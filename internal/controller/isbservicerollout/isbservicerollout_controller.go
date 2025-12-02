@@ -520,7 +520,7 @@ func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbS
 	if needsRecreate {
 		// in this case, we need to mark our resource as Recyclable (it will be recreated on a future reconciliation after it's been deleted)
 		reasonRecreate := common.LabelValueDeleteRecreateChild
-		err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, &reasonRecreate, newISBServiceDef)
+		err := ctlrcommon.MarkRecyclable(ctx, r.client, &reasonRecreate, newISBServiceDef)
 		if err != nil {
 			return err
 		}

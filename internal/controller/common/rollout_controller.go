@@ -154,7 +154,7 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 				numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
 					rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
 				purgeOld := common.LabelValuePurgeOld
-				err = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &purgeOld, recyclableChild)
+				err = MarkRecyclable(ctx, c, &purgeOld, recyclableChild)
 				if err != nil {
 					numaLogger.Error(err, "failed to mark older child objects") // don't return error, as it's a non-essential operation
 				}

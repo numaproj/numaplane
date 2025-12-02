@@ -158,6 +158,8 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 	It("Should create 2 failed Pipelines which will need to be drained and deleted and update back to original Pipeline", func() {
 
+		// update twice
+		// first this creates "test-pipeline-rollout-1", then "test-pipeline-rollout-2"
 		updateToFailedPipelines()
 
 		// restore PipelineRollout back to original spec
@@ -171,9 +173,11 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 	It("Should create 2 failed Pipelines which will need to be drained and deleted and update to new Pipeline", func() {
 
+		// update twice
+		// first this creates "test-pipeline-rollout-3", then "test-pipeline-rollout-4"
 		updateToFailedPipelines()
 
-		// updated Pipeline updates the sink
+		// updated Pipeline updates the sink ("test-pipeline-rollout-5")
 		updatePipeline(updatedPipelineSpec)
 
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})

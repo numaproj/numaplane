@@ -503,13 +503,13 @@ func checkForUpgradeReplacement(
 
 			// recycle the old one
 			reason := common.LabelValueProgressiveReplaced
-			if childStatus.AssessmentResult == apiv1.AssessmentResultFailure {
-				reason = common.LabelValueProgressiveReplacedFailed
-			}
-			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
-			if err != nil {
-				return false, false, err
-			}
+		if childStatus.AssessmentResult == apiv1.AssessmentResultFailure {
+			reason = common.LabelValueProgressiveReplacedFailed
+		}
+		err = ctlrcommon.MarkRecyclable(ctx, c, &reason, existingUpgradingChildDef)
+		if err != nil {
+			return false, false, err
+		}
 
 			// Create a new upgrading child to replace it
 
@@ -747,7 +747,7 @@ func declareSuccess(
 		return false, err
 	}
 
-	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
+	err = ctlrcommon.MarkRecyclable(ctx, c, &reasonSuccess, existingPromotedChildDef)
 	if err != nil {
 		return false, err
 	}
@@ -976,7 +976,7 @@ func Discontinue(ctx context.Context,
 
 	for _, child := range upgradingChildren.Items {
 		reason := common.LabelValueDiscontinueProgressive
-		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, &child)
+		err = ctlrcommon.MarkRecyclable(ctx, c, &reason, &child)
 		if err != nil {
 			return fmt.Errorf("failed to Discontinue progressive upgrade: error marking child %s recyclable: %v", child.GetName(), err)
 		}

@@ -242,11 +242,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 		numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Info("Found promoted pipeline, will force apply it")
 		// update spec with desiredPhase=Running and scaled to 0 initially, plus update the annotation to indicate that we've overridden the spec
 		err := forceApplySpecOnUndrainablePipeline(ctx, pipeline, promotedPipeline, c)
-		if err != nil {
-			return false, err
-		}
-
-		return false, nil
+		return false, err
 	}
 
 	// we need to make sure we get out of the previous Paused state before we Pause again, just to make sure that Numaflow will restart the pause
@@ -278,7 +274,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	}
 	numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Debug("checking drain of Pipeline using latest promoted pipeline's spec")
 
-	// if it's either paused or failed, delete it
+	// check if it fully drained or if it went to the maximum pause time
 	if paused {
 		// patch the annotation to mark that we've completed the drain with this promoted pipeline spec
 		currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsCompleted)
@@ -299,7 +295,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	}
 	// If force drain failed, we need to wait some time before deleting it, as there may be transient failures.
 	if failed {
-		nonTransientFailure, err := r.checkForFailedPipeline(ctx, c, pipelineRollout, pipeline)
+		nonTransientFailure, err := r.checkForFailedPipeline(ctx, c, pipeline)
 		if err != nil {
 			return false, fmt.Errorf("failed to check for failed pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
@@ -318,18 +314,15 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	return false, nil
 }
 
-// TODO: fix metrics
-
-// TODO: add completed annotation when complete
 // checkForFailedPipeline checks if the Pipeline has been in Failed state for long enough to consider it a permanent failure
 // if so, delete it; otherwise, return false to indicate we haven't deleted it yet.
 // decision: just use original failure start time in the case of Pipeline switching Failed->Running->Failed
-func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, c client.Client,
-	pipelineRollout *apiv1.PipelineRollout, pipeline *unstructured.Unstructured) (bool, error) {
+func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 	currentTime := time.Now()
-	// TODO: if we have retries, then we need to reset this annotation
+
+	// the first time we detect failure, mark the time
 	if pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime] == "" {
 		if err := kubernetes.PatchAnnotations(ctx, c, pipeline, map[string]string{
 			common.AnnotationKeyForceDrainFailureStartTime: currentTime.Format(time.RFC3339),
@@ -499,6 +492,7 @@ func drainRecyclablePipeline(
 		if isPaused {
 			isDrained, _ = numaflowtypes.CheckPipelineDrained(ctx, pipeline)
 		}
+		// TODO: should we be handling ephemeral failures here?
 		return isPaused, isDrained, isFailed, nil
 	}
 
