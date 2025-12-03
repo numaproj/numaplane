@@ -202,7 +202,6 @@ func (r *PipelineRolloutReconciler) checkAndPerformForceDrain(ctx context.Contex
 		// did we already try and fail to force drain with this promoted pipeline spec?
 		if checkForValueInCommaDelimitedAnnotation(pipeline, promotedPipeline.GetName(), common.AnnotationKeyForceDrainSpecsCompleted) {
 			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Debug("Promoted pipeline has already been force drained, skipping")
-			return false, nil
 		} else {
 			// we either haven't started or at least haven't finished trying to drain with this spec
 			promotedPipelineAvailableForDraining = true
@@ -391,9 +390,10 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 	// We need to extract just the fields we want to update: spec, metadata.annotations
 	patchData := map[string]interface{}{
 		"spec": newPipelineCopy.Object["spec"], // we assume we're the only ones who write to the Spec; therefore it's okay to copy the entire thing and use it knowing that nobody else has changed it
-		"metadata": map[string]interface{}{
-			"annotations": newPipelineCopy.GetAnnotations(),
-		},
+		//"metadata": map[string]interface{}{
+		// TODO: why did I decide we needed to copy the annotations?
+		//	"annotations": newPipelineCopy.GetAnnotations(),
+		//},
 	}
 
 	// Convert patch data to JSON
@@ -584,6 +584,9 @@ func calculateScaleForRecycle(
 				originalPodsRunning, found := historicalPodCount[vertexName]
 				if found {
 					newScaleValue = int64(math.Ceil(float64(originalPodsRunning) * float64(percent) / 100.0))
+					if newScaleValue < 1 {
+						newScaleValue = 1
+					}
 					numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue, "originalPodsRunning", originalPodsRunning, "percent", percent).Debug("Setting Vertex Scale value to percent of previous running count")
 				} else {
 					// This Vertex was not running in the "promoted" Pipeline: the Vertex may be new, or HistoricalPodCount hasn't been stored yet on this Pipeline due to not having done a progressive upgrade since it was introduced
