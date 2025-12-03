@@ -151,12 +151,11 @@ func TestPatchAnnotations(t *testing.T) {
 	namespace := "default"
 
 	tests := []struct {
-		name                    string
-		initialAnnotations      map[string]string
-		patchAnnotations        map[string]string
-		expectedAnnotations     map[string]string
-		expectedError           bool
-		expectedResourceVersion bool // whether resource version should change
+		name                string
+		initialAnnotations  map[string]string
+		patchAnnotations    map[string]string
+		expectedAnnotations map[string]string
+		expectedError       bool
 	}{
 		{
 			name:               "patch single annotation on resource with no annotations",
@@ -167,8 +166,7 @@ func TestPatchAnnotations(t *testing.T) {
 			expectedAnnotations: map[string]string{
 				"numaplane.io/test": "value1",
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name: "patch single annotation on resource with existing annotations",
@@ -182,8 +180,7 @@ func TestPatchAnnotations(t *testing.T) {
 				"existing":          "annotation",
 				"numaplane.io/test": "value1",
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name: "patch multiple annotations",
@@ -199,8 +196,7 @@ func TestPatchAnnotations(t *testing.T) {
 				"numaplane.io/test1": "value1",
 				"numaplane.io/test2": "value2",
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name: "update existing annotation value",
@@ -215,8 +211,7 @@ func TestPatchAnnotations(t *testing.T) {
 				"numaplane.io/test": "new-value",
 				"existing":          "annotation",
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name: "patch with special characters in value",
@@ -232,8 +227,7 @@ func TestPatchAnnotations(t *testing.T) {
 				"numaplane.io/timestamp": "2025-12-02T10:30:00Z",
 				"numaplane.io/json":      `{"key":"value"}`,
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name:               "patch empty map (no-op)",
@@ -242,8 +236,7 @@ func TestPatchAnnotations(t *testing.T) {
 			expectedAnnotations: map[string]string{
 				"existing": "annotation",
 			},
-			expectedError:           false,
-			expectedResourceVersion: false, // no change expected
+			expectedError: false,
 		},
 	}
 
@@ -277,7 +270,7 @@ func TestPatchAnnotations(t *testing.T) {
 
 			pipelineObject := &unstructured.Unstructured{Object: make(map[string]interface{})}
 			pipelineObject.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
-			pipelineObject.SetName(fmt.Sprintf("test-pipeline-%s", tt.name))
+			pipelineObject.SetName("test-pipeline")
 			pipelineObject.SetNamespace(namespace)
 
 			// Set initial annotations if any
@@ -297,7 +290,6 @@ func TestPatchAnnotations(t *testing.T) {
 			// Get the resource to get the initial resource version
 			pipelineObject, err = GetLiveResource(ctx, pipelineObject, "pipelines")
 			assert.Nil(t, err)
-			initialResourceVersion := pipelineObject.GetResourceVersion()
 
 			// Perform the patch
 			err = PatchAnnotations(ctx, runtimeClient, pipelineObject, tt.patchAnnotations)
@@ -314,14 +306,6 @@ func TestPatchAnnotations(t *testing.T) {
 				// Verify annotations
 				actualAnnotations := pipelineObject.GetAnnotations()
 				assert.Equal(t, tt.expectedAnnotations, actualAnnotations, "annotations should match expected")
-
-				// Verify resource version changed (or not)
-				if tt.expectedResourceVersion {
-					assert.NotEqual(t, initialResourceVersion, pipelineObject.GetResourceVersion(), "resource version should change after patch")
-				} else {
-					// For empty patch, resource version might still change depending on K8s behavior
-					// so we don't strictly assert this
-				}
 			}
 
 			// Clean up

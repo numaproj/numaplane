@@ -22,7 +22,7 @@ type RolloutController interface {
 	IncrementChildCount(ctx context.Context, rolloutObject RolloutObject) (int32, error)
 
 	// Recycle deletes child; returns true if it was in fact deleted
-	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error)
+	Recycle(ctx context.Context, childObject *unstructured.Unstructured) (bool, error)
 
 	// GetDesiredRiders gets the list of Riders as specified in the RolloutObject, templated for the specific child name and
 	// based on the child definition.
@@ -59,7 +59,7 @@ func GarbageCollectChildren(
 
 	allDeleted := true
 	for _, recyclableChild := range recyclableObjects.Items {
-		deleted, err := controller.Recycle(ctx, &recyclableChild, c)
+		deleted, err := controller.Recycle(ctx, &recyclableChild)
 		if err != nil {
 			return false, err
 		}

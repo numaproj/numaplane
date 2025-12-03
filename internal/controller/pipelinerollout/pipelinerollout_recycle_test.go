@@ -346,8 +346,10 @@ func Test_Recycle(t *testing.T) {
 		//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// the "Upgrade State Reason" label on the Pipeline being recycled which explains the condition in which it was recycled
 		upgradeStateReason string
-		// if the spec has already been overridden on the pipeline for the purpose of force draining
-		specHasBeenOverridden bool
+		// initial value of the force-drain-specs-started annotation (comma-delimited pipeline names)
+		initialForceDrainPipelinesStarted string
+		// initial value of the force-drain-specs-completed annotation (comma-delimited pipeline names)
+		initialForceDrainPipelinesCompleted string
 		// if the pipeline annotation for "requires-drain" is set
 		requiresDrain bool
 		// the lifecycle.desiredPhase on the pipeline
@@ -368,39 +370,40 @@ func Test_Recycle(t *testing.T) {
 		expectedError bool
 		// expected value of lifecycle.desiredPhase; if set to nil, we don't care what it is
 		expectedDesiredPhase *numaflowv1.PipelinePhase
-		// do we expect the value of the pipeline's spec to be that of the "promoted" pipeline?
-		expectSpecOverridden bool
+		// expected pipeline name in force-drain-specs-started annotation (empty string means not checked)
+		expectForceDrainPipelinesStarted string
+		// expected pipeline name in force-drain-specs-completed annotation (empty string means not checked)
+		expectedForceDrainPipelinesCompleted string
 		// expected pipeline vertex scale definitions at the end of the call
 		expectedVertexScaleDefinitions []apiv1.VertexScaleDefinition
 		// expected whether the force drain failure time annotation is set
 		expectForceDrainFailureTimeSet bool
 	}{
 		{
-			name:                  "Delete/Recreate - should delete immediately",
-			upgradeStateReason:    string(common.LabelValueDeleteRecreateChild),
-			specHasBeenOverridden: false,
-			requiresDrain:         true,
-			pipelinePhase:         numaflowv1.PipelinePhaseRunning,
-			expectedDeleted:       true, // Delete recreate should delete immediately
-			expectSpecOverridden:  false,
-			expectedError:         false,
+			name:               "Delete/Recreate - should delete immediately",
+			upgradeStateReason: string(common.LabelValueDeleteRecreateChild),
+			requiresDrain:      true,
+			pipelinePhase:      numaflowv1.PipelinePhaseRunning,
+			expectedDeleted:    true, // Delete recreate should delete immediately
+			expectedError:      false,
 		},
 		{
-			name:                           "Progressive Replace - second attempt (force drain failed)",
-			upgradeStateReason:             string(common.LabelValueProgressiveReplaced),
-			specHasBeenOverridden:          true,
-			requiresDrain:                  true,
-			desiredPhase:                   &paused,
-			pipelinePhase:                  failed,
-			isPromotedPipelineNew:          true,
-			expectForceDrainFailureTimeSet: true,
-			expectSpecOverridden:           true,
-			expectedDesiredPhase:           &running,
+			name:                                 "Progressive Replace - second attempt (force drain failed)",
+			upgradeStateReason:                   string(common.LabelValueProgressiveReplaced),
+			initialForceDrainPipelinesStarted:    newPromotedPipelineName + ",",
+			initialForceDrainPipelinesCompleted:  newPromotedPipelineName + ",",
+			requiresDrain:                        true,
+			desiredPhase:                         &paused,
+			pipelinePhase:                        failed,
+			isPromotedPipelineNew:                true,
+			expectForceDrainFailureTimeSet:       true,
+			expectForceDrainPipelinesStarted:     newPromotedPipelineName + ",",
+			expectedForceDrainPipelinesCompleted: newPromotedPipelineName + ",",
+			expectedDesiredPhase:                 &running,
 		},
 		{
 			name:                  "Progressive Replaced - second attempt (force drain) - first apply the new spec",
 			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
-			specHasBeenOverridden: false,
 			requiresDrain:         true,
 			desiredPhase:          &paused,
 			pipelinePhase:         paused,
@@ -423,9 +426,9 @@ func Test_Recycle(t *testing.T) {
 				},
 			},
 
-			expectSpecOverridden: true,
-			expectedError:        false,
-			expectedDesiredPhase: &running,
+			expectForceDrainPipelinesStarted: newPromotedPipelineName + ",",
+			expectedError:                    false,
+			expectedDesiredPhase:             &running,
 			// pipeline scaled back up to PipelineRollout defined scale except Source is 0
 			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
@@ -448,12 +451,12 @@ func Test_Recycle(t *testing.T) {
 			name: "Progressive Replaced - second attempt (force drain) - new spec was applied - now scale it down before pausing",
 			// preconditions:
 			// - desiredPhase=Running, phase=Running, initialScale=matching pipelinerollout
-			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
-			specHasBeenOverridden: true,
-			requiresDrain:         true,
-			desiredPhase:          &running,
-			pipelinePhase:         running,
-			isPromotedPipelineNew: true,
+			upgradeStateReason:                string(common.LabelValueProgressiveReplaced),
+			initialForceDrainPipelinesStarted: newPromotedPipelineName + ",",
+			requiresDrain:                     true,
+			desiredPhase:                      &running,
+			pipelinePhase:                     running,
+			isPromotedPipelineNew:             true,
 			// pipeline was scaled to 0
 			initialVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
@@ -472,9 +475,9 @@ func Test_Recycle(t *testing.T) {
 				},
 			},
 
-			expectSpecOverridden: true,
-			expectedError:        false,
-			expectedDesiredPhase: &running,
+			expectForceDrainPipelinesStarted: newPromotedPipelineName + ",",
+			expectedError:                    false,
+			expectedDesiredPhase:             &running,
 			// pipeline scaled back up to PipelineRollout defined scale except Source is 0
 			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
@@ -497,12 +500,12 @@ func Test_Recycle(t *testing.T) {
 			name: "Progressive Replace Failed - no new promoted pipeline available to use so scale to zero",
 			// preconditions:
 			// - desiredPhase=Paused, phase=Paused, initialScale=previous test's expected scale
-			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
-			specHasBeenOverridden: true,
-			requiresDrain:         true,
-			desiredPhase:          &paused,
-			pipelinePhase:         paused,
-			isPromotedPipelineNew: false,
+			upgradeStateReason:                string(common.LabelValueProgressiveReplaced),
+			initialForceDrainPipelinesStarted: originalPromotedPipelineName + ",",
+			requiresDrain:                     true,
+			desiredPhase:                      &paused,
+			pipelinePhase:                     paused,
+			isPromotedPipelineNew:             false,
 			// pipeline was scaled down to prepare for pausing
 			initialVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
@@ -521,9 +524,9 @@ func Test_Recycle(t *testing.T) {
 				},
 			},
 
-			expectSpecOverridden: true,
-			expectedError:        false,
-			expectedDesiredPhase: nil,
+			expectForceDrainPipelinesStarted: originalPromotedPipelineName + ",",
+			expectedError:                    false,
+			expectedDesiredPhase:             nil,
 			// vertex definitions scaled to 0
 			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
@@ -579,7 +582,7 @@ func Test_Recycle(t *testing.T) {
 			// Create a definition for a Promoted Pipeline
 			// We will use it below for our "promoted" pipeline if the test calls for a new "promoted" pipeline
 			// We will also use this for our PipelineRollout's definition
-			newPromotedPipelineDefinition := createPipelineForRecycleTest(pipelineRolloutName, newPromotedPipelineName, nil, tc.pipelinePhase, "promoted", "", newPromotedPipelinePath, false, originalPauseGracePeriodSeconds, scaledUpVertexDefinitions, true)
+			newPromotedPipelineDefinition := createPipelineForRecycleTest(pipelineRolloutName, newPromotedPipelineName, nil, tc.pipelinePhase, "promoted", "", newPromotedPipelinePath, "", "", originalPauseGracePeriodSeconds, scaledUpVertexDefinitions, true)
 			var newPromotedDefUnstructured unstructured.Unstructured
 			err := util.StructToStruct(newPromotedPipelineDefinition, &newPromotedDefUnstructured.Object)
 			assert.NoError(t, err)
@@ -617,7 +620,7 @@ func Test_Recycle(t *testing.T) {
 
 			// Create the Pipeline we're recycling
 			recyclablePipelineName := "test-pipeline-2"
-			pipeline := createPipelineForRecycleTest(pipelineRolloutName, recyclablePipelineName, tc.desiredPhase, tc.pipelinePhase, "recyclable", tc.upgradeStateReason, recyclableImage, tc.specHasBeenOverridden, originalPauseGracePeriodSeconds, tc.initialVertexScaleDefinitions, tc.requiresDrain)
+			pipeline := createPipelineForRecycleTest(pipelineRolloutName, recyclablePipelineName, tc.desiredPhase, tc.pipelinePhase, "recyclable", tc.upgradeStateReason, recyclableImage, tc.initialForceDrainPipelinesStarted, tc.initialForceDrainPipelinesCompleted, originalPauseGracePeriodSeconds, tc.initialVertexScaleDefinitions, tc.requiresDrain)
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, pipeline)
 			// Convert it to Unstructured for the Recycle function
 			var pipelineUnstructured unstructured.Unstructured
@@ -630,13 +633,13 @@ func Test_Recycle(t *testing.T) {
 				promotedPipeline = newPromotedPipelineDefinition
 			} else {
 				// this doesn't match that of our PipelineRollout, which means it will be seen as "old"
-				promotedPipeline = createPipelineForRecycleTest(pipelineRolloutName, originalPromotedPipelineName, nil, tc.pipelinePhase, "promoted", "", originalPromotedPipelinePath, false, originalPauseGracePeriodSeconds, scaledUpVertexDefinitions, true)
+				promotedPipeline = createPipelineForRecycleTest(pipelineRolloutName, originalPromotedPipelineName, nil, tc.pipelinePhase, "promoted", "", originalPromotedPipelinePath, "", "", originalPauseGracePeriodSeconds, scaledUpVertexDefinitions, true)
 			}
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, promotedPipeline)
 
-			reconciler := &PipelineRolloutReconciler{}
+			reconciler := &PipelineRolloutReconciler{client: client}
 
-			deleted, err := reconciler.Recycle(ctx, &pipelineUnstructured, client)
+			deleted, err := reconciler.Recycle(ctx, &pipelineUnstructured)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedDeleted, deleted)
 
@@ -661,12 +664,18 @@ func Test_Recycle(t *testing.T) {
 					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainFailureStartTime)
 				}
 
-				// Should the spec be overridden with the "promoted" spec?
-				if tc.expectSpecOverridden {
+				// Check if force-drain-specs-started annotation matches expected value
+				if tc.expectForceDrainPipelinesStarted != "" {
 					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
-					assert.Equal(t, "true", updatedPipeline.Annotations[common.AnnotationKeyForceDrainSpecsStarted])
-				} else {
-					assert.NotContains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
+					assert.Equal(t, tc.expectForceDrainPipelinesStarted, updatedPipeline.Annotations[common.AnnotationKeyForceDrainSpecsStarted],
+						"force-drain-specs-started annotation mismatch")
+				}
+
+				// Check if force-drain-specs-completed annotation matches expected value
+				if tc.expectedForceDrainPipelinesCompleted != "" {
+					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsCompleted)
+					assert.Equal(t, tc.expectedForceDrainPipelinesCompleted, updatedPipeline.Annotations[common.AnnotationKeyForceDrainSpecsCompleted],
+						"force-drain-specs-completed annotation mismatch")
 				}
 
 				if len(tc.expectedVertexScaleDefinitions) > 0 {
@@ -711,7 +720,8 @@ func int64Ptr(i int64) *int64 {
 }
 
 func createPipelineForRecycleTest(pipelineRolloutName, pipelineName string, desiredPhase *numaflowv1.PipelinePhase, phase numaflowv1.PipelinePhase, upgradeState, upgradeStateReason, sinkImagePath string,
-	overriddenSpec bool,
+	forceDrainPipelinesStarted string,
+	forceDrainPipelinesCompleted string,
 	pauseGracePeriodSeconds float64,
 	vertexScaleDefinitions []apiv1.VertexScaleDefinition,
 	requiresDrain bool) *numaflowv1.Pipeline {
@@ -781,8 +791,12 @@ func createPipelineForRecycleTest(pipelineRolloutName, pipelineName string, desi
 	pipeline.Annotations = map[string]string{}
 
 	// Set annotations if needed
-	if overriddenSpec {
-		pipeline.Annotations[common.AnnotationKeyForceDrainSpecsStarted] = "true"
+	if forceDrainPipelinesStarted != "" {
+		pipeline.Annotations[common.AnnotationKeyForceDrainSpecsStarted] = forceDrainPipelinesStarted
+	}
+
+	if forceDrainPipelinesCompleted != "" {
+		pipeline.Annotations[common.AnnotationKeyForceDrainSpecsCompleted] = forceDrainPipelinesCompleted
 	}
 
 	if requiresDrain {
