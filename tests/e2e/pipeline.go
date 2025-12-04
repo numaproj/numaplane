@@ -244,6 +244,23 @@ func GetPipelineMetadata(u *unstructured.Unstructured) (apiv1.Metadata, error) {
 	}, nil
 }
 
+// GetAnnotation retrieves a specific annotation from a Pipeline by namespace and name
+func GetAnnotation(namespace, pipelineName, annotationKey string) (string, error) {
+	pipeline, err := GetPipelineByName(namespace, pipelineName)
+	if err != nil {
+		return "", err
+	}
+	annotations := pipeline.GetAnnotations()
+	if annotations == nil {
+		return "", fmt.Errorf("pipeline %s has no annotations", pipelineName)
+	}
+	value, found := annotations[annotationKey]
+	if !found {
+		return "", fmt.Errorf("annotation %s not found on pipeline %s", annotationKey, pipelineName)
+	}
+	return value, nil
+}
+
 func GetGVRForPipeline() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaflow.numaproj.io",
@@ -790,4 +807,47 @@ func VerifyPipelineEvent(namespace, pipelineName, eventType string) {
 		}
 		return len(events.Items) > 0
 	}).Should(BeTrue())
+}
+
+// VerifyPipelineUpgradeState verifies that a Pipeline has the expected upgrade state label and optionally the upgrade state reason label
+func VerifyPipelineUpgradeState(namespace, pipelineName, upgradeState string, upgradeStateReason *string) {
+	CheckEventually(fmt.Sprintf("verifying Pipeline %s has upgrade state %s", pipelineName, upgradeState), func() bool {
+		pipeline, _, _, err := GetPipelineSpecAndStatus(namespace, pipelineName)
+		if err != nil {
+			return false
+		}
+
+		labels := pipeline.GetLabels()
+		if labels == nil {
+			return false
+		}
+
+		// Check upgrade state label
+		actualUpgradeState, found := labels[common.LabelKeyUpgradeState]
+		if !found || actualUpgradeState != upgradeState {
+			return false
+		}
+
+		// If upgradeStateReason is provided, check it as well
+		if upgradeStateReason != nil {
+			actualUpgradeStateReason, found := labels[common.LabelKeyUpgradeStateReason]
+			if !found || actualUpgradeStateReason != *upgradeStateReason {
+				return false
+			}
+		}
+
+		return true
+	}).Should(BeTrue())
+}
+
+// VerifyPipelinePromoted verifies that a specific Pipeline instance has the "promoted" upgrade state
+func VerifyPipelinePromoted(pipelineName string) {
+	VerifyPipelineUpgradeState(Namespace, pipelineName, string(common.LabelValueUpgradePromoted), nil)
+}
+
+// VerifyPipelineDesiredPhase verifies that a Pipeline has the expected desired phase in its lifecycle
+func VerifyPipelineDesiredPhase(pipelineName, desiredPhase string) {
+	VerifyPipelineSpecStatus(Namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
+		return string(spec.Lifecycle.DesiredPhase) == desiredPhase
+	})
 }
