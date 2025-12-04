@@ -18,7 +18,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
-	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -757,14 +756,9 @@ func (r *MonoVertexRolloutReconciler) ProgressiveUnsupported(ctx context.Context
 	return false
 }
 
-func (r *MonoVertexRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject, completed bool) {
+func (r *MonoVertexRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject) {
 	if rolloutObject.GetUpgradingChildStatus() != nil {
 		childName := rolloutObject.GetUpgradingChildStatus().Name
-		successStatus := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
-		forcedSuccess := rolloutObject.GetUpgradingChildStatus().ForcedSuccess
-		basicAssessmentResult := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
-
-		r.customMetrics.IncMonovertexProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
-			childName, basicAssessmentResult, successStatus, forcedSuccess, completed)
+		r.customMetrics.IncMonovertexProgressiveStarted(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(), childName)
 	}
 }
