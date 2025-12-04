@@ -29,7 +29,7 @@ import (
 
 type fakeProgressiveController struct{}
 
-func (fpc fakeProgressiveController) UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject, completed bool) {
+func (fpc fakeProgressiveController) UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject) {
 }
 
 func (fpc fakeProgressiveController) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error) {
