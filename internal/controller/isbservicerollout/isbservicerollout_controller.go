@@ -479,7 +479,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 				if assessmentResult != "" {
 					r.customMetrics.IncISBServiceProgressiveCompleted(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
 						isbServiceRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-						assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+						assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess)
 				}
 			}
 		} else {

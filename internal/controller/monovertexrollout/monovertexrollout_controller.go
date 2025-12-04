@@ -384,7 +384,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 				if assessmentResult != "" {
 					r.customMetrics.IncMonovertexProgressiveCompleted(monoVertexRollout.GetRolloutObjectMeta().GetNamespace(), monoVertexRollout.GetRolloutObjectMeta().GetName(),
 						monoVertexRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-						assessmentResult, monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+						assessmentResult, monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess)
 				}
 			}
 		} else {

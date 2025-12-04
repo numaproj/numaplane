@@ -359,42 +359,42 @@ var (
 		Name:        "numaplane_pipeline_progressive_started",
 		Help:        "The total number of pipeline progressive rollout started",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelName, LabelRolloutName})
+	}, []string{LabelNamespace, LabelRolloutName, LabelName})
 
 	// pipelineProgressiveResults count the total number of pipeline progressive rollouts completed
 	pipelineProgressiveCompleted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "numaplane_pipeline_progressive_completed",
 		Help:        "The total number of pipeline progressive rollout completed",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelName, LabelRolloutName, LabelSuccess, LabelForcedSuccess, LabelResourceHealthSuccess, LabelCompleted})
+	}, []string{LabelNamespace, LabelRolloutName, LabelName, LabelSuccess, LabelForcedSuccess, LabelResourceHealthSuccess})
 
 	// isbServiceProgressiveStarted count the total number of ISB Service progressive rollouts started
 	isbServiceProgressiveStarted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "numaplane_isbsvc_progressive_started",
 		Help:        "The total number of pipeline isbsvc rollout started",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelName, LabelRolloutName})
+	}, []string{LabelNamespace, LabelRolloutName, LabelName})
 
 	//isbServiceProgressiveCompleted count the total number of isbsvc progressive rollouts completed
 	isbServiceProgressiveCompleted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "numaplane_isbsvc_progressive_completed",
 		Help:        "The total number of isbsvc progressive rollout completed",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelName, LabelRolloutName, LabelSuccess, LabelForcedSuccess, LabelResourceHealthSuccess, LabelCompleted})
+	}, []string{LabelNamespace, LabelRolloutName, LabelName, LabelSuccess, LabelForcedSuccess, LabelResourceHealthSuccess})
 
 	// monovertexProgressiveStarted count the total number of monovertex progressive rollouts started
 	monovertexProgressiveStarted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "numaplane_monovertex_progressive_started",
 		Help:        "The total number of monovertex rollout started",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelName, LabelRolloutName})
+	}, []string{LabelNamespace, LabelRolloutName, LabelName})
 
 	// monovertexProgressiveCompleted count the total number of monovertex progressive rollout completed
 	monovertexProgressiveCompleted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "numaplane_monovertex_progressive_completed",
 		Help:        "The total number of monovertex progressive rollout completed",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelName, LabelRolloutName, LabelSuccess, LabelForcedSuccess, LabelResourceHealthSuccess, LabelCompleted})
+	}, []string{LabelNamespace, LabelRolloutName, LabelName, LabelSuccess, LabelForcedSuccess, LabelResourceHealthSuccess})
 )
 
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
@@ -631,24 +631,24 @@ func (m *CustomMetrics) IncPipelineProgressiveStarted(namespace, rolloutName, pi
 	m.PipelineProgressiveStarted.WithLabelValues(namespace, rolloutName, pipelineName).Inc()
 }
 
-func (m *CustomMetrics) IncPipelineProgressiveCompleted(namespace, name, pipelineName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
-	m.PipelineProgressiveCompleted.WithLabelValues(namespace, pipelineName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString(), strconv.FormatBool(completed)).Inc()
+func (m *CustomMetrics) IncPipelineProgressiveCompleted(namespace, rolloutName, pipelineName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess bool) {
+	m.PipelineProgressiveCompleted.WithLabelValues(namespace, rolloutName, pipelineName, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString()).Inc()
 }
 
-func (m *CustomMetrics) IncIBSServiceProgressiveStarted(namespace, rolloutName, pipelineName string) {
-	m.ISBServiceProgressiveStarted.WithLabelValues(namespace, rolloutName, pipelineName).Inc()
+func (m *CustomMetrics) IncIBSServiceProgressiveStarted(namespace, rolloutName, isbServiceName string) {
+	m.ISBServiceProgressiveStarted.WithLabelValues(namespace, rolloutName, isbServiceName).Inc()
 }
 
-func (m *CustomMetrics) IncISBServiceProgressiveCompleted(namespace, name, childName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
-	m.ISBServiceProgressiveCompleted.WithLabelValues(namespace, childName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString(), strconv.FormatBool(completed)).Inc()
+func (m *CustomMetrics) IncISBServiceProgressiveCompleted(namespace, rolloutName, isbServiceName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess bool) {
+	m.ISBServiceProgressiveCompleted.WithLabelValues(namespace, rolloutName, isbServiceName, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString()).Inc()
 }
 
-func (m *CustomMetrics) IncMonovertexProgressiveStarted(namespace, rolloutName, pipelineName string) {
-	m.MonovertexProgressiveStarted.WithLabelValues(namespace, rolloutName, pipelineName).Inc()
+func (m *CustomMetrics) IncMonovertexProgressiveStarted(namespace, rolloutName, monovertexName string) {
+	m.MonovertexProgressiveStarted.WithLabelValues(namespace, rolloutName, monovertexName).Inc()
 }
 
-func (m *CustomMetrics) IncMonovertexProgressiveCompleted(namespace, name, childName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
-	m.MonovertexProgressiveCompleted.WithLabelValues(namespace, childName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString(), strconv.FormatBool(completed)).Inc()
+func (m *CustomMetrics) IncMonovertexProgressiveCompleted(namespace, rolloutName, monovertexName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess bool) {
+	m.MonovertexProgressiveCompleted.WithLabelValues(namespace, rolloutName, monovertexName, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString()).Inc()
 }
 
 func EvaluateSuccessStatusForMetrics(assessmentResult apiv1.AssessmentResult) util.OptionalBoolStr {
