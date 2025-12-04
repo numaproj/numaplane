@@ -182,48 +182,40 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// This enables us to see that test-pipeline-rollout-0 and test-pipeline-rollout-3 start trying to drain
 		forcePromote(pipelineRolloutName, 4)
 
+		// test-pipeline-rollout-0 should be able to drain with its original spec
 		// Verify that test-pipeline-rollout-0 and test-pipeline-rollout-3 have the spec from test-pipeline-rollout-4
 		// and are pausing
-		verifyPipelineHasImage(0, "badpath2")
+		verifyPipelineHasImage(0, validImagePath)
 		verifyPipelineHasImage(3, "badpath2")
 		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 0), string(numaflowv1.PipelinePhasePaused))
 		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), string(numaflowv1.PipelinePhasePaused))
-		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-0 and test-pipeline-rollout-3
-		pauseTimestamp0Orig, err := GetAnnotation(Namespace, GetInstanceName(pipelineRolloutName, 0), "numaflow.numaproj.io/pause-timestamp")
-		Expect(err).ShouldNot(HaveOccurred())
+		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3
 		pauseTimestamp3Orig, err := GetAnnotation(Namespace, GetInstanceName(pipelineRolloutName, 3), "numaflow.numaproj.io/pause-timestamp")
 		Expect(err).ShouldNot(HaveOccurred())
-		fmt.Printf("pauseTimestamp0Orig: %s, pauseTimestamp3Orig: %s\n", pauseTimestamp0Orig, pauseTimestamp3Orig)
+		fmt.Printf("pauseTimestamp3Orig: %s\n", pauseTimestamp3Orig)
 
 		// create test-pipeline-rollout-5 which is also unhealthy
 		updatePipelineImage("badpath3")
 		// check that test-pipeline-rollout-5 has been created
-		verifyPipelineInUpgradingList(5)
+		verifyPipelinesUpgrading(5)
 
-		// force promote it so that test-pipeline-rollout-0, test-pipeline-rollout-3, and test-pipeline-rollout-4 start trying to drain with this spec
+		// force promote it so that test-pipeline-rollout-3 and test-pipeline-rollout-4 start trying to drain with this spec
 		// once they are done with the previous drain attempt
 		forcePromote(pipelineRolloutName, 5)
-		verifyPipelineHasImage(0, "badpath3")
 		verifyPipelineHasImage(3, "badpath3")
 		verifyPipelineHasImage(4, "badpath3")
-		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 0), string(numaflowv1.PipelinePhasePaused))
 		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), string(numaflowv1.PipelinePhasePaused))
 		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 4), string(numaflowv1.PipelinePhasePaused))
 
-		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-0 and test-pipeline-rollout-3 to make sure that they are
-		// different from the previous pause timestamps, indicating that a new pause has started
-		pauseTimestamp0, err := GetAnnotation(Namespace, GetInstanceName(pipelineRolloutName, 0), "numaflow.numaproj.io/pause-timestamp")
-		Expect(err).ShouldNot(HaveOccurred())
+		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3 to make sure that it's
+		// different from the previous pause timestamp, indicating that a new pause has started
 		pauseTimestamp3, err := GetAnnotation(Namespace, GetInstanceName(pipelineRolloutName, 3), "numaflow.numaproj.io/pause-timestamp")
 		Expect(err).ShouldNot(HaveOccurred())
-		fmt.Printf("pauseTimestamp0: %s, pauseTimestamp3: %s\n", pauseTimestamp0, pauseTimestamp3)
-		Expect(pauseTimestamp0).ShouldNot(Equal(pauseTimestamp0Orig))
+		fmt.Printf("pauseTimestamp3: %s\n", pauseTimestamp3)
 		Expect(pauseTimestamp3).ShouldNot(Equal(pauseTimestamp3Orig))
+		// todo: verify that pauseTimestamp3 is approximately the right time delta from original
 
-		// verify that test-pipeline-rollout-0, test-pipeline-rollout-3, and test-pipeline-rollout-4 have finished trying to drain
-		VerifyPipelineSpecStatus(Namespace, GetInstanceName(pipelineRolloutName, 0), func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
-			return status.Phase == numaflowv1.PipelinePhasePaused && !status.DrainedOnPause
-		})
+		// verify that test-pipeline-rollout-3, and test-pipeline-rollout-4 have finished trying to drain
 		VerifyPipelineSpecStatus(Namespace, GetInstanceName(pipelineRolloutName, 3), func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
 			return status.Phase == numaflowv1.PipelinePhasePaused && !status.DrainedOnPause
 		})
@@ -232,9 +224,11 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		})
 
 		// verify that test-pipeline-rollout-0, test-pipeline-rollout-3, and test-pipeline-rollout-4 scale to 0 replicas, waiting for the next "promoted" pipeline spec
-		verifyPipelineScaledToZero(0)
 		verifyPipelineScaledToZero(3)
 		verifyPipelineScaledToZero(4)
+
+		// verify that test-pipeline-rollout-0 was able to be deleted because it drained fully
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 	})
 
 	It("Should successfully drain all previous Pipelines once there's a Pipeline with a healthy spec", func() {
@@ -339,6 +333,7 @@ func updatePipeline(pipelineSpec *numaflowv1.PipelineSpec) {
 
 func forcePromote(pipelineRolloutName string, pipelineIndex int) {
 	pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+	By(fmt.Sprintf("Force promoting Pipeline %s", pipelineName))
 	UpdatePipelineInK8S(pipelineName, func(pipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 		labels := pipeline.GetLabels()
 		if labels == nil {
@@ -352,6 +347,7 @@ func forcePromote(pipelineRolloutName string, pipelineIndex int) {
 
 func verifyPipelineHasImage(pipelineIndex int, expectedImage string) {
 	pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+	By(fmt.Sprintf("Verifying that Pipeline %s has image %s", pipelineName, expectedImage))
 	VerifyPipelineSpecStatus(Namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
 		// Check the "cat" vertex (index 1) for the expected image
 		return spec.Vertices[1].UDF != nil &&
@@ -361,6 +357,7 @@ func verifyPipelineHasImage(pipelineIndex int, expectedImage string) {
 }
 
 func updatePipelineImage(imagePath string) *numaflowv1.PipelineSpec {
+	By(fmt.Sprintf("Updating PipelineRollout with image %s", imagePath))
 	pipelineSpec := initialPipelineSpec.DeepCopy()
 	pipelineSpec.Vertices[1] = numaflowv1.AbstractVertex{
 		Name: "cat",
@@ -374,8 +371,9 @@ func updatePipelineImage(imagePath string) *numaflowv1.PipelineSpec {
 	return pipelineSpec
 }
 
-func verifyPipelineInUpgradingList(pipelineIndex int) {
+func verifyPipelinesUpgrading(pipelineIndex int) {
 	expectedPipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+	By(fmt.Sprintf("Verifying that Pipeline %s is in the upgrading pipelines list", expectedPipelineName))
 	CheckEventually(fmt.Sprintf("Verifying that Pipeline %s is in the upgrading pipelines list", expectedPipelineName), func() bool {
 		upgradingPipelines, err := GetUpgradingPipelines(Namespace, pipelineRolloutName)
 		if err != nil {
@@ -392,6 +390,7 @@ func verifyPipelineInUpgradingList(pipelineIndex int) {
 
 func verifyPipelineScaledToZero(pipelineIndex int) {
 	pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+	By(fmt.Sprintf("Verifying that Pipeline %s is scaled to 0 replicas", pipelineName))
 	VerifyPipelineSpecStatus(Namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
 		// Check that all vertices have scale.min and scale.max equal to 0
 		for _, vertex := range spec.Vertices {
