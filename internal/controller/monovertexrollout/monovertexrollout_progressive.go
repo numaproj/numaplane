@@ -37,7 +37,7 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	}
 
 	labels := monoVertex.GetLabels()
-	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
 	monoVertex.SetLabels(labels)
 
 	return monoVertex, nil

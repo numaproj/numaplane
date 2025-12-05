@@ -102,6 +102,10 @@ const (
 	// of upgrade.
 	LabelValueUpgradeInProgress UpgradeState = "in-progress"
 
+	// LabelValueUpgradeTrial is the label value indicating that the resource managed by a NumaRollout is the trial resource
+	// of an upgrade.
+	LabelValueUpgradeTrial UpgradeState = "trial"
+
 	// LabelValueUpgradeRecyclable is the label value indicating that the resource managed by a NumaRollout is recyclable
 	// after an upgrade.
 	LabelValueUpgradeRecyclable UpgradeState = "recyclable"

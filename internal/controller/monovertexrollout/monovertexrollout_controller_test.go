@@ -561,7 +561,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			expectedProgressiveCondition:   metav1.ConditionUnknown,
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeInProgress,
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeTrial,
 			},
 		},
 		{
