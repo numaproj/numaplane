@@ -64,7 +64,6 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 
 	labels := pipeline.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
-	// labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
 	labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 	pipeline.SetLabels(labels)
 

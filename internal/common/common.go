@@ -25,7 +25,6 @@ import (
 
 // UpgradeState is the enum to track the possible state of
 // a resource upgrade: it can be `promoted`, `in-progress`, or `recyclable`.
-// TODO: in-progress to trial
 type UpgradeState string
 
 // UpgradeStateReason is the enum to track reasons for UpgradeState, to provide additional information when useful

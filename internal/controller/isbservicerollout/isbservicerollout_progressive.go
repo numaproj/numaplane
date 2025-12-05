@@ -34,7 +34,6 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	}
 
 	labels := isbsvc.GetLabels()
-	// replacing in-progress upgrade-state label with trial (remove after review)
 	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
 	isbsvc.SetLabels(labels)
 
