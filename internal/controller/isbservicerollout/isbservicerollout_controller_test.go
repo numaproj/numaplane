@@ -484,7 +484,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			expectedRolloutPhase:         apiv1.PhasePending,
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:  common.LabelValueUpgradePromoted,
-				defaultUpgradingISBSvcName: common.LabelValueUpgradeInProgress,
+				defaultUpgradingISBSvcName: common.LabelValueUpgradeTrial,
 			},
 		},
 		{
@@ -559,7 +559,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:                      common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName:                     common.LabelValueUpgradeRecyclable,
-				ctlrcommon.DefaultTestISBSvcRolloutName + "-2": common.LabelValueUpgradeInProgress,
+				ctlrcommon.DefaultTestISBSvcRolloutName + "-2": common.LabelValueUpgradeTrial,
 			},
 		},
 		{
