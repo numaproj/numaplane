@@ -187,9 +187,15 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// and are pausing
 		verifyPipelineHasImage(0, validImagePath)
 		verifyPipelineHasImage(3, "badpath2")
-		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 0), string(numaflowv1.PipelinePhasePaused))
-		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), string(numaflowv1.PipelinePhasePaused))
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 0), numaflowv1.PipelinePhasePaused)
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePaused)
 		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3
+
+
+		// verify test-pipeline-rollout-0 and test-pipeline-rollout-3 hav status.phase==Pausing
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 0), numaflowv1.PipelinePhasePausing)
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePausing)
+
 		pauseTimestamp3Orig, err := GetAnnotation(Namespace, GetInstanceName(pipelineRolloutName, 3), "numaflow.numaproj.io/pause-timestamp")
 		Expect(err).ShouldNot(HaveOccurred())
 		fmt.Printf("pauseTimestamp3Orig: %s\n", pauseTimestamp3Orig)
@@ -204,8 +210,10 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		forcePromote(pipelineRolloutName, 5)
 		verifyPipelineHasImage(3, "badpath3")
 		verifyPipelineHasImage(4, "badpath3")
-		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), string(numaflowv1.PipelinePhasePaused))
-		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 4), string(numaflowv1.PipelinePhasePaused))
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePaused)
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 4), numaflowv1.PipelinePhasePaused)
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePausing)
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 4), numaflowv1.PipelinePhasePausing)
 
 		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3 to make sure that it's
 		// different from the previous pause timestamp, indicating that a new pause has started
