@@ -149,6 +149,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 }
 
+// registerFinalDrainStatus issues an Event and a metric for the final drain status of a pipeline
 func (r *PipelineRolloutReconciler) registerFinalDrainStatus(namespace, pipelineRolloutName string, pipeline *unstructured.Unstructured, drainComplete bool, drainResult metrics.LabelValueDrainResult) {
 	r.customMetrics.IncProgressivePipelineDrains(namespace, pipelineRolloutName, pipeline.GetName(), drainComplete, drainResult)
 	eventType := "Normal"
@@ -158,6 +159,8 @@ func (r *PipelineRolloutReconciler) registerFinalDrainStatus(namespace, pipeline
 	r.recorder.Eventf(pipeline, eventType, string(drainResult), string(drainResult))
 }
 
+// checkAndPerformForceDrain checks if we should be force draining right now, and if so, does.
+// Otherwise, it may be that time has expired and we need to delete the pipeline instead; otherwise, we should just scale the pipeline to 0 and wait..
 func (r *PipelineRolloutReconciler) checkAndPerformForceDrain(ctx context.Context,
 	// the pipeline whose spec will be updated
 	pipeline *unstructured.Unstructured,
@@ -166,7 +169,7 @@ func (r *PipelineRolloutReconciler) checkAndPerformForceDrain(ctx context.Contex
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	// Check if the max recyclable duration has been exceeded
+	// Check if the max recyclable duration has been exceeded: if so, delete the pipeline
 	recyclableStartTimeStr, err := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyRecyclableStartTime)
 	if err != nil {
 		return false, fmt.Errorf("failed to get recyclable start time annotation: %w", err)
@@ -287,7 +290,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Infof("Pipeline has the promoted pipeline's spec but was not able to drain")
 		}
 	}
-	// If force drain failed, we need to wait some time before deleting it, as there may be transient failures.
+	// If the Pipeline failed during force drain,, we need to wait some time before deleting it, as there may be transient failures.
 	if failed {
 		nonTransientFailure, err := r.checkForFailedPipeline(ctx, pipeline)
 		if err != nil {
@@ -308,7 +311,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	return false, nil
 }
 
-// checkForFailedPipeline checks if the Pipeline has been in Failed state for long enough to consider it a permanent failure
+// check if the Pipeline has been in Failed state for long enough to consider it a permanent failure
 // if so, delete it; otherwise, return false to indicate we haven't deleted it yet.
 // decision: just use original failure start time in the case of Pipeline switching Failed->Running->Failed
 func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
@@ -331,7 +334,7 @@ func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, 
 	if err != nil {
 		return false, fmt.Errorf("failed to parse force drain failure start time annotation %q on pipeline %s/%s: %w", startTime, pipeline.GetNamespace(), pipeline.GetName(), err)
 	}
-	waitDurationSeconds := getForceDrainFailureWaitDuration()
+	waitDurationSeconds := config.GetForceDrainFailureWaitDuration()
 	if int32(currentTime.Sub(startTime).Seconds()) < waitDurationSeconds {
 		numaLogger.WithValues("startTime", startTime, "currentTime", currentTime, "waitDuration", waitDurationSeconds).Debug("waiting longer before deleting failed pipeline during force drain")
 		return false, nil
@@ -390,10 +393,6 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 	// We need to extract just the fields we want to update: spec, metadata.annotations
 	patchData := map[string]interface{}{
 		"spec": newPipelineCopy.Object["spec"], // we assume we're the only ones who write to the Spec; therefore it's okay to copy the entire thing and use it knowing that nobody else has changed it
-		//"metadata": map[string]interface{}{
-		// TODO: why did I decide we needed to copy the annotations?
-		//	"annotations": newPipelineCopy.GetAnnotations(),
-		//},
 	}
 
 	// Convert patch data to JSON
@@ -491,7 +490,6 @@ func drainRecyclablePipeline(
 		if isPaused {
 			isDrained, _ = numaflowtypes.CheckPipelineDrained(ctx, pipeline)
 		}
-		// TODO: should we be handling ephemeral failures here?
 		return isPaused, isDrained, isFailed, nil
 	}
 
@@ -690,14 +688,6 @@ func markPipelineForceDrainStarted(ctx context.Context, c client.Client, pipelin
 	}
 	currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsStarted)
 
-	// Update in-memory
-	err := kubernetes.SetAnnotations(pipeline, map[string]string{
-		common.AnnotationKeyForceDrainSpecsStarted: currentVal + forceDrainSpecPipeline + ",",
-	})
-	if err != nil {
-		return err
-	}
-
 	// Patch in Kubernetes
 	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
 		common.AnnotationKeyForceDrainSpecsStarted: currentVal + forceDrainSpecPipeline + ",",
@@ -712,20 +702,13 @@ func markPipelineForceDrainCompleted(ctx context.Context, c client.Client, pipel
 	}
 	currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsCompleted)
 
-	// Update in-memory
-	err := kubernetes.SetAnnotations(pipeline, map[string]string{
-		common.AnnotationKeyForceDrainSpecsCompleted: currentVal + forceDrainSpecPipeline + ",",
-	})
-	if err != nil {
-		return err
-	}
-
 	// Patch in Kubernetes
 	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
 		common.AnnotationKeyForceDrainSpecsCompleted: currentVal + forceDrainSpecPipeline + ",",
 	})
 }
 
+// annotation is comma delimited: check if the value is present
 func checkForValueInCommaDelimitedAnnotation(pipeline *unstructured.Unstructured, value string, annotationKey string) bool {
 	annotations := pipeline.GetAnnotations()
 	if annotations == nil {
@@ -741,15 +724,9 @@ func checkForValueInCommaDelimitedAnnotation(pipeline *unstructured.Unstructured
 	return strings.Contains(forceDrainSpecs, targetPattern)
 }
 
+// we use an annotation to indicate when we've started force draining with a promoted pipeline's spec
+// if the annotation is unset, then the pipeline spec is still theoriginal
 func isPipelineSpecOriginal(pipeline *unstructured.Unstructured) bool {
 	forceDrainSpecs, found := pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecsStarted]
 	return !found || forceDrainSpecs == ""
-}
-
-func getForceDrainFailureWaitDuration() int32 {
-	globalConfig, _ := config.GetConfigManagerInstance().GetConfig()
-	if globalConfig.Pipeline.ForceDrainFailureWaitDuration != nil {
-		return *globalConfig.Pipeline.ForceDrainFailureWaitDuration
-	}
-	return 15
 }

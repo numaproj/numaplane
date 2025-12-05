@@ -422,3 +422,11 @@ func GetMaxRecyclableDurationMinutes() int32 {
 	// Default to 60 minutes if not configured
 	return 60
 }
+
+func GetForceDrainFailureWaitDuration() int32 {
+	globalConfig, _ := GetConfigManagerInstance().GetConfig()
+	if globalConfig.Pipeline.ForceDrainFailureWaitDuration != nil {
+		return *globalConfig.Pipeline.ForceDrainFailureWaitDuration
+	}
+	return 15
+}

@@ -174,6 +174,7 @@ func PatchLabels(ctx context.Context, c client.Client, obj *unstructured.Unstruc
 	return PatchResource(ctx, c, obj, patchJson, k8stypes.MergePatchType)
 }
 
+// SetAndPatchLabels sets the labels on an unstructured object and then patches them into the live object
 func SetAndPatchLabels(ctx context.Context, c client.Client, obj *unstructured.Unstructured, labels map[string]string) error {
 	if err := SetLabels(obj, labels); err != nil {
 		return err
@@ -234,6 +235,7 @@ func PatchAnnotations(ctx context.Context, c client.Client, obj *unstructured.Un
 	return PatchResource(ctx, c, obj, patchJson, k8stypes.MergePatchType)
 }
 
+// SetAndPatchAnnotations sets the annotations on an unstructured object and then patches them into the live object
 func SetAndPatchAnnotations(ctx context.Context, c client.Client, obj *unstructured.Unstructured, annotations map[string]string) error {
 	if err := SetAnnotations(obj, annotations); err != nil {
 		return err

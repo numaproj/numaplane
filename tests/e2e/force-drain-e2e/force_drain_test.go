@@ -220,7 +220,6 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		fmt.Printf("pauseTimestamp3: %s\n", pauseTimestamp3)
 		Expect(pauseTimestamp3).ShouldNot(Equal(pauseTimestamp3Orig))
-		// todo: verify that pauseTimestamp3 is approximately the right time delta from original
 
 		// verify that test-pipeline-rollout-3, and test-pipeline-rollout-4 have finished trying to drain
 		VerifyPipelineSpecStatus(Namespace, GetInstanceName(pipelineRolloutName, 3), func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
