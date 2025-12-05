@@ -38,10 +38,17 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	// which InterstepBufferServiceName should we use?
 	// If there is an upgrading isbsvc, use that
 	// Otherwise, use the promoted one
-	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
-	if err != nil {
+	var isbsvc *unstructured.Unstructured
+	isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
+	if isbsvc == nil {
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
+		if err != nil {
+			return nil, err
+		}
+	} else if err != nil {
 		return nil, err
 	}
+	// if isbsvc is still nil after checking for trial and in progress labels, look for promoted
 	if isbsvc == nil {
 		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
 		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
@@ -56,7 +63,8 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	}
 
 	labels := pipeline.GetLabels()
-	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
+	// labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
 	labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 	pipeline.SetLabels(labels)
 

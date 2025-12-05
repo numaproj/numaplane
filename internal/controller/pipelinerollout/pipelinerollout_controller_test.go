@@ -1370,7 +1370,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, existingPipelineDef)
 			}
 
-			time.Sleep(time.Second * 15) // this is for the "Clean up after progressive upgrade" test case in which there are two "promoted" Pipelines (due to a failure) and we must know which one was created most recently (therefore, we need the CreationTimestamps differentiated enough)
+			// failing locally, changed to two seconds
+			time.Sleep(time.Second * 2) // this is for the "Clean up after progressive upgrade" test case in which there are two "promoted" Pipelines (due to a failure) and we must know which one was created most recently (therefore, we need the CreationTimestamps differentiated enough)
 
 			if tc.existingUpgradePipelineDef != nil {
 				existingUpgradePipelineDef := tc.existingUpgradePipelineDef

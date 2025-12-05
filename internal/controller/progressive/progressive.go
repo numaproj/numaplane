@@ -137,8 +137,14 @@ func ProcessResource(
 	}
 
 	// is there currently an "upgrading" child?
-	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
-	if err != nil {
+	var currentUpgradingChildDef *unstructured.Unstructured
+	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeTrial, nil, true, c)
+	if currentUpgradingChildDef == nil {
+		currentUpgradingChildDef, err = ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
+		if err != nil {
+			return false, 0, err
+		}
+	} else if err != nil {
 		return false, 0, err
 	}
 
@@ -969,8 +975,14 @@ func Discontinue(ctx context.Context,
 	}
 
 	// Generally, there should just be one Upgrading child, but just in case there's more than 1, mark all of them recyclable
-	upgradingChildren, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
-	if err != nil {
+	var upgradingChildren unstructured.UnstructuredList
+	upgradingChildren, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeTrial, nil, true, c)
+	if len(upgradingChildren.Items) == 0 {
+		upgradingChildren, err = ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
+		if err != nil {
+			return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
+		}
+	} else if err != nil {
 		return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
 	}
 
