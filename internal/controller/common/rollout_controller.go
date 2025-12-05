@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
-
-	k8stypes "k8s.io/apimachinery/pkg/types"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,7 +22,7 @@ type RolloutController interface {
 	IncrementChildCount(ctx context.Context, rolloutObject RolloutObject) (int32, error)
 
 	// Recycle deletes child; returns true if it was in fact deleted
-	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error)
+	Recycle(ctx context.Context, childObject *unstructured.Unstructured) (bool, error)
 
 	// GetDesiredRiders gets the list of Riders as specified in the RolloutObject, templated for the specific child name and
 	// based on the child definition.
@@ -60,7 +59,7 @@ func GarbageCollectChildren(
 
 	allDeleted := true
 	for _, recyclableChild := range recyclableObjects.Items {
-		deleted, err := controller.Recycle(ctx, &recyclableChild, c)
+		deleted, err := controller.Recycle(ctx, &recyclableChild)
 		if err != nil {
 			return false, err
 		}
@@ -155,7 +154,7 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 				numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
 					rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
 				purgeOld := common.LabelValuePurgeOld
-				err = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &purgeOld, recyclableChild)
+				err = MarkRecyclable(ctx, c, &purgeOld, recyclableChild)
 				if err != nil {
 					numaLogger.Error(err, "failed to mark older child objects") // don't return error, as it's a non-essential operation
 				}
@@ -169,26 +168,35 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 	}
 }
 
+func MarkRecyclable(ctx context.Context, c client.Client, upgradeStateReason *common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
+
+	err := UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, upgradeStateReason, childObject)
+	if err != nil {
+		return err
+	}
+	// patch the annotation to mark the time when the resource was marked as recyclable
+	return kubernetes.SetAndPatchAnnotations(ctx, c, childObject, map[string]string{
+		common.AnnotationKeyRecyclableStartTime: time.Now().Format(time.RFC3339),
+	})
+
+}
+
 // update the in-memory object with the new Label and patch the object in K8S
 func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
 	numaLogger := logger.FromContext(ctx)
 
 	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", util.OptionalString(upgradeStateReason)).Debugf("patching upgradeState and upgradeStateReason to %s:%s/%s",
 		childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
-	var patchJson string
-	labels := childObject.GetLabels()
-	if labels == nil {
-		labels = make(map[string]string)
+
+	labelsToSet := map[string]string{
+		common.LabelKeyUpgradeState: string(upgradeState),
 	}
-	labels[common.LabelKeyUpgradeState] = string(upgradeState)
 	if upgradeStateReason != nil {
-		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
-		patchJson = `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `","` + common.LabelKeyUpgradeStateReason + `":"` + string(*upgradeStateReason) + `"}}}`
-	} else {
-		patchJson = `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
+		labelsToSet[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
 	}
-	childObject.SetLabels(labels)
-	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
+
+	// Patch the labels in Kubernetes
+	return kubernetes.SetAndPatchLabels(ctx, c, childObject, labelsToSet)
 }
 
 func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstructured.Unstructured) (*common.UpgradeState, *common.UpgradeStateReason) {

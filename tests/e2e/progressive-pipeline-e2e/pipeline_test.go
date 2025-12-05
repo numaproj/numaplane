@@ -269,12 +269,12 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 4)) // the "Upgrading" one
 		CheckConsistently("verifying just the original promoted Pipeline remains", func() bool {
 			pipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
-			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName) == 1 && pipelineName == promotedPipelineName
+			return GetNumberOfNonRecyclableChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName) == 1 && pipelineName == promotedPipelineName
 		}).Should(BeTrue())
 
 		CheckConsistently("verifying just the original promoted InterstepBufferService remains", func() bool {
 			isbsvcName, _ := GetPromotedISBServiceName(Namespace, isbServiceRolloutName)
-			return GetNumberOfChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName) == 1 && isbsvcName == promotedISBSvc.GetName()
+			return GetNumberOfNonRecyclableChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName) == 1 && isbsvcName == promotedISBSvc.GetName()
 		}).Should(BeTrue())
 
 		DeletePipelineRollout(pipelineRolloutName)

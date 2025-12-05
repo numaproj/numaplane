@@ -826,9 +826,8 @@ func (r *MonoVertexRolloutReconciler) IncrementChildCount(ctx context.Context, r
 // This implements a function of the RolloutController interface
 func (r *MonoVertexRolloutReconciler) Recycle(ctx context.Context,
 	monoVertexDef *unstructured.Unstructured,
-	c client.Client,
 ) (bool, error) {
-	err := kubernetes.DeleteResource(ctx, c, monoVertexDef)
+	err := kubernetes.DeleteResource(ctx, r.client, monoVertexDef)
 	if err != nil {
 		return false, err
 	}

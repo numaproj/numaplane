@@ -22,3 +22,4 @@ data:
     permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler"
     pipeline:
       forceDrainFailureWaitDuration: 15
+      maxRecyclableDurationMinutes: 240 # 4 hours

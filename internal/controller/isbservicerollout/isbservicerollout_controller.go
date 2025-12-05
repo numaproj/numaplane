@@ -520,7 +520,7 @@ func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbS
 	if needsRecreate {
 		// in this case, we need to mark our resource as Recyclable (it will be recreated on a future reconciliation after it's been deleted)
 		reasonRecreate := common.LabelValueDeleteRecreateChild
-		err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, &reasonRecreate, newISBServiceDef)
+		err := ctlrcommon.MarkRecyclable(ctx, r.client, &reasonRecreate, newISBServiceDef)
 		if err != nil {
 			return err
 		}
@@ -1033,7 +1033,7 @@ func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, r
 
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
-func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured, c client.Client) (bool, error) {
+func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("isbsvc", fmt.Sprintf("%s/%s", isbsvc.GetNamespace(), isbsvc.GetName()))
 
 	// For InterstepBufferService, the main thing is that we don't want to delete it until we can be sure there are no
@@ -1049,7 +1049,7 @@ func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstr
 	}
 	// okay to delete now
 	numaLogger.Debug("deleting isbsvc")
-	err = kubernetes.DeleteResource(ctx, c, isbsvc)
+	err = kubernetes.DeleteResource(ctx, r.client, isbsvc)
 	if err != nil {
 		return false, err
 	}

@@ -241,13 +241,13 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 		CheckEventually("verifying just 1 InterstepBufferService", func() int {
-			return GetNumberOfChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
+			return GetNumberOfNonRecyclableChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
 		}).Should(Equal(1))
 		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		CheckEventually("verifying just 1 Pipeline", func() int {
-			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+			return GetNumberOfNonRecyclableChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
 		}).Should(Equal(1))
 		VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
@@ -300,13 +300,13 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 		CheckEventually("verifying just 1 InterstepBufferService", func() int {
-			return GetNumberOfChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
+			return GetNumberOfNonRecyclableChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
 		}).Should(Equal(1))
 		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		CheckEventually("verifying just 1 Pipeline", func() int {
-			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+			return GetNumberOfNonRecyclableChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
 		}).Should(Equal(1))
 		VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
@@ -357,7 +357,7 @@ var _ = Describe("Rollback e2e", Serial, func() {
 			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 			CheckEventually(fmt.Sprintf("verifying just 1 promoted Pipeline, with expected name %s", promotedPipelineName), func() bool {
 				currentPromotedName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
-				numChildren := GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+				numChildren := GetNumberOfNonRecyclableChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
 				return currentPromotedName == promotedPipelineName && numChildren == 1
 			}).Should(Equal(true))
 			VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)

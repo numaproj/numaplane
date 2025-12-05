@@ -741,7 +741,9 @@ func toUnstructuredAndApplyLabel(manifests []string, name string) ([]*unstructur
 			return nil, err
 		}
 		target := &unstructured.Unstructured{Object: obj}
-		err = kubernetes.SetLabel(target, common.LabelKeyNumaplaneInstance, name)
+		err = kubernetes.SetLabels(target, map[string]string{
+			common.LabelKeyNumaplaneInstance: name,
+		})
 		if err != nil {
 			return nil, err
 		}
