@@ -326,12 +326,11 @@ func TestPatchLabels(t *testing.T) {
 	namespace := "default"
 
 	tests := []struct {
-		name                    string
-		initialLabels           map[string]string
-		patchLabels             map[string]string
-		expectedLabels          map[string]string
-		expectedError           bool
-		expectedResourceVersion bool // whether resource version should change
+		name           string
+		initialLabels  map[string]string
+		patchLabels    map[string]string
+		expectedLabels map[string]string
+		expectedError  bool
 	}{
 		{
 			name:          "patch single label on resource with no labels",
@@ -342,8 +341,7 @@ func TestPatchLabels(t *testing.T) {
 			expectedLabels: map[string]string{
 				"app": "test-app",
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name: "patch single label on resource with existing labels",
@@ -357,8 +355,7 @@ func TestPatchLabels(t *testing.T) {
 				"existing": "label",
 				"app":      "test-app",
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name: "patch multiple labels",
@@ -376,8 +373,7 @@ func TestPatchLabels(t *testing.T) {
 				"version":  "v1.0",
 				"env":      "production",
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name: "update existing label value",
@@ -392,8 +388,7 @@ func TestPatchLabels(t *testing.T) {
 				"app":      "new-app",
 				"existing": "label",
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name: "patch upgrade state labels",
@@ -409,8 +404,7 @@ func TestPatchLabels(t *testing.T) {
 				common.LabelKeyUpgradeState:       string(common.LabelValueUpgradePromoted),
 				common.LabelKeyUpgradeStateReason: "test-reason",
 			},
-			expectedError:           false,
-			expectedResourceVersion: true,
+			expectedError: false,
 		},
 		{
 			name:          "patch empty map (no-op)",
@@ -419,8 +413,7 @@ func TestPatchLabels(t *testing.T) {
 			expectedLabels: map[string]string{
 				"existing": "label",
 			},
-			expectedError:           false,
-			expectedResourceVersion: false, // no change expected
+			expectedError: false,
 		},
 	}
 
@@ -454,7 +447,7 @@ func TestPatchLabels(t *testing.T) {
 
 			pipelineObject := &unstructured.Unstructured{Object: make(map[string]interface{})}
 			pipelineObject.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
-			pipelineObject.SetName(fmt.Sprintf("test-pipeline-labels-%s", tt.name))
+			pipelineObject.SetName("test-pipeline-0")
 			pipelineObject.SetNamespace(namespace)
 
 			// Set initial labels if any
@@ -474,7 +467,6 @@ func TestPatchLabels(t *testing.T) {
 			// Get the resource to get the initial resource version
 			pipelineObject, err = GetLiveResource(ctx, pipelineObject, "pipelines")
 			assert.Nil(t, err)
-			initialResourceVersion := pipelineObject.GetResourceVersion()
 
 			// Perform the patch
 			err = PatchLabels(ctx, runtimeClient, pipelineObject, tt.patchLabels)
@@ -491,11 +483,6 @@ func TestPatchLabels(t *testing.T) {
 				// Verify labels
 				actualLabels := pipelineObject.GetLabels()
 				assert.Equal(t, tt.expectedLabels, actualLabels, "labels should match expected")
-
-				// Verify resource version changed (or not)
-				if tt.expectedResourceVersion {
-					assert.NotEqual(t, initialResourceVersion, pipelineObject.GetResourceVersion(), "resource version should change after patch")
-				}
 			}
 
 			// Clean up

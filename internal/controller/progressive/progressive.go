@@ -503,13 +503,13 @@ func checkForUpgradeReplacement(
 
 			// recycle the old one
 			reason := common.LabelValueProgressiveReplaced
-		if childStatus.AssessmentResult == apiv1.AssessmentResultFailure {
-			reason = common.LabelValueProgressiveReplacedFailed
-		}
-		err = ctlrcommon.MarkRecyclable(ctx, c, &reason, existingUpgradingChildDef)
-		if err != nil {
-			return false, false, err
-		}
+			if childStatus.AssessmentResult == apiv1.AssessmentResultFailure {
+				reason = common.LabelValueProgressiveReplacedFailed
+			}
+			err = ctlrcommon.MarkRecyclable(ctx, c, &reason, existingUpgradingChildDef)
+			if err != nil {
+				return false, false, err
+			}
 
 			// Create a new upgrading child to replace it
 
