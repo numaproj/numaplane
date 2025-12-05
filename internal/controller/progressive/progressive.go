@@ -88,7 +88,7 @@ type progressiveController interface {
 	// ProgressiveUnsupported checks to see if Full Progressive Rollout (with assessment) is unsupported for this Rollout
 	ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool
 
-	UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject, completed bool)
+	UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -822,7 +822,7 @@ func startUpgradeProcess(
 	}
 
 	// Update progressive metrics after creating the upgrading child
-	controller.UpdateProgressiveMetrics(rolloutObject, false)
+	controller.UpdateProgressiveMetrics(rolloutObject)
 
 	return newUpgradingChildDef, false, nil
 }

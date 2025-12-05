@@ -477,9 +477,9 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 				// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
 				assessmentResult := metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult)
 				if assessmentResult != "" {
-					r.customMetrics.IncISBSvcProgressiveResults(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
+					r.customMetrics.IncISBServiceProgressiveCompleted(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
 						isbServiceRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-						assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+						assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess)
 				}
 			}
 		} else {

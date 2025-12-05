@@ -16,7 +16,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
-	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -221,15 +220,10 @@ func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 	return false, nil
 }
 
-func (r *ISBServiceRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject, completed bool) {
+func (r *ISBServiceRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject) {
 	if rolloutObject.GetUpgradingChildStatus() != nil {
 		childName := rolloutObject.GetUpgradingChildStatus().Name
-		successStatus := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
-		forcedSuccess := rolloutObject.GetUpgradingChildStatus().ForcedSuccess
-		basicAssessmentResult := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
-
-		r.customMetrics.IncISBSvcProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
-			childName, basicAssessmentResult, successStatus, forcedSuccess, completed)
+		r.customMetrics.IncIBSServiceProgressiveStarted(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(), childName)
 	}
 }
 
