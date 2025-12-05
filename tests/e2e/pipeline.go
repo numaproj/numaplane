@@ -846,8 +846,21 @@ func VerifyPipelinePromoted(pipelineName string) {
 }
 
 // VerifyPipelineDesiredPhase verifies that a Pipeline has the expected desired phase in its lifecycle
-func VerifyPipelineDesiredPhase(pipelineName, desiredPhase string) {
+func VerifyPipelineDesiredPhase(pipelineName string, desiredPhase numaflowv1.PipelinePhase) {
+	By(fmt.Sprintf("Verifying Pipeline %s has desired phase %s", pipelineName, desiredPhase))
 	VerifyPipelineSpecStatus(Namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
-		return string(spec.Lifecycle.DesiredPhase) == desiredPhase
+		return spec.Lifecycle.DesiredPhase == desiredPhase
+	})
+}
+
+func VerifyPipelinePhase(namespace, pipelineName string, phases []numaflowv1.PipelinePhase) {
+	By(fmt.Sprintf("Verifying Pipeline %s has phase in %v", pipelineName, phases))
+	VerifyPipelineSpecStatus(namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
+		for _, phase := range phases {
+			if status.Phase == phase {
+				return true
+			}
+		}
+		return false
 	})
 }

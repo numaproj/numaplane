@@ -187,9 +187,14 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// and are pausing
 		verifyPipelineHasImage(0, validImagePath)
 		verifyPipelineHasImage(3, "badpath2")
-		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 0), string(numaflowv1.PipelinePhasePaused))
-		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), string(numaflowv1.PipelinePhasePaused))
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 0), numaflowv1.PipelinePhasePaused)
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePaused)
 		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3
+
+		// verify test-pipeline-rollout-0 and test-pipeline-rollout-3 hav status.phase==Pausing
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 0), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing,numaflowv1.PipelinePhasePaused})
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing,numaflowv1.PipelinePhasePaused})
+
 		pauseTimestamp3Orig, err := GetAnnotation(Namespace, GetInstanceName(pipelineRolloutName, 3), "numaflow.numaproj.io/pause-timestamp")
 		Expect(err).ShouldNot(HaveOccurred())
 		fmt.Printf("pauseTimestamp3Orig: %s\n", pauseTimestamp3Orig)
@@ -204,8 +209,10 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		forcePromote(pipelineRolloutName, 5)
 		verifyPipelineHasImage(3, "badpath3")
 		verifyPipelineHasImage(4, "badpath3")
-		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), string(numaflowv1.PipelinePhasePaused))
-		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 4), string(numaflowv1.PipelinePhasePaused))
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePaused)
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 4), numaflowv1.PipelinePhasePaused)
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing,numaflowv1.PipelinePhasePaused})
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 4), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing,numaflowv1.PipelinePhasePaused})
 
 		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3 to make sure that it's
 		// different from the previous pause timestamp, indicating that a new pause has started
@@ -233,15 +240,31 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 	It("Should successfully drain all previous Pipelines once there's a Pipeline with a healthy spec", func() {
 
-		// updated Pipeline updates the sink ("test-pipeline-rollout-5")
+		// updated Pipeline updates the sink ("test-pipeline-rollout-6")
 		updatePipeline(updatedPipelineSpec)
 
-		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4, 5})
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{3, 4, 5})
 
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 0), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 3), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 4), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 5), "Normal")
+		
+	})
+
+	It("Should reach max recyclable duration and delete the Pipeline", func() {
+
+		// set numaplane controller config to have max recyclable duration of 2 minutes
+		UpdateNumaplaneControllerConfig(map[string]string{
+			"pipeline.maxRecyclableDurationMinutes": "2",
+		})
+
+		// create test-pipeline-rollout-7 and test-pipeline-rollout-8 and force promote 8
+	    updateFailedPipelinesBackToBack()
+		forcePromote(pipelineRolloutName, 8)
+
+		// now let's make sure that test-pipeline-rollout-8 gets deleted even though it can't drain successfully
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 8))
 	})
 
 	It("Should Delete Rollouts", func() {
