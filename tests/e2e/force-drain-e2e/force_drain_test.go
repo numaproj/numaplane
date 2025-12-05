@@ -240,7 +240,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 	It("Should successfully drain all previous Pipelines once there's a Pipeline with a healthy spec", func() {
 
-		// updated Pipeline updates the sink ("test-pipeline-rollout-5")
+		// updated Pipeline updates the sink ("test-pipeline-rollout-6")
 		updatePipeline(updatedPipelineSpec)
 
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{3, 4, 5})
@@ -249,6 +249,22 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 3), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 4), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 5), "Normal")
+		
+	})
+
+	It("Should reach max recyclable duration and delete the Pipeline", func() {
+
+		// set numaplane controller config to have max recyclable duration of 2 minutes
+		UpdateNumaplaneControllerConfig(map[string]string{
+			"pipeline.maxRecyclableDurationMinutes": "2",
+		})
+
+		// create test-pipeline-rollout-7 and test-pipeline-rollout-8 and force promote 8
+	    updateFailedPipelinesBackToBack()
+		forcePromote(pipelineRolloutName, 8)
+
+		// now let's make sure that test-pipeline-rollout-8 gets deleted even though it can't drain successfully
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 8))
 	})
 
 	It("Should Delete Rollouts", func() {
