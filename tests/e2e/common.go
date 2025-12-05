@@ -608,6 +608,29 @@ func GetNumberOfChildren(gvr schema.GroupVersionResource, namespace, rolloutName
 	return len(children.Items)
 }
 
+func GetNumberOfNonRecyclableChildren(gvr schema.GroupVersionResource, namespace, rolloutName string) int {
+	children, err := GetChildren(gvr, namespace, rolloutName)
+	if err != nil || children == nil {
+		return 0
+	}
+
+	count := 0
+	for _, child := range children.Items {
+		labels := child.GetLabels()
+		if labels != nil {
+			upgradeState, found := labels[common.LabelKeyUpgradeState]
+			// Count children that either don't have the label or have a state other than "recyclable"
+			if !found || upgradeState != string(common.LabelValueUpgradeRecyclable) {
+				count++
+			}
+		} else {
+			// No labels means not recyclable
+			count++
+		}
+	}
+	return count
+}
+
 func getUpgradeStrategy() config.USDEUserStrategy {
 	userStrategy := config.USDEUserStrategy(strings.ToLower(os.Getenv("STRATEGY")))
 	if userStrategy == "" {

@@ -296,7 +296,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 		if nonTransientFailure {
 			// patch the annotation to mark that we've completed the drain with this promoted pipeline spec
 			currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsCompleted)
-			err := kubernetes.PatchAnnotations(ctx, r.client, pipeline, map[string]string{
+			err := kubernetes.SetAndPatchAnnotations(ctx, r.client, pipeline, map[string]string{
 				common.AnnotationKeyForceDrainSpecsCompleted: currentVal + promotedPipeline.GetName() + ",",
 				// reset this so we won't try to look at it on the next force drain attempt
 				common.AnnotationKeyForceDrainFailureStartTime: "",
@@ -318,7 +318,7 @@ func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, 
 
 	// the first time we detect failure, mark the time
 	if pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime] == "" {
-		if err := kubernetes.PatchAnnotations(ctx, r.client, pipeline, map[string]string{
+		if err := kubernetes.SetAndPatchAnnotations(ctx, r.client, pipeline, map[string]string{
 			common.AnnotationKeyForceDrainFailureStartTime: currentTime.Format(time.RFC3339),
 		}); err != nil {
 			return false, fmt.Errorf("failed to set force drain failure start time annotation on pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
@@ -699,7 +699,7 @@ func markPipelineForceDrainStarted(ctx context.Context, c client.Client, pipelin
 	}
 
 	// Patch in Kubernetes
-	return kubernetes.PatchAnnotations(ctx, c, pipeline, map[string]string{
+	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
 		common.AnnotationKeyForceDrainSpecsStarted: currentVal + forceDrainSpecPipeline + ",",
 	})
 }
@@ -721,7 +721,7 @@ func markPipelineForceDrainCompleted(ctx context.Context, c client.Client, pipel
 	}
 
 	// Patch in Kubernetes
-	return kubernetes.PatchAnnotations(ctx, c, pipeline, map[string]string{
+	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
 		common.AnnotationKeyForceDrainSpecsCompleted: currentVal + forceDrainSpecPipeline + ",",
 	})
 }

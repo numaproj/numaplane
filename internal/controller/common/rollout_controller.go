@@ -175,7 +175,7 @@ func MarkRecyclable(ctx context.Context, c client.Client, upgradeStateReason *co
 		return err
 	}
 	// patch the annotation to mark the time when the resource was marked as recyclable
-	return kubernetes.PatchAnnotations(ctx, c, childObject, map[string]string{
+	return kubernetes.SetAndPatchAnnotations(ctx, c, childObject, map[string]string{
 		common.AnnotationKeyRecyclableStartTime: time.Now().Format(time.RFC3339),
 	})
 
@@ -195,13 +195,8 @@ func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState commo
 		labelsToSet[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
 	}
 
-	// Update in-memory labels
-	if err := kubernetes.SetLabels(childObject, labelsToSet); err != nil {
-		return err
-	}
-
 	// Patch the labels in Kubernetes
-	return kubernetes.PatchLabels(ctx, c, childObject, labelsToSet)
+	return kubernetes.SetAndPatchLabels(ctx, c, childObject, labelsToSet)
 }
 
 func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstructured.Unstructured) (*common.UpgradeState, *common.UpgradeStateReason) {

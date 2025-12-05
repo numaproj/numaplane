@@ -159,8 +159,11 @@ const (
 	// (if not, it is safe to delete without needing to drain it first)
 	AnnotationKeyRequiresDrain = KeyNumaplanePrefix + "requires-drain"
 
+	// AnnotationKeyForceDrainFailureStartTime is annotated on a pipeline when it is marked as failed due to force drain
+	// This is used to check for transient vs persistent failures to know if we can stop trying to drain
 	AnnotationKeyForceDrainFailureStartTime = KeyNumaplanePrefix + "force-drain-failure-start-time"
 
+	// AnnotationKeyRecyclableStartTime is annotated on a pipeline when it is marked as recyclable
 	AnnotationKeyRecyclableStartTime = KeyNumaplanePrefix + "recyclable-start-time"
 
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed

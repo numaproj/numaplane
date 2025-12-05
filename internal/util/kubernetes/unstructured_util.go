@@ -174,6 +174,13 @@ func PatchLabels(ctx context.Context, c client.Client, obj *unstructured.Unstruc
 	return PatchResource(ctx, c, obj, patchJson, k8stypes.MergePatchType)
 }
 
+func SetAndPatchLabels(ctx context.Context, c client.Client, obj *unstructured.Unstructured, labels map[string]string) error {
+	if err := SetLabels(obj, labels); err != nil {
+		return err
+	}
+	return PatchLabels(ctx, c, obj, labels)
+}
+
 // GetAnnotation returns the annotation identified by "key"
 func GetAnnotation(un *unstructured.Unstructured, key string) (string, error) {
 	annotations, err := nestedNullableStringMap(un.Object, "metadata", "annotations")
@@ -225,6 +232,13 @@ func PatchAnnotations(ctx context.Context, c client.Client, obj *unstructured.Un
 	// Using strategic merge patch which handles missing annotations map gracefully
 	patchJson := fmt.Sprintf(`{"metadata":{"annotations":%s}}`, string(annotationsJson))
 	return PatchResource(ctx, c, obj, patchJson, k8stypes.MergePatchType)
+}
+
+func SetAndPatchAnnotations(ctx context.Context, c client.Client, obj *unstructured.Unstructured, annotations map[string]string) error {
+	if err := SetAnnotations(obj, annotations); err != nil {
+		return err
+	}
+	return PatchAnnotations(ctx, c, obj, annotations)
 }
 
 // nestedNullableStringMap returns a copy of map[string]string value of a nested field.
