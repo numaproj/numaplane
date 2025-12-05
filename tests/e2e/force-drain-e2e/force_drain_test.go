@@ -191,10 +191,9 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePaused)
 		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3
 
-
 		// verify test-pipeline-rollout-0 and test-pipeline-rollout-3 hav status.phase==Pausing
-		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 0), numaflowv1.PipelinePhasePausing)
-		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePausing)
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 0), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing,numaflowv1.PipelinePhasePaused})
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing,numaflowv1.PipelinePhasePaused})
 
 		pauseTimestamp3Orig, err := GetAnnotation(Namespace, GetInstanceName(pipelineRolloutName, 3), "numaflow.numaproj.io/pause-timestamp")
 		Expect(err).ShouldNot(HaveOccurred())
@@ -212,8 +211,8 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		verifyPipelineHasImage(4, "badpath3")
 		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePaused)
 		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 4), numaflowv1.PipelinePhasePaused)
-		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePausing)
-		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 4), numaflowv1.PipelinePhasePausing)
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing,numaflowv1.PipelinePhasePaused})
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 4), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing,numaflowv1.PipelinePhasePaused})
 
 		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3 to make sure that it's
 		// different from the previous pause timestamp, indicating that a new pause has started
@@ -244,7 +243,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// updated Pipeline updates the sink ("test-pipeline-rollout-5")
 		updatePipeline(updatedPipelineSpec)
 
-		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4, 5})
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{3, 4, 5})
 
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 0), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 3), "Normal")
