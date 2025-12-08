@@ -41,6 +41,13 @@ func GetPromotedMonoVertexName(namespace, monoVertexRolloutName string) (string,
 	return mv.GetName(), nil
 }
 
+func VerifyPromotedMonoVertexExists(namespace, monoVertexRolloutName string) {
+	CheckEventually(fmt.Sprintf("Verifying that a promoted MonoVertex exists for MonoVertexRollout %s", monoVertexRolloutName), func() bool {
+		_, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
+		return err == nil
+	}).Should(BeTrue())
+}
+
 func GetGVRForMonoVertex() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaflow.numaproj.io",

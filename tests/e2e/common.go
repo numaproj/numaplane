@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -607,6 +608,29 @@ func GetNumberOfChildren(gvr schema.GroupVersionResource, namespace, rolloutName
 	return len(children.Items)
 }
 
+func GetNumberOfNonRecyclableChildren(gvr schema.GroupVersionResource, namespace, rolloutName string) int {
+	children, err := GetChildren(gvr, namespace, rolloutName)
+	if err != nil || children == nil {
+		return 0
+	}
+
+	count := 0
+	for _, child := range children.Items {
+		labels := child.GetLabels()
+		if labels != nil {
+			upgradeState, found := labels[common.LabelKeyUpgradeState]
+			// Count children that either don't have the label or have a state other than "recyclable"
+			if !found || upgradeState != string(common.LabelValueUpgradeRecyclable) {
+				count++
+			}
+		} else {
+			// No labels means not recyclable
+			count++
+		}
+	}
+	return count
+}
+
 func getUpgradeStrategy() config.USDEUserStrategy {
 	userStrategy := config.USDEUserStrategy(strings.ToLower(os.Getenv("STRATEGY")))
 	if userStrategy == "" {
@@ -816,4 +840,88 @@ func VerifyVerticesScale(actualVertexScaleMap map[string]numaflowv1.Scale, expec
 	}
 
 	return true
+}
+
+// UpdateNumaplaneControllerConfig updates the numaplane controller ConfigMap with the provided key-value pairs
+func UpdateNumaplaneControllerConfig(configUpdates map[string]string) {
+	By("Updating numaplane controller config")
+
+	configMapName := "numaplane-controller-config"
+
+	CheckEventually(fmt.Sprintf("Updating ConfigMap %s", configMapName), func() bool {
+		// Get the current ConfigMap
+		configMap, err := kubeClient.CoreV1().ConfigMaps(Namespace).Get(ctx, configMapName, metav1.GetOptions{})
+		if err != nil {
+			GinkgoWriter.Printf("Failed to get ConfigMap %s: %v\n", configMapName, err)
+			return false
+		}
+
+		// Get the current config.yaml content
+		currentConfigYaml, exists := configMap.Data["config.yaml"]
+		if !exists {
+			GinkgoWriter.Printf("config.yaml not found in ConfigMap %s\n", configMapName)
+			return false
+		}
+
+		// Parse the YAML into a map
+		var configData map[string]interface{}
+		err = yaml.Unmarshal([]byte(currentConfigYaml), &configData)
+		if err != nil {
+			GinkgoWriter.Printf("Failed to unmarshal config.yaml: %v\n", err)
+			return false
+		}
+
+		// Update the config with the provided key-value pairs
+		for key, value := range configUpdates {
+			// Handle nested keys (e.g., "pipeline.maxRecyclableDurationMinutes")
+			keys := strings.Split(key, ".")
+			current := configData
+
+			// Navigate to the nested structure
+			for i := 0; i < len(keys)-1; i++ {
+				if _, ok := current[keys[i]]; !ok {
+					current[keys[i]] = make(map[string]interface{})
+				}
+				if nested, ok := current[keys[i]].(map[string]interface{}); ok {
+					current = nested
+				} else {
+					// If the value exists but is not a map, we need to convert it
+					current[keys[i]] = make(map[string]interface{})
+					current = current[keys[i]].(map[string]interface{})
+				}
+			}
+
+			// Set the final value
+			finalKey := keys[len(keys)-1]
+			// Try to parse the value as an integer first
+			if intVal, err := strconv.Atoi(value); err == nil {
+				current[finalKey] = intVal
+			} else {
+				// If not an integer, store as string
+				current[finalKey] = value
+			}
+		}
+
+		// Marshal the updated config back to YAML
+		updatedConfigYaml, err := yaml.Marshal(configData)
+		if err != nil {
+			GinkgoWriter.Printf("Failed to marshal updated config: %v\n", err)
+			return false
+		}
+
+		// Update the ConfigMap
+		configMap.Data["config.yaml"] = string(updatedConfigYaml)
+		_, err = kubeClient.CoreV1().ConfigMaps(Namespace).Update(ctx, configMap, metav1.UpdateOptions{})
+		if err != nil {
+			GinkgoWriter.Printf("Failed to update ConfigMap %s: %v\n", configMapName, err)
+			return false
+		}
+
+		GinkgoWriter.Printf("Successfully updated ConfigMap %s with %v\n", configMapName, configUpdates)
+		return true
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
+
+	// Wait a bit for the config to be reloaded by the controller
+	// The controller watches the ConfigMap and reloads it automatically
+	time.Sleep(5 * time.Second)
 }

@@ -89,6 +89,13 @@ func GetPromotedISBServiceName(namespace, isbServiceRolloutName string) (string,
 	return isbsvc.GetName(), nil
 }
 
+func VerifyPromotedISBServiceExists(namespace, isbServiceRolloutName string) {
+	CheckEventually(fmt.Sprintf("Verifying that a promoted ISBService exists for ISBServiceRollout %s", isbServiceRolloutName), func() bool {
+		_, err := GetPromotedISBService(namespace, isbServiceRolloutName)
+		return err == nil
+	}).Should(BeTrue())
+}
+
 func VerifyPromotedISBServiceSpec(namespace string, isbServiceRolloutName string, f func(numaflowv1.InterStepBufferServiceSpec) bool) {
 	var retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec
 	CheckEventually("verifying ISBService Spec", func() bool {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -30,13 +31,12 @@ import (
 func (r *PipelineRolloutReconciler) Recycle(
 	ctx context.Context,
 	pipeline *unstructured.Unstructured,
-	c client.Client,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", fmt.Sprintf("%s/%s", pipeline.GetNamespace(), pipeline.GetName()))
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
 
-	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
+	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, r.client, pipeline)
 	if err != nil {
 		return false, fmt.Errorf("failed to get rollout for pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 	}
@@ -45,7 +45,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	// Use the "upgrade-strategy-reason" Label to determine how
 	// if upgrade-strategy-reason="delete/recreate", then don't pause at all (it will have already paused if we're in PPND)
 	// for the progressive upgrade-strategy-reasons, we drain first
-	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, c, pipeline)
+	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, r.client, pipeline)
 	if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclable {
 		numaLogger.Error(errors.New("should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
 			"namespace", pipeline.GetNamespace(), "name", pipeline.GetName(), "labels", pipeline.GetLabels())
@@ -87,22 +87,22 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	if !requiresPause {
 		numaLogger.Info("Pipeline will be deleted now")
-		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		err = kubernetes.DeleteResource(ctx, r.client, pipeline)
 		return true, err
 	}
 
 	// if pipeline doesn't require drain then just delete it
 	if pipeline.GetAnnotations() == nil || pipeline.GetAnnotations()[common.AnnotationKeyRequiresDrain] != "true" {
 		numaLogger.Info("Pipeline does not require drain and will be deleted now")
-		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		err = kubernetes.DeleteResource(ctx, r.client, pipeline)
 		return true, err
 	}
 
+	// Get live Pipeline here
+
 	// First check if the PipelineRollout is configured to run
 	// If it's configured to be paused or has Vertex.scale.max==0, then we must respect the user's preference not to run
-	// TODO: reduce the number of Pipelines which are in this state by deleting any pipeline which has always been paused or scaled to 0 its entire life, in which case there's
-	// no risk of there being data in it to drain
-	pauseDesired, err := checkUserDesiresPause(ctx, pipelineRollout, pipeline, c)
+	pauseDesired, err := checkUserDesiresPause(ctx, pipelineRollout, pipeline, r.client)
 	if err != nil {
 		return false, err
 	}
@@ -112,7 +112,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 
 	// Is the pipeline still defined with its original spec or have we overridden it with that of the "promoted" pipeline?
-	originalSpec := !isPipelineSpecOverridden(pipeline)
+	originalSpec := isPipelineSpecOriginal(pipeline)
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// if requiresPauseOriginalSpec==true, it means we first attempt to pause with our original spec, and only if that is not able to drain fully, we do force draining
@@ -123,7 +123,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	// if the recycling strategy requires pausing with the original spec and we still have the original spec, then
 	// make sure we pause it and check on it
 	if requiresPauseOriginalSpec && originalSpec {
-		paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
+		paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, r.client)
 		if err != nil {
 			return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
@@ -131,7 +131,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		if paused {
 			if drained {
 				numaLogger.Info("Pipeline has been drained and will be deleted now")
-				err = kubernetes.DeleteResource(ctx, c, pipeline)
+				err = kubernetes.DeleteResource(ctx, r.client, pipeline)
 				r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, true, metrics.LabelValueDrainResult_StandardDrain)
 
 				return true, err
@@ -145,25 +145,11 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 
 	// force drain:
-	// if no new promoted pipeline, we need to wait: ensure we scale to 0 and return
-	promotedPipeline, err := r.checkForPromotedPipelineForForceDrain(ctx, pipelineRollout)
-	if err != nil {
-		return false, fmt.Errorf("error checking for promoted pipeline for force drain for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
-	}
-	if promotedPipeline == nil {
-		numaLogger.Debug("No viable promoted pipeline found for force draining, scaling current pipeline to zero")
-		err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, c)
-		if err != nil {
-			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
-		}
-
-		return false, nil
-	} else {
-		return r.forceDrain(ctx, pipeline, promotedPipeline, pipelineRollout, originalSpec, c)
-	}
+	return r.checkAndPerformForceDrain(ctx, pipeline, pipelineRollout)
 
 }
 
+// registerFinalDrainStatus issues an Event and a metric for the final drain status of a pipeline
 func (r *PipelineRolloutReconciler) registerFinalDrainStatus(namespace, pipelineRolloutName string, pipeline *unstructured.Unstructured, drainComplete bool, drainResult metrics.LabelValueDrainResult) {
 	r.customMetrics.IncProgressivePipelineDrains(namespace, pipelineRolloutName, pipeline.GetName(), drainComplete, drainResult)
 	eventType := "Normal"
@@ -173,21 +159,89 @@ func (r *PipelineRolloutReconciler) registerFinalDrainStatus(namespace, pipeline
 	r.recorder.Eventf(pipeline, eventType, string(drainResult), string(drainResult))
 }
 
+// checkAndPerformForceDrain checks if we should be force draining right now, and if so, does.
+// Otherwise, it may be that time has expired and we need to delete the pipeline instead; otherwise, we should just scale the pipeline to 0 and wait..
+func (r *PipelineRolloutReconciler) checkAndPerformForceDrain(ctx context.Context,
+	// the pipeline whose spec will be updated
+	pipeline *unstructured.Unstructured,
+	// the PipelineRollout parent
+	pipelineRollout *apiv1.PipelineRollout,
+) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	// Check if the max recyclable duration has been exceeded: if so, delete the pipeline
+	recyclableStartTimeStr, err := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyRecyclableStartTime)
+	if err != nil {
+		return false, fmt.Errorf("failed to get recyclable start time annotation: %w", err)
+	}
+
+	if recyclableStartTimeStr != "" {
+		recyclableStartTime, err := time.Parse(time.RFC3339, recyclableStartTimeStr)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse recyclable start time annotation %q on pipeline %s/%s: %w", recyclableStartTimeStr, pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+
+		maxDurationMinutes := config.GetMaxRecyclableDurationMinutes()
+		elapsedMinutes := int32(time.Since(recyclableStartTime).Minutes())
+
+		if elapsedMinutes >= maxDurationMinutes {
+			numaLogger.WithValues("recyclableStartTime", recyclableStartTime, "elapsedMinutes", elapsedMinutes, "maxDurationMinutes", maxDurationMinutes).
+				Info("Time expired on force draining: deleting pipeline now")
+
+			err = kubernetes.DeleteResource(ctx, r.client, pipeline)
+			r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_NeverDrained)
+			return true, err
+		}
+	}
+
+	// if no new promoted pipeline, we need to wait: ensure we scale to 0 and return
+	promotedPipelineAvailableForDraining := false
+	promotedPipeline, err := r.checkForPromotedPipelineForForceDrain(ctx, pipelineRollout)
+	if err != nil {
+		return false, fmt.Errorf("error checking for promoted pipeline for force drain for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
+	}
+
+	if promotedPipeline != nil {
+		// did we already try and fail to force drain with this promoted pipeline spec?
+		if checkForValueInCommaDelimitedAnnotation(pipeline, promotedPipeline.GetName(), common.AnnotationKeyForceDrainSpecsCompleted) {
+			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Debug("Promoted pipeline has already been force drained, skipping")
+		} else {
+			// we either haven't started or at least haven't finished trying to drain with this spec
+			promotedPipelineAvailableForDraining = true
+		}
+	}
+	if !promotedPipelineAvailableForDraining {
+		numaLogger.Debug("No viable promoted pipeline found for force draining, scaling current pipeline to zero")
+		err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, r.client)
+		if err != nil {
+			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+
+		return false, nil
+	} else {
+		return r.forceDrain(ctx, pipeline, promotedPipeline, pipelineRollout)
+	}
+}
+
 // apply a spec that's considered valid (from a promoted pipeline) over top a spec that's not working.
 // The new spec will enable it to drain.
 // Then pause it.
-// pipeline: the pipeline whose spec will be updated
-// promotedPipeline: the definition of the pipeline whose spec will be used
-// pipelineRollout: the PipelineRollout parent
-// originalSpec: this function may be called multiple times, if originalSpec is true, we still need to update the spec, if false, just continue with the remaining process
-func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context, pipeline, promotedPipeline *unstructured.Unstructured, pipelineRollout *apiv1.PipelineRollout, originalSpec bool, c client.Client) (bool, error) {
+// Return true if the Pipeline was deleted
+func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
+	// the pipeline whose spec will be updated
+	pipeline *unstructured.Unstructured,
+	// the definition of the pipeline whose spec will be used
+	promotedPipeline *unstructured.Unstructured,
+	// the PipelineRollout parent
+	pipelineRollout *apiv1.PipelineRollout,
+) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	// if we still have the original spec, we need to update with the promoted pipeline's spec
-	if originalSpec {
+	// if we haven't yet, we need to update with the promoted pipeline's spec (we use the annotation to check)
+	if !checkForValueInCommaDelimitedAnnotation(pipeline, promotedPipeline.GetName(), common.AnnotationKeyForceDrainSpecsStarted) {
 		numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Info("Found promoted pipeline, will force apply it")
 		// update spec with desiredPhase=Running and scaled to 0 initially, plus update the annotation to indicate that we've overridden the spec
-		err := forceApplySpecOnUndrainablePipeline(ctx, pipeline, promotedPipeline, c)
+		err := forceApplySpecOnUndrainablePipeline(ctx, pipeline, promotedPipeline, r.client)
 		return false, err
 	}
 
@@ -214,42 +268,62 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context, pipeline, pr
 	}
 
 	// perform the drain
-	paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
+	paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, r.client)
 	if err != nil {
 		return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 	}
 	numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Debug("checking drain of Pipeline using latest promoted pipeline's spec")
-	// if it's either paused or failed, delete it
+
+	// check if it fully drained or if it went to the maximum pause time
 	if paused {
-		numaLogger.WithValues("paused", paused, "drained", drained).Infof("Pipeline has the promoted pipeline's spec and has paused, now deleting it")
-		err = kubernetes.DeleteResource(ctx, c, pipeline)
-		if drained {
-			r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, true, metrics.LabelValueDrainResult_ForceDrain)
-		} else {
-			numaLogger.Debugf("Pipeline never drained, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
-			r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_NeverDrained)
+		// patch the annotation to mark that we've completed the drain with this promoted pipeline spec
+		err := markPipelineForceDrainCompleted(ctx, r.client, pipeline, promotedPipeline.GetName())
+		if err != nil {
+			return false, err
 		}
-		return true, err
+		if drained {
+			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Infof("Pipeline has the promoted pipeline's spec and has fully drained, now deleting it")
+			err = kubernetes.DeleteResource(ctx, r.client, pipeline)
+			r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, true, metrics.LabelValueDrainResult_ForceDrain)
+			return true, err
+		} else {
+			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Infof("Pipeline has the promoted pipeline's spec but was not able to drain")
+		}
 	}
-	// If force drain failed, we need to wait some time before deleting it, as there may be transient failures.
+	// If the Pipeline failed during force drain, we need to wait some time before deleting it, as there may be transient failures.
 	if failed {
-		return r.checkForFailedPipeline(ctx, c, pipelineRollout, pipeline)
+		nonTransientFailure, err := r.checkForFailedPipeline(ctx, pipeline)
+		if err != nil {
+			return false, fmt.Errorf("failed to check for failed pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+		if nonTransientFailure {
+			// patch the annotation to mark that we've completed the drain with this promoted pipeline spec
+			currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsCompleted)
+			err := kubernetes.SetAndPatchAnnotations(ctx, r.client, pipeline, map[string]string{
+				common.AnnotationKeyForceDrainSpecsCompleted: currentVal + promotedPipeline.GetName() + ",",
+				// reset this so we won't try to look at it on the next force drain attempt
+				common.AnnotationKeyForceDrainFailureStartTime: "",
+			})
+			return false, err
+		}
 	}
 
 	return false, nil
 }
 
-// checkForFailedPipeline checks if the Pipeline has been in Failed state for long enough to consider it a permanent failure
+// check if the Pipeline has been in Failed state for long enough to consider it a permanent failure
 // if so, delete it; otherwise, return false to indicate we haven't deleted it yet.
 // decision: just use original failure start time in the case of Pipeline switching Failed->Running->Failed
-func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, c client.Client,
-	pipelineRollout *apiv1.PipelineRollout, pipeline *unstructured.Unstructured) (bool, error) {
+func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 	currentTime := time.Now()
+
+	// the first time we detect failure, mark the time
 	if pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime] == "" {
-		patchJson := fmt.Sprintf(`{"metadata": {"annotations": {"%s": "%s"}}}`, common.AnnotationKeyForceDrainFailureStartTime, currentTime.Format(time.RFC3339))
-		if err := kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType); err != nil {
+		if err := kubernetes.SetAndPatchAnnotations(ctx, r.client, pipeline, map[string]string{
+			common.AnnotationKeyForceDrainFailureStartTime: currentTime.Format(time.RFC3339),
+		}); err != nil {
 			return false, fmt.Errorf("failed to set force drain failure start time annotation on pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
 		return false, nil
@@ -260,14 +334,12 @@ func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, 
 	if err != nil {
 		return false, fmt.Errorf("failed to parse force drain failure start time annotation %q on pipeline %s/%s: %w", startTime, pipeline.GetNamespace(), pipeline.GetName(), err)
 	}
-	waitDurationSeconds := getForceDrainFailureWaitDuration()
+	waitDurationSeconds := config.GetForceDrainFailureWaitDuration()
 	if int32(currentTime.Sub(startTime).Seconds()) < waitDurationSeconds {
 		numaLogger.WithValues("startTime", startTime, "currentTime", currentTime, "waitDuration", waitDurationSeconds).Debug("waiting longer before deleting failed pipeline during force drain")
 		return false, nil
 	} else {
-		numaLogger.WithValues("failed", true).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
-		err = kubernetes.DeleteResource(ctx, c, pipeline)
-		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_PipelineFailed)
+		numaLogger.Infof("Pipeline has the promoted pipeline's spec and has failed, drain attempt is complete, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
 		return true, err
 	}
 }
@@ -314,7 +386,6 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 	if err != nil {
 		return err
 	}
-	markPipelineSpecOverridden(newPipelineCopy)
 
 	// Take the difference between this newPipelineCopy spec and the original currentPipeline spec to derive the patch we need and then apply it
 
@@ -322,9 +393,6 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 	// We need to extract just the fields we want to update: spec, metadata.annotations
 	patchData := map[string]interface{}{
 		"spec": newPipelineCopy.Object["spec"], // we assume we're the only ones who write to the Spec; therefore it's okay to copy the entire thing and use it knowing that nobody else has changed it
-		"metadata": map[string]interface{}{
-			"annotations": newPipelineCopy.GetAnnotations(),
-		},
 	}
 
 	// Convert patch data to JSON
@@ -339,6 +407,12 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 	err = kubernetes.PatchResource(ctx, c, currentPipeline, string(patchBytes), k8stypes.MergePatchType)
 	if err != nil {
 		return fmt.Errorf("failed to apply patch to pipeline %s: %w", currentPipeline.GetName(), err)
+	}
+
+	// patch the annotation to mark that we've started the force drain with this promoted pipeline spec
+	err = markPipelineForceDrainStarted(ctx, c, currentPipeline, newPipeline.GetName())
+	if err != nil {
+		return err
 	}
 
 	numaLogger.WithValues("currentPipeline", currentPipeline.GetName()).Debug("successfully applied patch to pipeline")
@@ -508,6 +582,9 @@ func calculateScaleForRecycle(
 				originalPodsRunning, found := historicalPodCount[vertexName]
 				if found {
 					newScaleValue = int64(math.Ceil(float64(originalPodsRunning) * float64(percent) / 100.0))
+					if newScaleValue < 1 {
+						newScaleValue = 1
+					}
 					numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue, "originalPodsRunning", originalPodsRunning, "percent", percent).Debug("Setting Vertex Scale value to percent of previous running count")
 				} else {
 					// This Vertex was not running in the "promoted" Pipeline: the Vertex may be new, or HistoricalPodCount hasn't been stored yet on this Pipeline due to not having done a progressive upgrade since it was introduced
@@ -603,24 +680,57 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 	return false, nil
 }
 
-func markPipelineSpecOverridden(pipeline *unstructured.Unstructured) {
+// update the Pipeline's annotation to mark that a new pipeline's spec has been used to update the pipeline
+func markPipelineForceDrainStarted(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) error {
+	// first check if it's already marked in which case we'll skip this
+	if checkForValueInCommaDelimitedAnnotation(pipeline, forceDrainSpecPipeline, common.AnnotationKeyForceDrainSpecsStarted) {
+		return nil
+	}
+	currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsStarted)
+
+	// Patch in Kubernetes
+	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
+		common.AnnotationKeyForceDrainSpecsStarted: currentVal + forceDrainSpecPipeline + ",",
+	})
+}
+
+// update the Pipeline's annotation to mark that a new pipeline's spec has been used to update the pipeline
+func markPipelineForceDrainCompleted(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) error {
+	// first check if it's already marked in which case we'll skip this
+	if checkForValueInCommaDelimitedAnnotation(pipeline, forceDrainSpecPipeline, common.AnnotationKeyForceDrainSpecsCompleted) {
+		return nil
+	}
+	currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsCompleted)
+
+	// Patch in Kubernetes
+	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
+		common.AnnotationKeyForceDrainSpecsCompleted: currentVal + forceDrainSpecPipeline + ",",
+	})
+}
+
+// annotation is comma delimited: check if the value is present
+func checkForValueInCommaDelimitedAnnotation(pipeline *unstructured.Unstructured, value string, annotationKey string) bool {
 	annotations := pipeline.GetAnnotations()
 	if annotations == nil {
-		annotations = map[string]string{}
+		return false
 	}
-	annotations[common.AnnotationKeyOverriddenSpec] = "true"
-	pipeline.SetAnnotations(annotations)
+
+	forceDrainSpecs, exists := annotations[annotationKey]
+	if !exists {
+		return false
+	}
+
+	for _, p := range strings.Split(forceDrainSpecs, ",") {
+		if strings.TrimSpace(p) == value {
+			return true
+		}
+	}
+	return false
 }
 
-func isPipelineSpecOverridden(pipeline *unstructured.Unstructured) bool {
-	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
-	return found
-}
-
-func getForceDrainFailureWaitDuration() int32 {
-	globalConfig, _ := config.GetConfigManagerInstance().GetConfig()
-	if globalConfig.Pipeline.ForceDrainFailureWaitDuration != nil {
-		return *globalConfig.Pipeline.ForceDrainFailureWaitDuration
-	}
-	return 15
+// we use an annotation to indicate when we've started force draining with a promoted pipeline's spec
+// if the annotation is unset, then the pipeline spec is still the original
+func isPipelineSpecOriginal(pipeline *unstructured.Unstructured) bool {
+	forceDrainSpecs, found := pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecsStarted]
+	return !found || forceDrainSpecs == ""
 }
