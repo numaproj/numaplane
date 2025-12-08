@@ -705,6 +705,92 @@ func Test_Recycle(t *testing.T) {
 	}
 }
 
+func Test_checkForValueInCommaDelimitedAnnotation(t *testing.T) {
+	testAnnotationKey := "test-annotation-key"
+
+	tests := []struct {
+		name           string
+		annotations    map[string]string
+		value          string
+		annotationKey  string
+		expectedResult bool
+	}{
+		{
+			name:           "nil annotations",
+			annotations:    nil,
+			value:          "abc",
+			annotationKey:  testAnnotationKey,
+			expectedResult: false,
+		},
+		{
+			name:           "annotation key not present",
+			annotations:    map[string]string{"other-key": "value"},
+			value:          "abc",
+			annotationKey:  testAnnotationKey,
+			expectedResult: false,
+		},
+		{
+			name:           "empty annotation value",
+			annotations:    map[string]string{testAnnotationKey: ""},
+			value:          "abc",
+			annotationKey:  testAnnotationKey,
+			expectedResult: false,
+		},
+		{
+			name:           "value found - single value in annotation",
+			annotations:    map[string]string{testAnnotationKey: "abc,"},
+			value:          "abc",
+			annotationKey:  testAnnotationKey,
+			expectedResult: true,
+		},
+		{
+			name:           "value found - first of multiple values",
+			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
+			value:          "abc",
+			annotationKey:  testAnnotationKey,
+			expectedResult: true,
+		},
+		{
+			name:           "value found - middle of multiple values",
+			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
+			value:          "def",
+			annotationKey:  testAnnotationKey,
+			expectedResult: true,
+		},
+		{
+			name:           "value found - last of multiple values",
+			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
+			value:          "ghi",
+			annotationKey:  testAnnotationKey,
+			expectedResult: true,
+		},
+		{
+			name:           "value not found",
+			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
+			value:          "xyz",
+			annotationKey:  testAnnotationKey,
+			expectedResult: false,
+		},
+		{
+			name:           "partial match should not match",
+			annotations:    map[string]string{testAnnotationKey: "abcdef,"},
+			value:          "abc",
+			annotationKey:  testAnnotationKey,
+			expectedResult: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pipeline := &unstructured.Unstructured{}
+			pipeline.SetAnnotations(tc.annotations)
+
+			result := checkForValueInCommaDelimitedAnnotation(pipeline, tc.value, tc.annotationKey)
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
 func getDesiredPhase(pipeline *numaflowv1.Pipeline) numaflowv1.PipelinePhase {
 	if pipeline.Spec.Lifecycle.DesiredPhase == "" {
 		return numaflowv1.PipelinePhaseRunning

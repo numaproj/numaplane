@@ -290,7 +290,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Infof("Pipeline has the promoted pipeline's spec but was not able to drain")
 		}
 	}
-	// If the Pipeline failed during force drain,, we need to wait some time before deleting it, as there may be transient failures.
+	// If the Pipeline failed during force drain, we need to wait some time before deleting it, as there may be transient failures.
 	if failed {
 		nonTransientFailure, err := r.checkForFailedPipeline(ctx, pipeline)
 		if err != nil {
@@ -720,12 +720,16 @@ func checkForValueInCommaDelimitedAnnotation(pipeline *unstructured.Unstructured
 		return false
 	}
 
-	targetPattern := value + ","
-	return strings.Contains(forceDrainSpecs, targetPattern)
+	for _, p := range strings.Split(forceDrainSpecs, ",") {
+		if strings.TrimSpace(p) == value {
+			return true
+		}
+	}
+	return false
 }
 
 // we use an annotation to indicate when we've started force draining with a promoted pipeline's spec
-// if the annotation is unset, then the pipeline spec is still theoriginal
+// if the annotation is unset, then the pipeline spec is still the original
 func isPipelineSpecOriginal(pipeline *unstructured.Unstructured) bool {
 	forceDrainSpecs, found := pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecsStarted]
 	return !found || forceDrainSpecs == ""
