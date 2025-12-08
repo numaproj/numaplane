@@ -39,13 +39,13 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	// Otherwise, use the promoted one
 	var isbsvc *unstructured.Unstructured
 	isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
-	if isbsvc == nil {
+	if err != nil {
+		return nil, err
+	} else if isbsvc == nil {
 		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
 		if err != nil {
 			return nil, err
 		}
-	} else if err != nil {
-		return nil, err
 	}
 	// if isbsvc is still nil after checking for trial and in progress labels, look for promoted
 	if isbsvc == nil {
