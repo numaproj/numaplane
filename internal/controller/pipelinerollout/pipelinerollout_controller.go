@@ -1297,7 +1297,7 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 				recyclableReason := isbsvc.GetLabels()[common.LabelKeyUpgradeStateReason]
 				numaLogger.WithValues("pipeline", pipeline.GetName(), "isbsvc", pipelineISBSvcName).Debug("marking pipeline 'recyclable' since isbsvc is 'recyclable'")
 				upgradeStateReason := common.UpgradeStateReason(recyclableReason)
-				err = ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, &upgradeStateReason, &pipeline)
+				err = ctlrcommon.MarkRecyclable(ctx, r.client, &upgradeStateReason, &pipeline)
 				if err != nil {
 					return false, fmt.Errorf("failed to mark pipeline %s 'recyclable': %s/%s", pipeline.GetNamespace(), pipeline.GetName(), err.Error())
 				}

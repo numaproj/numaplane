@@ -23,6 +23,7 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -158,7 +159,9 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 	It("Should create 2 failed Pipelines which will need to be drained and deleted and update back to original Pipeline", func() {
 
-		updateToFailedPipelines()
+		// update twice
+		// first this creates "test-pipeline-rollout-1", then "test-pipeline-rollout-2"
+		updateFailedPipelinesBackToBack()
 
 		// restore PipelineRollout back to original spec
 		updatePipeline(&initialPipelineSpec)
@@ -169,18 +172,98 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 2), "Normal")
 	})
 
-	It("Should create 2 failed Pipelines which will need to be drained and deleted and update to new Pipeline", func() {
+	It("Should create 3 failed Pipelines which attempt to drain with an unhealthy Pipeline spec", func() {
 
-		updateToFailedPipelines()
+		// update twice
+		// first this creates "test-pipeline-rollout-3", then "test-pipeline-rollout-4"
+		updateFailedPipelinesBackToBack()
 
-		// updated Pipeline updates the sink
+		// Force promote test-pipeline-rollout-4 (which is unhealthy)
+		// This enables us to see that test-pipeline-rollout-0 and test-pipeline-rollout-3 start trying to drain
+		forcePromote(pipelineRolloutName, 4)
+
+		// test-pipeline-rollout-0 should be able to drain with its original spec
+		// Verify that test-pipeline-rollout-0 and test-pipeline-rollout-3 have the spec from test-pipeline-rollout-4
+		// and are pausing
+		verifyPipelineHasImage(0, validImagePath)
+		verifyPipelineHasImage(3, "badpath2")
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 0), numaflowv1.PipelinePhasePaused)
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePaused)
+		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3
+
+		// verify test-pipeline-rollout-0 and test-pipeline-rollout-3 hav status.phase==Pausing
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 0), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing, numaflowv1.PipelinePhasePaused})
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing, numaflowv1.PipelinePhasePaused})
+
+		pauseTimestamp3Orig, err := GetAnnotation(Namespace, GetInstanceName(pipelineRolloutName, 3), "numaflow.numaproj.io/pause-timestamp")
+		Expect(err).ShouldNot(HaveOccurred())
+		fmt.Printf("pauseTimestamp3Orig: %s\n", pauseTimestamp3Orig)
+
+		// create test-pipeline-rollout-5 which is also unhealthy
+		updatePipelineImage("badpath3")
+		// check that test-pipeline-rollout-5 has been created
+		verifyPipelinesUpgrading(5)
+
+		// force promote it so that test-pipeline-rollout-3 and test-pipeline-rollout-4 start trying to drain with this spec
+		// once they are done with the previous drain attempt
+		forcePromote(pipelineRolloutName, 5)
+		verifyPipelineHasImage(3, "badpath3")
+		verifyPipelineHasImage(4, "badpath3")
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePaused)
+		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 4), numaflowv1.PipelinePhasePaused)
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 3), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing, numaflowv1.PipelinePhasePaused})
+		VerifyPipelinePhase(Namespace, GetInstanceName(pipelineRolloutName, 4), []numaflowv1.PipelinePhase{numaflowv1.PipelinePhasePausing, numaflowv1.PipelinePhasePaused})
+
+		// get the annotation numaflow.numaproj.io/pause-timestamp for test-pipeline-rollout-3 to make sure that it's
+		// different from the previous pause timestamp, indicating that a new pause has started
+		pauseTimestamp3, err := GetAnnotation(Namespace, GetInstanceName(pipelineRolloutName, 3), "numaflow.numaproj.io/pause-timestamp")
+		Expect(err).ShouldNot(HaveOccurred())
+		fmt.Printf("pauseTimestamp3: %s\n", pauseTimestamp3)
+		Expect(pauseTimestamp3).ShouldNot(Equal(pauseTimestamp3Orig))
+
+		// verify that test-pipeline-rollout-3, and test-pipeline-rollout-4 have finished trying to drain
+		VerifyPipelineSpecStatus(Namespace, GetInstanceName(pipelineRolloutName, 3), func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
+			return status.Phase == numaflowv1.PipelinePhasePaused && !status.DrainedOnPause
+		})
+		VerifyPipelineSpecStatus(Namespace, GetInstanceName(pipelineRolloutName, 4), func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
+			return status.Phase == numaflowv1.PipelinePhasePaused && !status.DrainedOnPause
+		})
+
+		// verify that test-pipeline-rollout-0, test-pipeline-rollout-3, and test-pipeline-rollout-4 scale to 0 replicas, waiting for the next "promoted" pipeline spec
+		verifyPipelineScaledToZero(3)
+		verifyPipelineScaledToZero(4)
+
+		// verify that test-pipeline-rollout-0 was able to be deleted because it drained fully
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
+	})
+
+	It("Should successfully drain all previous Pipelines once there's a Pipeline with a healthy spec", func() {
+
+		// updated Pipeline updates the sink ("test-pipeline-rollout-6")
 		updatePipeline(updatedPipelineSpec)
 
-		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{3, 4, 5})
 
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 0), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 3), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 4), "Normal")
+		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 5), "Normal")
+
+	})
+
+	It("Should reach max recyclable duration and delete the Pipeline", func() {
+
+		// set numaplane controller config to have max recyclable duration of 2 minutes
+		UpdateNumaplaneControllerConfig(map[string]string{
+			"pipeline.maxRecyclableDurationMinutes": "2",
+		})
+
+		// create test-pipeline-rollout-7 and test-pipeline-rollout-8 and force promote 8
+		updateFailedPipelinesBackToBack()
+		forcePromote(pipelineRolloutName, 8)
+
+		// now let's make sure that test-pipeline-rollout-7 gets deleted even though it can't drain successfully
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 7))
 	})
 
 	It("Should Delete Rollouts", func() {
@@ -194,33 +277,14 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 // the first pipeline will be failed but it will be replaced before it's assessed
 // the second pipeline will actually be assessed as Failed
 // We test both since they take slightly different paths in the recycle code
-func updateToFailedPipelines() {
+func updateFailedPipelinesBackToBack() {
 	// this will be a failed Pipeline which will be replaced before it has a chance to be assessed
-	failedPipelineSpec1 := initialPipelineSpec.DeepCopy()
-	failedPipelineSpec1.Vertices[1] = numaflowv1.AbstractVertex{
-		Name: "cat",
-		UDF: &numaflowv1.UDF{
-			Container: &numaflowv1.Container{
-				Image: "badpath1",
-			},
-		},
-	}
-
 	time.Sleep(10 * time.Second)
-	updatePipeline(failedPipelineSpec1)
+	updatePipelineImage("badpath1")
 
 	// this will be a failed Pipeline which will be assessed as Failed
-	failedPipelineSpec2 := initialPipelineSpec.DeepCopy()
-	failedPipelineSpec2.Vertices[1] = numaflowv1.AbstractVertex{
-		Name: "cat",
-		UDF: &numaflowv1.UDF{
-			Container: &numaflowv1.Container{
-				Image: "badpath2",
-			},
-		},
-	}
 	time.Sleep(45 * time.Second)
-	updatePipeline(failedPipelineSpec2)
+	updatePipelineImage("badpath2")
 
 	// verify it was assessed as failed
 	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionFalse)
@@ -286,5 +350,79 @@ func updatePipeline(pipelineSpec *numaflowv1.PipelineSpec) {
 	UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 		rollout.Spec.Pipeline.Spec.Raw = rawSpec
 		return rollout, nil
+	})
+}
+
+func forcePromote(pipelineRolloutName string, pipelineIndex int) {
+	pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+	By(fmt.Sprintf("Force promoting Pipeline %s", pipelineName))
+	UpdatePipelineInK8S(pipelineName, func(pipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+		labels := pipeline.GetLabels()
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+		labels[common.LabelKeyForcePromote] = "true"
+		pipeline.SetLabels(labels)
+		return pipeline, nil
+	})
+}
+
+func verifyPipelineHasImage(pipelineIndex int, expectedImage string) {
+	pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+	By(fmt.Sprintf("Verifying that Pipeline %s has image %s", pipelineName, expectedImage))
+	VerifyPipelineSpecStatus(Namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
+		// Check the "cat" vertex (index 1) for the expected image
+		return spec.Vertices[1].UDF != nil &&
+			spec.Vertices[1].UDF.Container != nil &&
+			spec.Vertices[1].UDF.Container.Image == expectedImage
+	})
+}
+
+func updatePipelineImage(imagePath string) *numaflowv1.PipelineSpec {
+	By(fmt.Sprintf("Updating PipelineRollout with image %s", imagePath))
+	pipelineSpec := initialPipelineSpec.DeepCopy()
+	pipelineSpec.Vertices[1] = numaflowv1.AbstractVertex{
+		Name: "cat",
+		UDF: &numaflowv1.UDF{
+			Container: &numaflowv1.Container{
+				Image: imagePath,
+			},
+		},
+	}
+	updatePipeline(pipelineSpec)
+	return pipelineSpec
+}
+
+func verifyPipelinesUpgrading(pipelineIndex int) {
+	expectedPipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+	By(fmt.Sprintf("Verifying that Pipeline %s is in the upgrading pipelines list", expectedPipelineName))
+	CheckEventually(fmt.Sprintf("Verifying that Pipeline %s is in the upgrading pipelines list", expectedPipelineName), func() bool {
+		upgradingPipelines, err := GetUpgradingPipelines(Namespace, pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+		for _, pipeline := range upgradingPipelines.Items {
+			if pipeline.GetName() == expectedPipelineName {
+				return true
+			}
+		}
+		return false
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
+}
+
+func verifyPipelineScaledToZero(pipelineIndex int) {
+	pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+	By(fmt.Sprintf("Verifying that Pipeline %s is scaled to 0 replicas", pipelineName))
+	VerifyPipelineSpecStatus(Namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
+		// Check that all vertices have scale.min and scale.max equal to 0
+		for _, vertex := range spec.Vertices {
+			if vertex.Scale.Min == nil || *vertex.Scale.Min != 0 {
+				return false
+			}
+			if vertex.Scale.Max == nil || *vertex.Scale.Max != 0 {
+				return false
+			}
+		}
+		return true
 	})
 }

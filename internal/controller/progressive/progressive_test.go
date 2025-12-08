@@ -40,7 +40,7 @@ func (fpc fakeProgressiveController) IncrementChildCount(ctx context.Context, ro
 	return 0, nil
 }
 
-func (fpc fakeProgressiveController) Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error) {
+func (fpc fakeProgressiveController) Recycle(ctx context.Context, childObject *unstructured.Unstructured) (bool, error) {
 	return false, nil
 }
 

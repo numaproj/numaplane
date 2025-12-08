@@ -133,20 +133,114 @@ func GetLabel(un *unstructured.Unstructured, key string) (string, error) {
 	return "", nil
 }
 
-// SetLabel sets the label identified by "key" on an unstructured object
-func SetLabel(target *unstructured.Unstructured, key, val string) error {
+// SetLabels sets one or more labels on an unstructured object
+func SetLabels(target *unstructured.Unstructured, labelsToSet map[string]string) error {
+	if len(labelsToSet) == 0 {
+		return nil
+	}
 
-	labels, err := nestedNullableStringMap(target.Object, "metadata", "labels")
+	existingLabels, err := nestedNullableStringMap(target.Object, "metadata", "labels")
 	if err != nil {
 		return fmt.Errorf("failed to get labels from target object %s %s/%s: %w", target.GroupVersionKind().String(), target.GetNamespace(), target.GetName(), err)
 	}
-	if labels == nil {
-		labels = make(map[string]string)
+	if existingLabels == nil {
+		existingLabels = make(map[string]string)
 	}
-	labels[key] = val
-	target.SetLabels(labels)
+
+	// Merge new labels into existing labels
+	for key, val := range labelsToSet {
+		existingLabels[key] = val
+	}
+	target.SetLabels(existingLabels)
 
 	return nil
+}
+
+// PatchLabels patches a Kubernetes resource to add/update one or more labels
+func PatchLabels(ctx context.Context, c client.Client, obj *unstructured.Unstructured, labels map[string]string) error {
+	if len(labels) == 0 {
+		return nil
+	}
+
+	// Build JSON for the labels map
+	labelsJson, err := json.Marshal(labels)
+	if err != nil {
+		return fmt.Errorf("failed to marshal labels: %w", err)
+	}
+
+	// Create a JSON patch to add/update the labels
+	// Using strategic merge patch which handles missing labels map gracefully
+	patchJson := fmt.Sprintf(`{"metadata":{"labels":%s}}`, string(labelsJson))
+	return PatchResource(ctx, c, obj, patchJson, k8stypes.MergePatchType)
+}
+
+// SetAndPatchLabels sets the labels on an unstructured object and then patches them into the live object
+func SetAndPatchLabels(ctx context.Context, c client.Client, obj *unstructured.Unstructured, labels map[string]string) error {
+	if err := SetLabels(obj, labels); err != nil {
+		return err
+	}
+	return PatchLabels(ctx, c, obj, labels)
+}
+
+// GetAnnotation returns the annotation identified by "key"
+func GetAnnotation(un *unstructured.Unstructured, key string) (string, error) {
+	annotations, err := nestedNullableStringMap(un.Object, "metadata", "annotations")
+	if err != nil {
+		return "", fmt.Errorf("failed to get annotations from target object %s %s/%s: %w", un.GroupVersionKind().String(), un.GetNamespace(), un.GetName(), err)
+	}
+	if annotations != nil {
+		return annotations[key], nil
+	}
+	return "", nil
+}
+
+// SetAnnotations sets one or more annotations on an unstructured object
+func SetAnnotations(target *unstructured.Unstructured, annotationsToSet map[string]string) error {
+	if len(annotationsToSet) == 0 {
+		return nil
+	}
+
+	existingAnnotations, err := nestedNullableStringMap(target.Object, "metadata", "annotations")
+	if err != nil {
+		return fmt.Errorf("failed to get annotations from target object %s %s/%s: %w", target.GroupVersionKind().String(), target.GetNamespace(), target.GetName(), err)
+	}
+	if existingAnnotations == nil {
+		existingAnnotations = make(map[string]string)
+	}
+
+	// Merge new annotations into existing annotations
+	for key, val := range annotationsToSet {
+		existingAnnotations[key] = val
+	}
+	target.SetAnnotations(existingAnnotations)
+
+	return nil
+}
+
+// PatchAnnotations patches a Kubernetes resource to add/update one or more annotations
+func PatchAnnotations(ctx context.Context, c client.Client, obj *unstructured.Unstructured, annotations map[string]string) error {
+	if len(annotations) == 0 {
+		return nil
+	}
+
+	// Build JSON for the annotations map
+	annotationsJson, err := json.Marshal(annotations)
+	if err != nil {
+		return fmt.Errorf("failed to marshal annotations: %w", err)
+	}
+
+	// Create a JSON patch to add/update the annotations
+	// Using strategic merge patch which handles missing annotations map gracefully
+	patchJson := fmt.Sprintf(`{"metadata":{"annotations":%s}}`, string(annotationsJson))
+	return PatchResource(ctx, c, obj, patchJson, k8stypes.MergePatchType)
+}
+
+// SetAndPatchAnnotations sets the annotations on an unstructured object and then patches them into the live object
+func SetAndPatchAnnotations(ctx context.Context, c client.Client, obj *unstructured.Unstructured, annotations map[string]string) error {
+	if err := SetAnnotations(obj, annotations); err != nil {
+		return err
+	}
+	return PatchAnnotations(ctx, c, obj, annotations)
 }
 
 // nestedNullableStringMap returns a copy of map[string]string value of a nested field.
