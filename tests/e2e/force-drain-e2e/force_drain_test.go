@@ -294,7 +294,11 @@ func updateFailedPipelinesBackToBack(nextIndex int) {
 	verifyPipelinesUpgrading(nextIndex + 1)
 
 	// verify it was assessed as failed
-	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionFalse)
+	VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
+		return status.ProgressiveStatus.UpgradingPipelineStatus != nil &&
+			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, nextIndex+1) &&
+			status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult == apiv1.AssessmentResultFailure
+	})
 }
 
 func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {

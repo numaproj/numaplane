@@ -205,6 +205,13 @@ func VerifyPromotedPipelineFailed(namespace, pipelineRolloutName string) {
 		})
 }
 
+func VerifyPipelineRolloutStatusEventually(pipelineRolloutName string, f func(apiv1.PipelineRolloutStatus) bool) {
+	CheckEventually(fmt.Sprintf("Verifying PipelineRollout %s status", pipelineRolloutName), func() bool {
+		rollout, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return err == nil && f(rollout.Status)
+	}).Should(BeTrue())
+}
+
 func VerifyPipelineRolloutConditionPausing(namespace string, pipelineRolloutName string) {
 	CheckEventually("Verify that Pipeline Rollout condition is Pausing/Paused", func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
