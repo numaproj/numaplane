@@ -210,9 +210,15 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 	var err error
 	childName := ""
 	if useExistingChildName == nil {
-		childName, err = ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, false)
+		// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
+		childName, err = ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeTrial, nil, c, false)
 		if err != nil {
 			return nil, err
+		} else if childName == "" {
+			childName, err = ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, false)
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		childName = *useExistingChildName
