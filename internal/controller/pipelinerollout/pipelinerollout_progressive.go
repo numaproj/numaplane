@@ -42,6 +42,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	if err != nil {
 		return nil, err
 	} else if isbsvc == nil {
+		// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
 		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
 		if err != nil {
 			return nil, err

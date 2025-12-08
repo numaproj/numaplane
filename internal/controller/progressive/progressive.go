@@ -142,6 +142,7 @@ func ProcessResource(
 	if err != nil {
 		return false, 0, err
 	} else if currentUpgradingChildDef == nil {
+		// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
 		currentUpgradingChildDef, err = ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
 		if err != nil {
 			return false, 0, err
@@ -980,6 +981,7 @@ func Discontinue(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
 	}
+	// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
 	upgradingChildrenUpgradeInProgressLabel, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
 	if err != nil {
 		return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
