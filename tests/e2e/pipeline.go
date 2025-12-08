@@ -52,6 +52,13 @@ func VerifyPromotedPipelineExists(namespace, pipelineRolloutName string) {
 	}).Should(BeTrue())
 }
 
+func VerifyPipelineExists(namespace, pipelineName string) {
+	CheckEventually(fmt.Sprintf("Verifying that Pipeline %s exists", pipelineName), func() bool {
+		_, err := GetPipelineByName(namespace, pipelineName)
+		return err == nil
+	}).Should(BeTrue())
+}
+
 func GetCurrentPipelineCount(pipelineRolloutName string) int {
 	rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 	return int(*rollout.Status.NameCount)

@@ -284,14 +284,14 @@ func updateFailedPipelinesBackToBack(nextIndex int) {
 	updatePipelineImage("badpath1")
 
 	// verify the first pipeline was created
-	verifyPipelinesUpgrading(nextIndex)
+	VerifyPipelineExists(Namespace, GetInstanceName(pipelineRolloutName, nextIndex))
 
 	// this will be a failed Pipeline which will be assessed as Failed
 	time.Sleep(45 * time.Second)
 	updatePipelineImage("badpath2")
 
 	// verify the second pipeline was created
-	verifyPipelinesUpgrading(nextIndex + 1)
+	VerifyPipelineExists(Namespace, GetInstanceName(pipelineRolloutName, nextIndex+1))
 
 	// verify it was assessed as failed
 	VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
