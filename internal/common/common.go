@@ -147,15 +147,24 @@ const (
 	// AnnotationKeyHash is used to maintain a hash of a Rider to know whether it's changed
 	AnnotationKeyHash = KeyNumaplanePrefix + "hash"
 
-	// AnnotationKeyOverriddenSpec is used in the process of deletion for describing if a pipeline has had its spec overridden with that of a
-	// "promoted" pipeline for the purpose of "force draining" it
-	AnnotationKeyOverriddenSpec = KeyNumaplanePrefix + "overridden-spec"
+	// AnnotationKeyForceDrainSpecsStarted is used on a Pipeline in the process of recycling it for describing the promoted Pipelines' specs which
+	// have been force applied to it for draining
+	AnnotationKeyForceDrainSpecsStarted = KeyNumaplanePrefix + "force-drain-specs-started"
+
+	// AnnotationKeyForceDrainSpecsCompleted is used on a Pipeline in the process of recycling it for describing the promoted Pipelines' specs which
+	// have been force applied to it for draining, which have completed the drain attempt
+	AnnotationKeyForceDrainSpecsCompleted = KeyNumaplanePrefix + "force-drain-specs-completed"
 
 	// AnnotationKeyRequiresDrain is annotated on a pipeline if at least some point in its lifetime it has had Source scaled > 0 and desiredPhase=Running
 	// (if not, it is safe to delete without needing to drain it first)
 	AnnotationKeyRequiresDrain = KeyNumaplanePrefix + "requires-drain"
 
+	// AnnotationKeyForceDrainFailureStartTime is annotated on a pipeline when it is marked as failed due to force drain
+	// This is used to check for transient vs persistent failures to know if we can stop trying to drain
 	AnnotationKeyForceDrainFailureStartTime = KeyNumaplanePrefix + "force-drain-failure-start-time"
+
+	// AnnotationKeyRecyclableStartTime is annotated on a pipeline when it is marked as recyclable
+	AnnotationKeyRecyclableStartTime = KeyNumaplanePrefix + "recyclable-start-time"
 
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
 	NumaplaneSystemNamespace = "numaplane-system"

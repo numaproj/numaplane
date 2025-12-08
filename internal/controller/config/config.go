@@ -120,6 +120,11 @@ type PipelineConfig struct {
 	// Note that the Pipeline's pauseGracePeriodSeconds will be multiplied by the inverse fraction.
 	// If not defined, default to 50
 	RecycleScaleFactor *int32 `json:"recycleScaleFactor,omitempty"`
+
+	// MaxRecyclableDurationMinutes is the period of time for which we will retry force draining a Pipeline, after it gets marked "Recyclable"
+	MaxRecyclableDurationMinutes *int32 `json:"maxRecyclableDurationMinutes,omitempty"`
+
+	// RecyclableStartTime is the time when the Pipeline was marked as recyclable
 	// ForceDrainFailureWaitDuration is the duration to wait after a force drain failure before deleting.
 	// If not defined, default to 15 seconds
 	ForceDrainFailureWaitDuration *int32 `json:"forceDrainFailureWaitDuration,omitempty"`
@@ -407,4 +412,21 @@ func (config *ProgressiveConfig) GetAnalysisRunTimeout() (time.Duration, error) 
 	}
 
 	return time.Duration(analysisRunTimeout) * time.Second, nil
+}
+
+func GetMaxRecyclableDurationMinutes() int32 {
+	globalConfig, _ := GetConfigManagerInstance().GetConfig()
+	if globalConfig.Pipeline.MaxRecyclableDurationMinutes != nil {
+		return *globalConfig.Pipeline.MaxRecyclableDurationMinutes
+	}
+	// Default to 60 minutes if not configured
+	return 60
+}
+
+func GetForceDrainFailureWaitDuration() int32 {
+	globalConfig, _ := GetConfigManagerInstance().GetConfig()
+	if globalConfig.Pipeline.ForceDrainFailureWaitDuration != nil {
+		return *globalConfig.Pipeline.ForceDrainFailureWaitDuration
+	}
+	return 15
 }

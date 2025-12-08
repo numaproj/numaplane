@@ -339,11 +339,11 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should only be one child per Rollout", func() { // all prior children should be marked "Recyclable" and deleted
 		CheckEventually("verifying just 1 Pipeline", func() int {
-			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+			return GetNumberOfNonRecyclableChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
 		}).Should(Equal(1))
 
 		CheckEventually("verifying just 1 InterstepBufferService", func() int {
-			return GetNumberOfChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
+			return GetNumberOfNonRecyclableChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
 		}).Should(Equal(1))
 	})
 
