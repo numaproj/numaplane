@@ -88,6 +88,9 @@ type progressiveController interface {
 	// ProgressiveUnsupported checks to see if Full Progressive Rollout (with assessment) is unsupported for this Rollout
 	ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool
 
+	// SkipProgressiveAssessment checks to see if we should skip progressive assessment for this Rollout
+	SkipProgressiveAssessment(ctx context.Context, rolloutObject ProgressiveRolloutObject) (bool, SkipProgressiveAssessmentReason, error)
+
 	UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject)
 }
 
@@ -113,6 +116,16 @@ type ProgressiveRolloutObject interface {
 
 	GetChildMetadata() apiv1.Metadata
 }
+
+type SkipProgressiveAssessmentReason string
+
+const (
+	SkipProgressiveAssessmentReasonUndefined              SkipProgressiveAssessmentReason = ""
+	SkipProgressiveAssessmentReasonForcePromote           SkipProgressiveAssessmentReason = "force_promote"
+	SkipProgressiveAssessmentReasonProgressiveUnsupported SkipProgressiveAssessmentReason = "progressive_unsupported"
+	SkipProgressiveAssessmentReasonNoDataIngestion        SkipProgressiveAssessmentReason = "no_data_ingestion"
+	SkipProgressiveAssessmentReasonRolloutConfiguration   SkipProgressiveAssessmentReason = "rollout_configuration"
+)
 
 // return:
 // - whether we're done
@@ -338,23 +351,23 @@ func processUpgradingChild(
 
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 
+	// check if we should skip the asssessment
+	skipAssessment, reason, err := controller.SkipProgressiveAssessment(ctx, rolloutObject)
+	if err != nil {
+		return false, 0, err
+	}
+
+	// check for "force promote" label on the child
 	forcePromote := false
 	_, ok := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromote]
 	if ok {
 		forcePromote = true
+		reason = SkipProgressiveAssessmentReasonForcePromote
 	}
 
-	// check for Force Promote set in Progressive strategy to force success logic OR if upgrading child has force-promote label
-	if rolloutObject.GetProgressiveStrategy().ForcePromote || forcePromote || controller.ProgressiveUnsupported(ctx, rolloutObject) {
+	if forcePromote || skipAssessment {
 		childStatus.ForcedSuccess = true
-		reason := ""
-		if rolloutObject.GetProgressiveStrategy().ForcePromote {
-			reason = "rollout strategy"
-		} else if forcePromote {
-			reason = "user force promote"
-		} else {
-			reason = "progressive unsupported"
-		}
+
 		numaLogger.WithValues("reason", reason).Debug("Upgrading child force promoted")
 
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
