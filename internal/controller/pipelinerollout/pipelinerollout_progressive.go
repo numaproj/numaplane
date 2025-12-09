@@ -795,6 +795,38 @@ func (r *PipelineRolloutReconciler) ProgressiveUnsupported(ctx context.Context, 
 	return false
 }
 
+func (r *PipelineRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+
+	// check if Pipeline definition is set to Paused or scaled to 0, in which case it can't ingest data
+	pipelineSpecMap := make(map[string]interface{})
+	err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, pipelineSpecMap)
+	if err != nil {
+		return false, progressive.SkipProgressiveAssessmentReasonUndefined, err
+	}
+	pipelineDef := &unstructured.Unstructured{Object: map[string]interface{}{"spec": pipelineSpecMap}}
+
+	canIngestData, err := numaflowtypes.CanPipelineIngestData(ctx, pipelineDef)
+	if err != nil {
+		return false, progressive.SkipProgressiveAssessmentReasonUndefined, err
+	}
+
+	// check if ForcePromote is set true in the Progressive strategy
+	if pipelineRollout.GetProgressiveStrategy().ForcePromote {
+		return true, progressive.SkipProgressiveAssessmentReasonRolloutConfiguration, nil
+	}
+	// check if Progressive is unsupported for this Rollout
+	if r.ProgressiveUnsupported(ctx, rolloutObject) {
+		return true, progressive.SkipProgressiveAssessmentReasonProgressiveUnsupported, nil
+	}
+	if !canIngestData {
+		return true, progressive.SkipProgressiveAssessmentReasonNoDataIngestion, nil
+	}
+
+	return false, progressive.SkipProgressiveAssessmentReasonUndefined, nil
+
+}
+
 func (r *PipelineRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject) {
 	if rolloutObject.GetUpgradingChildStatus() != nil {
 		childName := rolloutObject.GetUpgradingChildStatus().Name
