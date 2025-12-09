@@ -406,7 +406,6 @@ func updatePipelineImage(imagePath string) *numaflowv1.PipelineSpec {
 
 func verifyPipelinesUpgrading(pipelineIndex int) {
 	expectedPipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
-	By(fmt.Sprintf("Verifying that Pipeline %s is in the upgrading pipelines list", expectedPipelineName))
 	CheckEventually(fmt.Sprintf("Verifying that Pipeline %s is in the upgrading pipelines list", expectedPipelineName), func() bool {
 		upgradingPipelines, err := GetUpgradingPipelines(Namespace, pipelineRolloutName)
 		if err != nil {

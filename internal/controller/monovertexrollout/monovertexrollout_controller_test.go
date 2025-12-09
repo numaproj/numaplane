@@ -104,7 +104,7 @@ var (
 			},
 		},
 		map[string]string{
-			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeTrial),
 			common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
 		},
 		map[string]string{
@@ -598,7 +598,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					Conditions: []metav1.Condition{},
 				},
 				map[string]string{
-					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeTrial),
 					common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
 				},
 				map[string]string{
@@ -619,7 +619,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			expectedProgressiveCondition: metav1.ConditionFalse,
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeInProgress,
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeTrial,
 			},
 		},
 		{
@@ -1548,7 +1548,7 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				tc.upgradingChildName,
 				tc.upgradingChildLabels,
 				tc.upgradingChildAnnotations,
-				common.LabelValueUpgradeInProgress,
+				common.LabelValueUpgradeTrial,
 			)
 
 			// Call progressive.IsUpgradeReplacementRequired with the real controller

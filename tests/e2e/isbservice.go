@@ -40,7 +40,7 @@ func GetPromotedISBService(namespace, isbServiceRolloutName string) (*unstructur
 }
 
 func GetUpgradingISBServices(namespace, isbServiceRolloutName string) (*unstructured.UnstructuredList, error) {
-	return GetChildrenOfUpgradeStrategy(GetGVRForISBService(), namespace, isbServiceRolloutName, common.LabelValueUpgradeInProgress)
+	return GetChildrenOfUpgradeStrategy(GetGVRForISBService(), namespace, isbServiceRolloutName, common.LabelValueUpgradeTrial)
 
 }
 
