@@ -48,8 +48,8 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 			pipelines: []*numaflowv1.Pipeline{
 				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil), // oldest
 				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
-				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),   // newest
-				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil), // different upgrade state
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil), // newest
+				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeTrial, nil),    // different upgrade state
 			},
 			upgradeState:  common.LabelValueUpgradePromoted,
 			expectedName:  "my-pipeline-3", // newest timestamp
@@ -80,7 +80,7 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 			pipelines: []*numaflowv1.Pipeline{
 				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess), // different reason
 				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),                       // no reason
-				createPipeline("my-pipeline-5", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil),                     // different upgrade state
+				createPipeline("my-pipeline-5", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeTrial, nil),                          // different upgrade state
 			},
 			upgradeState:       common.LabelValueUpgradePromoted,
 			upgradeStateReason: &reasonUpgradingReplaced,

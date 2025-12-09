@@ -391,7 +391,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		numaflowv1.PipelinePhaseRunning, map[string]string{
 			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 			common.LabelKeyISBServiceChildNameForPipeline: defaultUpgradingISBSvcName,
-			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
+			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeTrial),
 			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 		},
 	)
@@ -401,7 +401,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		numaflowv1.ISBSvcPhaseRunning,
 		true,
 		map[string]string{
-			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeTrial),
 			common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
 		},
 		map[string]string{},
@@ -484,7 +484,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			expectedRolloutPhase:         apiv1.PhasePending,
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:  common.LabelValueUpgradePromoted,
-				defaultUpgradingISBSvcName: common.LabelValueUpgradeInProgress,
+				defaultUpgradingISBSvcName: common.LabelValueUpgradeTrial,
 			},
 		},
 		{
@@ -536,7 +536,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			expectedRolloutPhase:           apiv1.PhasePending,
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:  common.LabelValueUpgradePromoted,
-				defaultUpgradingISBSvcName: common.LabelValueUpgradeInProgress,
+				defaultUpgradingISBSvcName: common.LabelValueUpgradeTrial,
 			},
 		},
 		{
@@ -559,7 +559,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:                      common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName:                     common.LabelValueUpgradeRecyclable,
-				ctlrcommon.DefaultTestISBSvcRolloutName + "-2": common.LabelValueUpgradeInProgress,
+				ctlrcommon.DefaultTestISBSvcRolloutName + "-2": common.LabelValueUpgradeTrial,
 			},
 		},
 		{
@@ -945,7 +945,7 @@ func Test_ISBSvcRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				tc.upgradingChildName,
 				tc.upgradingChildLabels,
 				tc.upgradingChildAnnotations,
-				common.LabelValueUpgradeInProgress,
+				common.LabelValueUpgradeTrial,
 			)
 
 			// Call progressive.IsUpgradeReplacementRequired with the real controller

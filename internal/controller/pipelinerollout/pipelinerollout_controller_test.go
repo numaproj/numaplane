@@ -1161,7 +1161,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		map[string]string{
 			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
+			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeTrial),
 			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 		},
 		map[string]string{
@@ -1258,7 +1258,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeInProgress,
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeTrial,
 			},
 		},
 		{
@@ -1845,7 +1845,7 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 					true,
 					map[string]string{
 						common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
-						common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+						common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeTrial),
 					},
 					map[string]string{},
 				)
@@ -1880,7 +1880,7 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				tc.upgradingChildName,
 				tc.upgradingChildLabels,
 				tc.upgradingChildAnnotations,
-				common.LabelValueUpgradeInProgress,
+				common.LabelValueUpgradeTrial,
 			)
 
 			// Call progressive.IsUpgradeReplacementRequired with the PipelineRollout controller

@@ -30,7 +30,7 @@ func GetPromotedMonoVertex(namespace, monoVertexRolloutName string) (*unstructur
 }
 
 func GetUpgradingMonoVertices(namespace, monoVertexRolloutName string) (*unstructured.UnstructuredList, error) {
-	return GetChildrenOfUpgradeStrategy(GetGVRForMonoVertex(), namespace, monoVertexRolloutName, common.LabelValueUpgradeInProgress)
+	return GetChildrenOfUpgradeStrategy(GetGVRForMonoVertex(), namespace, monoVertexRolloutName, common.LabelValueUpgradeTrial)
 }
 
 func GetPromotedMonoVertexName(namespace, monoVertexRolloutName string) (string, error) {

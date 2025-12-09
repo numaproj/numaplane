@@ -1075,10 +1075,18 @@ func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 	// Otherwise, use the promoted one
 	// TODO: consider case that there's an "upgrading" isbsvc, but the preferred strategy has just changed to something
 	// other than progressive - we may need isbsvc's "in-progress-strategy" to inform pipeline's strategy
-	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
+	var isbsvc *unstructured.Unstructured
+	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
 	if err != nil {
 		return nil, err
+	} else if isbsvc == nil {
+		// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
+		if err != nil {
+			return nil, err
+		}
 	}
+	// if isbsvc is still nil after checking for trial and in progress labels, look for promoted
 	if isbsvc == nil {
 		numaLogger.Debug("no Upgrading isbsvc found for Pipeline, will find promoted one")
 		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
