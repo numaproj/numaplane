@@ -733,7 +733,7 @@ func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string
 	return scaleValue
 }
 
-func (r *MonoVertexRolloutReconciler) ProgressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
+func (r *MonoVertexRolloutReconciler) progressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
 	numaLogger := logger.FromContext(ctx)
 
 	// Temporary: we cannot support Progressive rollout assessment for HPA: See issue https://github.com/numaproj/numaplane/issues/868
@@ -754,6 +754,42 @@ func (r *MonoVertexRolloutReconciler) ProgressiveUnsupported(ctx context.Context
 	}
 
 	return false
+}
+
+func (r *MonoVertexRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+
+	// check if MonoVertex definition is set to Paused or scaled to 0, in which case it can't ingest data (so we skip the assessment as an optimization)
+	monoVertexSpecMap := make(map[string]interface{})
+	err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, monoVertexSpecMap)
+	if err != nil {
+		return false, progressive.SkipProgressiveAssessmentReasonUndefined, err
+	}
+
+	monoVertexDef := &unstructured.Unstructured{Object: map[string]interface{}{"spec": monoVertexSpecMap}}
+	canIngestData, err := numaflowtypes.CanMonoVertexIngestData(ctx, monoVertexDef)
+	if err != nil {
+		return false, progressive.SkipProgressiveAssessmentReasonUndefined, err
+	}
+
+	if !canIngestData {
+		return true, progressive.SkipProgressiveAssessmentReasonNoDataIngestion, nil
+	}
+
+	// check if ForcePromote is set true in the Progressive strategy
+	if monoVertexRollout.GetProgressiveStrategy().ForcePromote {
+		return true, progressive.SkipProgressiveAssessmentReasonRolloutConfiguration, nil
+	}
+	// check if Progressive is unsupported for this Rollout
+	if r.progressiveUnsupported(ctx, rolloutObject) {
+		return true, progressive.SkipProgressiveAssessmentReasonProgressiveUnsupported, nil
+	}
+	if !canIngestData {
+		return true, progressive.SkipProgressiveAssessmentReasonNoDataIngestion, nil
+	}
+
+	return false, progressive.SkipProgressiveAssessmentReasonUndefined, nil
+
 }
 
 func (r *MonoVertexRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject) {

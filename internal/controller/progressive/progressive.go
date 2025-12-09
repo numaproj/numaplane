@@ -85,9 +85,6 @@ type progressiveController interface {
 	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 
-	// ProgressiveUnsupported checks to see if Full Progressive Rollout (with assessment) is unsupported for this Rollout
-	ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool
-
 	// SkipProgressiveAssessment checks to see if we should skip progressive assessment for this Rollout
 	SkipProgressiveAssessment(ctx context.Context, rolloutObject ProgressiveRolloutObject) (bool, SkipProgressiveAssessmentReason, error)
 
