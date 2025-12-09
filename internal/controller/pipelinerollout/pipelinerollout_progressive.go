@@ -800,7 +800,7 @@ func (r *PipelineRolloutReconciler) SkipProgressiveAssessment(ctx context.Contex
 
 	// check if Pipeline definition is set to Paused or scaled to 0, in which case it can't ingest data (so we skip the assessment as an optimization)
 	pipelineSpecMap := make(map[string]interface{})
-	err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, pipelineSpecMap)
+	err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, &pipelineSpecMap)
 	if err != nil {
 		return false, progressive.SkipProgressiveAssessmentReasonUndefined, err
 	}

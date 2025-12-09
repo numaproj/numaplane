@@ -78,5 +78,5 @@ func CanMonoVertexIngestData(ctx context.Context, monovertex *unstructured.Unstr
 	if err != nil {
 		return false, err
 	}
-	return desiredPhase == string(numaflowv1.MonoVertexPhaseRunning) && scaleMinMax != nil && nonZeroScale, nil
+	return desiredPhase == string(numaflowv1.MonoVertexPhaseRunning) && nonZeroScale, nil
 }

@@ -761,7 +761,7 @@ func (r *MonoVertexRolloutReconciler) SkipProgressiveAssessment(ctx context.Cont
 
 	// check if MonoVertex definition is set to Paused or scaled to 0, in which case it can't ingest data (so we skip the assessment as an optimization)
 	monoVertexSpecMap := make(map[string]interface{})
-	err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, monoVertexSpecMap)
+	err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpecMap)
 	if err != nil {
 		return false, progressive.SkipProgressiveAssessmentReasonUndefined, err
 	}
