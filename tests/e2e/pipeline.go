@@ -30,7 +30,7 @@ func GetPromotedPipeline(namespace, pipelineRolloutName string) (*unstructured.U
 	return getChildResource(GetGVRForPipeline(), namespace, pipelineRolloutName)
 }
 func GetUpgradingPipelines(namespace, pipelineRolloutName string) (*unstructured.UnstructuredList, error) {
-	return GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), namespace, pipelineRolloutName, common.LabelValueUpgradeInProgress)
+	return GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), namespace, pipelineRolloutName, common.LabelValueUpgradeTrial)
 }
 
 func GetPipelineByName(namespace, pipelineName string) (*unstructured.Unstructured, error) {
@@ -48,6 +48,13 @@ func GetPromotedPipelineName(namespace, pipelineRolloutName string) (string, err
 func VerifyPromotedPipelineExists(namespace, pipelineRolloutName string) {
 	CheckEventually(fmt.Sprintf("Verifying that a promoted Pipeline exists for PipelineRollout %s", pipelineRolloutName), func() bool {
 		_, err := GetPromotedPipeline(namespace, pipelineRolloutName)
+		return err == nil
+	}).Should(BeTrue())
+}
+
+func VerifyPipelineExists(namespace, pipelineName string) {
+	CheckEventually(fmt.Sprintf("Verifying that Pipeline %s exists", pipelineName), func() bool {
+		_, err := GetPipelineByName(namespace, pipelineName)
 		return err == nil
 	}).Should(BeTrue())
 }
@@ -203,6 +210,13 @@ func VerifyPromotedPipelineFailed(namespace, pipelineRolloutName string) {
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhaseFailed
 		})
+}
+
+func VerifyPipelineRolloutStatusEventually(pipelineRolloutName string, f func(apiv1.PipelineRolloutStatus) bool) {
+	CheckEventually(fmt.Sprintf("Verifying PipelineRollout %s status", pipelineRolloutName), func() bool {
+		rollout, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return err == nil && f(rollout.Status)
+	}).Should(BeTrue())
 }
 
 func VerifyPipelineRolloutConditionPausing(namespace string, pipelineRolloutName string) {

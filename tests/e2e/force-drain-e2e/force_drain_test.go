@@ -161,7 +161,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 		// update twice
 		// first this creates "test-pipeline-rollout-1", then "test-pipeline-rollout-2"
-		updateFailedPipelinesBackToBack()
+		updateFailedPipelinesBackToBack(1)
 
 		// restore PipelineRollout back to original spec
 		updatePipeline(&initialPipelineSpec)
@@ -176,7 +176,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 		// update twice
 		// first this creates "test-pipeline-rollout-3", then "test-pipeline-rollout-4"
-		updateFailedPipelinesBackToBack()
+		updateFailedPipelinesBackToBack(3)
 
 		// Force promote test-pipeline-rollout-4 (which is unhealthy)
 		// This enables us to see that test-pipeline-rollout-0 and test-pipeline-rollout-3 start trying to drain
@@ -259,7 +259,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		})
 
 		// create test-pipeline-rollout-7 and test-pipeline-rollout-8 and force promote 8
-		updateFailedPipelinesBackToBack()
+		updateFailedPipelinesBackToBack(7)
 		forcePromote(pipelineRolloutName, 8)
 
 		// now let's make sure that test-pipeline-rollout-7 gets deleted even though it can't drain successfully
@@ -277,17 +277,28 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 // the first pipeline will be failed but it will be replaced before it's assessed
 // the second pipeline will actually be assessed as Failed
 // We test both since they take slightly different paths in the recycle code
-func updateFailedPipelinesBackToBack() {
+// nextIndex is the expected index of the first pipeline that will be created (second will be nextIndex+1)
+func updateFailedPipelinesBackToBack(nextIndex int) {
 	// this will be a failed Pipeline which will be replaced before it has a chance to be assessed
 	time.Sleep(10 * time.Second)
 	updatePipelineImage("badpath1")
+
+	// verify the first pipeline was created
+	VerifyPipelineExists(Namespace, GetInstanceName(pipelineRolloutName, nextIndex))
 
 	// this will be a failed Pipeline which will be assessed as Failed
 	time.Sleep(45 * time.Second)
 	updatePipelineImage("badpath2")
 
+	// verify the second pipeline was created
+	VerifyPipelineExists(Namespace, GetInstanceName(pipelineRolloutName, nextIndex+1))
+
 	// verify it was assessed as failed
-	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionFalse)
+	VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
+		return status.ProgressiveStatus.UpgradingPipelineStatus != nil &&
+			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, nextIndex+1) &&
+			status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult == apiv1.AssessmentResultFailure
+	})
 }
 
 func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
@@ -395,7 +406,6 @@ func updatePipelineImage(imagePath string) *numaflowv1.PipelineSpec {
 
 func verifyPipelinesUpgrading(pipelineIndex int) {
 	expectedPipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
-	By(fmt.Sprintf("Verifying that Pipeline %s is in the upgrading pipelines list", expectedPipelineName))
 	CheckEventually(fmt.Sprintf("Verifying that Pipeline %s is in the upgrading pipelines list", expectedPipelineName), func() bool {
 		upgradingPipelines, err := GetUpgradingPipelines(Namespace, pipelineRolloutName)
 		if err != nil {

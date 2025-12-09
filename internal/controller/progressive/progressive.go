@@ -137,9 +137,16 @@ func ProcessResource(
 	}
 
 	// is there currently an "upgrading" child?
-	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
+	var currentUpgradingChildDef *unstructured.Unstructured
+	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeTrial, nil, true, c)
 	if err != nil {
 		return false, 0, err
+	} else if currentUpgradingChildDef == nil {
+		// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
+		currentUpgradingChildDef, err = ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
+		if err != nil {
+			return false, 0, err
+		}
 	}
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't yet an "upgrading" definition, then create one and return
@@ -203,9 +210,15 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 	var err error
 	childName := ""
 	if useExistingChildName == nil {
-		childName, err = ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, false)
+		// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
+		childName, err = ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeTrial, nil, c, false)
 		if err != nil {
 			return nil, err
+		} else if childName == "" {
+			childName, err = ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, false)
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		childName = *useExistingChildName
@@ -969,12 +982,20 @@ func Discontinue(ctx context.Context,
 	}
 
 	// Generally, there should just be one Upgrading child, but just in case there's more than 1, mark all of them recyclable
-	upgradingChildren, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
+	// var upgradingChildren unstructured.UnstructuredList
+	upgradingChildrenTrialLabel, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeTrial, nil, true, c)
+	if err != nil {
+		return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
+	}
+	// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
+	upgradingChildrenUpgradeInProgressLabel, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
 	if err != nil {
 		return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
 	}
 
-	for _, child := range upgradingChildren.Items {
+	upgradingChildren := append(upgradingChildrenTrialLabel.Items, upgradingChildrenUpgradeInProgressLabel.Items...)
+
+	for _, child := range upgradingChildren {
 		reason := common.LabelValueDiscontinueProgressive
 		err = ctlrcommon.MarkRecyclable(ctx, c, &reason, &child)
 		if err != nil {
