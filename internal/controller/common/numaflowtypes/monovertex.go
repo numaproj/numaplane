@@ -18,6 +18,7 @@ package numaflowtypes
 
 import (
 	"context"
+	"fmt"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util"
@@ -64,4 +65,18 @@ func GetMonoVertexDesiredPhase(monovertex *unstructured.Unstructured) (string, e
 		desiredPhase = string(numaflowv1.MonoVertexPhaseRunning)
 	}
 	return desiredPhase, err
+}
+
+func CanMonoVertexIngestData(ctx context.Context, monovertex *unstructured.Unstructured) (bool, error) {
+
+	scaleMinMax, err := ExtractScaleMinMax(monovertex.Object, []string{"spec", "scale"})
+	if err != nil {
+		return false, fmt.Errorf("cannot extract the scale min and max values from the monovertex: %w", err)
+	}
+	nonZeroScale := scaleMinMax != nil && scaleMinMax.Max != nil && *scaleMinMax.Max > 0
+	desiredPhase, err := GetMonoVertexDesiredPhase(monovertex)
+	if err != nil {
+		return false, err
+	}
+	return desiredPhase == string(numaflowv1.MonoVertexPhaseRunning) && scaleMinMax != nil && nonZeroScale, nil
 }

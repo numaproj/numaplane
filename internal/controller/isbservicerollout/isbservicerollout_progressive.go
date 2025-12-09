@@ -227,7 +227,12 @@ func (r *ISBServiceRolloutReconciler) UpdateProgressiveMetrics(rolloutObject pro
 	}
 }
 
-func (r *ISBServiceRolloutReconciler) ProgressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
+func (r *ISBServiceRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 
-	return false
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	// check if ForcePromote is set true in the Progressive strategy
+	if isbsvcRollout.GetProgressiveStrategy().ForcePromote {
+		return true, progressive.SkipProgressiveAssessmentReasonRolloutConfiguration, nil
+	}
+	return false, progressive.SkipProgressiveAssessmentReasonUndefined, nil
 }

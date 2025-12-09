@@ -773,7 +773,7 @@ func scalePromotedPipelineToOriginalScale(
 
 	return nil
 }
-func (r *PipelineRolloutReconciler) ProgressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
+func (r *PipelineRolloutReconciler) progressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
 	numaLogger := logger.FromContext(ctx)
 
 	// Temporary: we cannot support Progressive rollout assessment for HPA: See issue https://github.com/numaproj/numaplane/issues/868
@@ -798,7 +798,7 @@ func (r *PipelineRolloutReconciler) ProgressiveUnsupported(ctx context.Context, 
 func (r *PipelineRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 
-	// check if Pipeline definition is set to Paused or scaled to 0, in which case it can't ingest data
+	// check if Pipeline definition is set to Paused or scaled to 0, in which case it can't ingest data (so we skip the assessment as an optimization)
 	pipelineSpecMap := make(map[string]interface{})
 	err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, pipelineSpecMap)
 	if err != nil {
@@ -816,7 +816,7 @@ func (r *PipelineRolloutReconciler) SkipProgressiveAssessment(ctx context.Contex
 		return true, progressive.SkipProgressiveAssessmentReasonRolloutConfiguration, nil
 	}
 	// check if Progressive is unsupported for this Rollout
-	if r.ProgressiveUnsupported(ctx, rolloutObject) {
+	if r.progressiveUnsupported(ctx, rolloutObject) {
 		return true, progressive.SkipProgressiveAssessmentReasonProgressiveUnsupported, nil
 	}
 	if !canIngestData {
