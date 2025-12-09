@@ -1489,7 +1489,7 @@ func TestProgressiveUnsupported(t *testing.T) {
 				},
 			}
 
-			result := reconciler.ProgressiveUnsupported(ctx, pipelineRollout)
+			result := reconciler.progressiveUnsupported(ctx, pipelineRollout)
 			assert.Equal(t, tt.expected, result, "ProgressiveUnsupported should return %v for test case: %s", tt.expected, tt.name)
 		})
 	}

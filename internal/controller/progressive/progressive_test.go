@@ -102,8 +102,8 @@ func (fpc fakeProgressiveController) SetCurrentRiderList(ctx context.Context, ro
 
 }
 
-func (fpc fakeProgressiveController) ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool {
-	return false
+func (fpc fakeProgressiveController) SkipProgressiveAssessment(ctx context.Context, rolloutObject ProgressiveRolloutObject) (bool, SkipProgressiveAssessmentReason, error) {
+	return false, SkipProgressiveAssessmentReasonUndefined, nil
 }
 
 func (fpc fakeProgressiveController) GetTemplateArguments(pipeline *unstructured.Unstructured) map[string]interface{} {

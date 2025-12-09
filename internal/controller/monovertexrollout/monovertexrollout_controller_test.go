@@ -1259,7 +1259,7 @@ func TestProgressiveUnsupported(t *testing.T) {
 				},
 			}
 
-			result := reconciler.ProgressiveUnsupported(ctx, monoVertexRollout)
+			result := reconciler.progressiveUnsupported(ctx, monoVertexRollout)
 			assert.Equal(t, tt.expected, result, "ProgressiveUnsupported should return %v for test case: %s", tt.expected, tt.name)
 		})
 	}
