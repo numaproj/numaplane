@@ -795,6 +795,7 @@ func (r *PipelineRolloutReconciler) progressiveUnsupported(ctx context.Context, 
 	return false
 }
 
+// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the PipelineRollout
 func (r *PipelineRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 

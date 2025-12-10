@@ -227,6 +227,7 @@ func (r *ISBServiceRolloutReconciler) UpdateProgressiveMetrics(rolloutObject pro
 	}
 }
 
+// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the ISBServiceRollout
 func (r *ISBServiceRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)

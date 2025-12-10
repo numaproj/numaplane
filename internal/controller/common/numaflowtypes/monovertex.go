@@ -67,6 +67,8 @@ func GetMonoVertexDesiredPhase(monovertex *unstructured.Unstructured) (string, e
 	return desiredPhase, err
 }
 
+// CanMonoVertexIngestData verifies that the configuration of the MonoVertex would allow it to ingest data
+// (must be set to Running and must have scale > 0)
 func CanMonoVertexIngestData(ctx context.Context, monovertex *unstructured.Unstructured) (bool, error) {
 
 	scaleMinMax, err := ExtractScaleMinMax(monovertex.Object, []string{"spec", "scale"})
