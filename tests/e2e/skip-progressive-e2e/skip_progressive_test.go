@@ -157,7 +157,7 @@ var _ = Describe("Skip Progressive E2E", Serial, func() {
 			updatedMonoVertexSpec.Scale.Max = ptr.To(int32(0))
 			updatedMonoVertexSpec.Scale.Min = ptr.To(int32(0))
 			return updatedMonoVertexSpec
-		}, 1)
+		})
 		time.Sleep(5 * time.Second)
 	})
 
@@ -166,7 +166,7 @@ var _ = Describe("Skip Progressive E2E", Serial, func() {
 			updatedMonoVertexSpec := spec.DeepCopy()
 			updatedMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
 			return updatedMonoVertexSpec
-		}, 2)
+		})
 	})
 
 	It("Should create ISBServiceRollout", func() {
@@ -179,7 +179,7 @@ var _ = Describe("Skip Progressive E2E", Serial, func() {
 			updatedPipelineSpec.Vertices[0].Scale.Max = ptr.To(int32(0))
 			updatedPipelineSpec.Vertices[0].Scale.Min = ptr.To(int32(0))
 			return updatedPipelineSpec
-		}, 1)
+		})
 		time.Sleep(5 * time.Second)
 	})
 
@@ -188,7 +188,7 @@ var _ = Describe("Skip Progressive E2E", Serial, func() {
 			updatedPipelineSpec := spec.DeepCopy()
 			updatedPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
 			return updatedPipelineSpec
-		}, 2)
+		})
 	})
 
 	It("Should delete Rollouts", func() {
@@ -205,7 +205,7 @@ func updateMonoVertexRolloutImage(initialMonoVertexSpec numaflowv1.MonoVertexSpe
 	return updatedMonoVertexSpec
 }
 
-func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec, index int) {
+func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec) {
 	CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, nil, apiv1.Metadata{})
 	// wait for MonoVertex to be ready
 	err := VerifyPromotedMonoVertexRunning(Namespace, monoVertexRolloutName)
@@ -222,7 +222,7 @@ func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec)
 	VerifyMonoVertexRolloutStatusEventually(monoVertexRolloutName, func(status apiv1.MonoVertexRolloutStatus) bool {
 		return status.ProgressiveStatus.UpgradingMonoVertexStatus != nil &&
 			status.ProgressiveStatus.UpgradingMonoVertexStatus.ForcedSuccess &&
-			status.ProgressiveStatus.UpgradingMonoVertexStatus.Name == GetInstanceName(monoVertexRolloutName, index)
+			status.ProgressiveStatus.UpgradingMonoVertexStatus.Name == GetInstanceName(monoVertexRolloutName, 1)
 	})
 	DeleteMonoVertexRollout(monoVertexRolloutName)
 }
@@ -235,7 +235,7 @@ func updatePipelineRolloutImage(initialPipelineSpec numaflowv1.PipelineSpec) *nu
 	return updatedPipelineSpec
 }
 
-func verifyPipelineAnalysisSkipped(updateFunc func(*numaflowv1.PipelineSpec) *numaflowv1.PipelineSpec, index int) {
+func verifyPipelineAnalysisSkipped(updateFunc func(*numaflowv1.PipelineSpec) *numaflowv1.PipelineSpec) {
 	CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, apiv1.PipelineStrategy{}, apiv1.Metadata{})
 
 	updatedPipelineSpec := updatePipelineRolloutImage(initialPipelineSpec)
@@ -249,7 +249,7 @@ func verifyPipelineAnalysisSkipped(updateFunc func(*numaflowv1.PipelineSpec) *nu
 	VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
 		return status.ProgressiveStatus.UpgradingPipelineStatus != nil &&
 			status.ProgressiveStatus.UpgradingPipelineStatus.ForcedSuccess &&
-			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, index)
+			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, 1)
 	})
 	DeletePipelineRollout(pipelineRolloutName)
 }
