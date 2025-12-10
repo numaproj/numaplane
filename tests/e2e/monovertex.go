@@ -103,6 +103,13 @@ func GetMonoVertexMetadata(u *unstructured.Unstructured) (apiv1.Metadata, error)
 	}, nil
 }
 
+func VerifyMonoVertexRolloutStatusEventually(monoVertexRolloutName string, f func(apiv1.MonoVertexRolloutStatus) bool) {
+	CheckEventually(fmt.Sprintf("Verifying MonoVertexRollout %s status", monoVertexRolloutName), func() bool {
+		rollout, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return err == nil && f(rollout.Status)
+	}).Should(BeTrue())
+}
+
 func VerifyMonoVertexRolloutReady(monoVertexRolloutName string) {
 	VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 
