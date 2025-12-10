@@ -1474,6 +1474,118 @@ func Test_CanPipelineIngestData(t *testing.T) {
 			expectedResult: true,
 			expectError:    false,
 		},
+		{
+			name: "Pipeline NOT set to ingest data - source vertex with max = 0 and desiredPhase=Paused",
+			pipelineSpec: `{
+				"lifecycle": {
+					"desiredPhase": "Paused"
+				},
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: false,
+			expectError:    false,
+		},
+		{
+			name: "Pipeline can ingest data - empty lifecycle (defaults to Running)",
+			pipelineSpec: `{
+				"lifecycle": {},
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"min": 1,
+							"max": 3
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name: "Pipeline can ingest data - empty scale on source vertex (defaults to max = 1)",
+			pipelineSpec: `{
+				"lifecycle": {
+					"desiredPhase": "Running"
+				},
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name: "Pipeline can ingest data - scale and lifecycle unset (defaults to Running and max = 1)",
+			pipelineSpec: `{
+				"vertices": [
+					{
+						"name": "in",
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: true,
+			expectError:    false,
+		},
 	}
 
 	for _, tt := range tests {
