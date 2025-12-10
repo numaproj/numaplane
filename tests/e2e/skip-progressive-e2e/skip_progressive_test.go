@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
@@ -121,6 +122,17 @@ var (
 			},
 		},
 	}
+
+	volSize, _            = apiresource.ParseQuantity("10Mi")
+	initialISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+		Redis: nil,
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version: "2.10.17",
+			Persistence: &numaflowv1.PersistenceStrategy{
+				VolumeSize: &volSize,
+			},
+		},
+	}
 )
 
 func TestSkipProgressiveE2E(t *testing.T) {
@@ -133,7 +145,7 @@ func TestSkipProgressiveE2E(t *testing.T) {
 	RunSpecs(t, "Skip Progressive E2E Suite")
 }
 
-var _ = Describe("Skip MonoVertex E2E", Serial, func() {
+var _ = Describe("Skip Progressive E2E", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
 		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
@@ -145,7 +157,7 @@ var _ = Describe("Skip MonoVertex E2E", Serial, func() {
 			updatedMonoVertexSpec.Scale.Max = ptr.To(int32(0))
 			updatedMonoVertexSpec.Scale.Min = ptr.To(int32(0))
 			return updatedMonoVertexSpec
-		})
+		}, 1)
 		time.Sleep(5 * time.Second)
 	})
 
@@ -154,26 +166,50 @@ var _ = Describe("Skip MonoVertex E2E", Serial, func() {
 			updatedMonoVertexSpec := spec.DeepCopy()
 			updatedMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
 			return updatedMonoVertexSpec
-		})
+		}, 2)
 	})
 
-	It("Should delete NumaflowControllerRollout", func() {
+	It("Should create ISBServiceRollout", func() {
+		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
+	})
+
+	It("Should skip analysis if PipelineRollout has source vertex with scale.max=0", func() {
+		verifyPipelineAnalysisSkipped(func(spec *numaflowv1.PipelineSpec) *numaflowv1.PipelineSpec {
+			updatedPipelineSpec := spec.DeepCopy()
+			updatedPipelineSpec.Vertices[0].Scale.Max = ptr.To(int32(0))
+			updatedPipelineSpec.Vertices[0].Scale.Min = ptr.To(int32(0))
+			return updatedPipelineSpec
+		}, 1)
+		time.Sleep(5 * time.Second)
+	})
+
+	It("Should skip analysis if PipelineRollout is set to pause", func() {
+		verifyPipelineAnalysisSkipped(func(spec *numaflowv1.PipelineSpec) *numaflowv1.PipelineSpec {
+			updatedPipelineSpec := spec.DeepCopy()
+			updatedPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
+			return updatedPipelineSpec
+		}, 2)
+	})
+
+	It("Should delete Rollouts", func() {
+		DeleteISBServiceRollout(isbServiceRolloutName)
 		DeleteNumaflowControllerRollout()
 	})
 })
 
 func updateMonoVertexRolloutImage(initialMonoVertexSpec numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec {
-	By("Updating the MonoVertex Topology to cause a Progressive change - Successful case")
+	By("Updating the MonoVertex Topology to cause a Progressive change")
 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 	updatedMonoVertexSpec.Source.UDTransformer = &numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
 	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = validUDTransformerImage
 	return updatedMonoVertexSpec
 }
 
-func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec) {
+func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec, index int) {
 	CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, nil, apiv1.Metadata{})
 	// wait for MonoVertex to be ready
-	VerifyPromotedMonoVertexRunning(Namespace, monoVertexRolloutName)
+	err := VerifyPromotedMonoVertexRunning(Namespace, monoVertexRolloutName)
+	Expect(err).ShouldNot(HaveOccurred())
 
 	updatedMonoVertexSpec := updateMonoVertexRolloutImage(initialMonoVertexSpec)
 	updatedMonoVertexSpec = updateFunc(updatedMonoVertexSpec)
@@ -186,7 +222,34 @@ func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec)
 	VerifyMonoVertexRolloutStatusEventually(monoVertexRolloutName, func(status apiv1.MonoVertexRolloutStatus) bool {
 		return status.ProgressiveStatus.UpgradingMonoVertexStatus != nil &&
 			status.ProgressiveStatus.UpgradingMonoVertexStatus.ForcedSuccess &&
-			status.ProgressiveStatus.UpgradingMonoVertexStatus.Name == GetInstanceName(monoVertexRolloutName, 1)
+			status.ProgressiveStatus.UpgradingMonoVertexStatus.Name == GetInstanceName(monoVertexRolloutName, index)
 	})
 	DeleteMonoVertexRollout(monoVertexRolloutName)
+}
+
+func updatePipelineRolloutImage(initialPipelineSpec numaflowv1.PipelineSpec) *numaflowv1.PipelineSpec {
+	By("Updating the Pipeline Topology to cause a Progressive change")
+	updatedPipelineSpec := initialPipelineSpec.DeepCopy()
+	// Change the UDF image to trigger a progressive upgrade
+	updatedPipelineSpec.Vertices[1].UDF.Container.Image = "quay.io/numaio/numaflow-go/map-cat:v0.9.0"
+	return updatedPipelineSpec
+}
+
+func verifyPipelineAnalysisSkipped(updateFunc func(*numaflowv1.PipelineSpec) *numaflowv1.PipelineSpec, index int) {
+	CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, apiv1.PipelineStrategy{}, apiv1.Metadata{})
+
+	updatedPipelineSpec := updatePipelineRolloutImage(initialPipelineSpec)
+	updatedPipelineSpec = updateFunc(updatedPipelineSpec)
+	rawSpec, err := json.Marshal(updatedPipelineSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pr apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+		pr.Spec.Pipeline.Spec.Raw = rawSpec
+		return pr, nil
+	})
+	VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
+		return status.ProgressiveStatus.UpgradingPipelineStatus != nil &&
+			status.ProgressiveStatus.UpgradingPipelineStatus.ForcedSuccess &&
+			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, index)
+	})
+	DeletePipelineRollout(pipelineRolloutName)
 }
