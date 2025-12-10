@@ -73,10 +73,10 @@ func CanMonoVertexIngestData(ctx context.Context, monovertex *unstructured.Unstr
 	if err != nil {
 		return false, fmt.Errorf("cannot extract the scale min and max values from the monovertex: %w", err)
 	}
-	nonZeroScale := scaleMinMax != nil && scaleMinMax.Max != nil && *scaleMinMax.Max > 0
+	zeroScale := scaleMinMax != nil && scaleMinMax.Max != nil && *scaleMinMax.Max == 0
 	desiredPhase, err := GetMonoVertexDesiredPhase(monovertex)
 	if err != nil {
 		return false, err
 	}
-	return desiredPhase == string(numaflowv1.MonoVertexPhaseRunning) && nonZeroScale, nil
+	return desiredPhase == string(numaflowv1.MonoVertexPhaseRunning) && !zeroScale, nil
 }
