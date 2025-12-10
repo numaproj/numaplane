@@ -542,8 +542,8 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		expectedRolloutPhase         apiv1.Phase
 		expectedProgressiveCondition metav1.ConditionStatus
 
-		expectedMonoVertices map[string]common.UpgradeState // after reconcile(), these are the only monoVertexs we expect to exist along with their expected UpgradeState
-
+		expectedMonoVertices            map[string]common.UpgradeState // after reconcile(), these are the only monoVertexs we expect to exist along with their expected UpgradeState
+		expectedMonoVerticesResultState map[string]common.ResultState
 	}{
 		{
 			name:                           "Instance annotation difference results in Progressive",
@@ -563,6 +563,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeTrial,
 			},
+			expectedMonoVerticesResultState: map[string]common.ResultState{},
 		},
 		{
 			name:                           "Progressive deployed successfully",
@@ -585,6 +586,9 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			// original MonoVertex deleted, new one promoted
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
+			},
+			expectedMonoVerticesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateSucceeded,
 			},
 		},
 		{
@@ -621,6 +625,9 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeTrial,
 			},
+			expectedMonoVerticesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateFailed,
+			},
 		},
 		{
 			name:                           "AnalysisRun successful",
@@ -649,6 +656,9 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			// original MonoVertex deleted, new one promoted
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
+			},
+			expectedMonoVerticesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateSucceeded,
 			},
 		},
 		{
@@ -684,6 +694,9 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
+			// expectedMonoVerticesResultState: map[string]common.ResultState{
+			// 	ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateFailed,
+			// },
 		},
 		{
 			name:                           "Handle user deletion of promoted monovertex during Progressive",
@@ -706,6 +719,9 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
+			// expectedMonoVerticesResultState: map[string]common.ResultState{
+			// 	ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueResultStateSucceeded,
+			// },
 		},
 	}
 
@@ -817,6 +833,15 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 				resultUpgradeState, found := monoVertex.Labels[common.LabelKeyUpgradeState]
 				assert.True(t, found)
 				assert.Equal(t, string(expectedMonoVertexUpgradeState), resultUpgradeState)
+
+				if len(tc.expectedMonoVerticesResultState) > 0 {
+					expectedMonoVertexResultState, found := tc.expectedMonoVerticesResultState[monoVertex.Name]
+					if found {
+						resultState, labelFound := monoVertex.Labels[common.LabelKeyProgressiveResultState]
+						assert.True(t, labelFound)
+						assert.Equal(t, string(expectedMonoVertexResultState), resultState)
+					}
+				}
 			}
 		})
 	}

@@ -181,6 +181,42 @@ func MarkRecyclable(ctx context.Context, c client.Client, upgradeStateReason *co
 
 }
 
+// update the in-memory object with the new result state Label and patch the object in K8S
+func UpdateResultState(ctx context.Context, c client.Client, resultState common.ResultState, childObject *unstructured.Unstructured) error {
+	numaLogger := logger.FromContext(ctx)
+
+	numaLogger.WithValues("resultState", resultState).Debugf("patching resultState to %s:%s/%s",
+		childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+
+	labelsToSet := map[string]string{
+		common.LabelKeyProgressiveResultState: string(resultState),
+	}
+
+	// Patch the labels in Kubernetes
+	return kubernetes.SetAndPatchLabels(ctx, c, childObject, labelsToSet)
+}
+
+func GetResultState(ctx context.Context, c client.Client, childObject *unstructured.Unstructured) *common.ResultState {
+	numaLogger := logger.FromContext(ctx)
+
+	resultStateStr, found := childObject.GetLabels()[common.LabelKeyProgressiveResultState]
+	if !found {
+		numaLogger.Debug("resultState unset for %s:%s/%s", childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+		return nil
+	} else {
+		numaLogger.WithValues("resultState", resultStateStr).Debugf("reading resultState for %s:%s/%s",
+			childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+		if !found {
+			resultState := common.ResultState(resultStateStr)
+			return &resultState
+		} else {
+			resultState := common.ResultState(resultStateStr)
+			return &resultState
+		}
+	}
+
+}
+
 // update the in-memory object with the new Label and patch the object in K8S
 func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
 	numaLogger := logger.FromContext(ctx)
