@@ -136,6 +136,8 @@ jobs:
             case: "force-drain"
           - strategy: "progressive"
             case: "no-drain"
+          - strategy: "progressive"
+            case: "skip-progressive"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
