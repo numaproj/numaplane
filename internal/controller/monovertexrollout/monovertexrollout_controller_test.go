@@ -1311,6 +1311,168 @@ func createHPARawExtension(t *testing.T) []byte {
 	return raw
 }
 
+func Test_SkipProgressiveAssessment(t *testing.T) {
+	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	recorder := record.NewFakeRecorder(64)
+	r := NewMonoVertexRolloutReconciler(
+		client,
+		scheme.Scheme,
+		ctlrcommon.TestCustomMetrics,
+		recorder)
+
+	// Helper function to create a MonoVertex spec with desiredPhase set
+	createMonoVertexSpecWithLifecycle := func(desiredPhase string) numaflowv1.MonoVertexSpec {
+		spec := monoVertexSpec.DeepCopy()
+		if desiredPhase != "" {
+			spec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhase(desiredPhase)
+		}
+		return *spec
+	}
+
+	// Helper function to create a MonoVertex spec scaled to 0
+	createMonoVertexSpecScaledToZero := func() numaflowv1.MonoVertexSpec {
+		spec := monoVertexSpec.DeepCopy()
+		zero := int32(0)
+		spec.Scale = numaflowv1.Scale{Max: &zero}
+		return *spec
+	}
+
+	testCases := []struct {
+		name                   string
+		monoVertexSpec         numaflowv1.MonoVertexSpec
+		forcePromoteConfigured bool
+		riders                 []apiv1.Rider
+		expectedSkip           bool
+	}{
+		{
+			name:                   "MonoVertex can ingest data, no ForcePromote, no HPA rider - should NOT skip",
+			monoVertexSpec:         monoVertexSpec,
+			forcePromoteConfigured: false,
+			riders:                 nil,
+			expectedSkip:           false,
+		},
+		{
+			name:                   "MonoVertex paused - should skip",
+			monoVertexSpec:         createMonoVertexSpecWithLifecycle("Paused"),
+			forcePromoteConfigured: false,
+			riders:                 nil,
+			expectedSkip:           true,
+		},
+		{
+			name:                   "MonoVertex scaled to 0 - should skip",
+			monoVertexSpec:         createMonoVertexSpecScaledToZero(),
+			forcePromoteConfigured: false,
+			riders:                 nil,
+			expectedSkip:           true,
+		},
+		{
+			name:                   "ForcePromote set to true - should skip",
+			monoVertexSpec:         monoVertexSpec,
+			forcePromoteConfigured: true,
+			riders:                 nil,
+			expectedSkip:           true,
+		},
+		{
+			name:                   "HPA rider present - should skip",
+			monoVertexSpec:         monoVertexSpec,
+			forcePromoteConfigured: false,
+			riders: []apiv1.Rider{
+				{
+					Progressive: true,
+					Definition: runtime.RawExtension{
+						Raw: createHPARawExtension(t),
+					},
+				},
+			},
+			expectedSkip: true,
+		},
+		{
+			name:                   "ConfigMap rider only (no HPA) - should NOT skip",
+			monoVertexSpec:         monoVertexSpec,
+			forcePromoteConfigured: false,
+			riders: []apiv1.Rider{
+				{
+					Progressive: true,
+					Definition: runtime.RawExtension{
+						Raw: createConfigMapRawExtension(t),
+					},
+				},
+			},
+			expectedSkip: false,
+		},
+		{
+			name:                   "Mixed riders including HPA - should skip",
+			monoVertexSpec:         monoVertexSpec,
+			forcePromoteConfigured: false,
+			riders: []apiv1.Rider{
+				{
+					Progressive: true,
+					Definition: runtime.RawExtension{
+						Raw: createConfigMapRawExtension(t),
+					},
+				},
+				{
+					Progressive: true,
+					Definition: runtime.RawExtension{
+						Raw: createHPARawExtension(t),
+					},
+				},
+			},
+			expectedSkip: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Marshal monoVertexSpec to RawExtension
+			monoVertexSpecBytes, err := json.Marshal(tc.monoVertexSpec)
+			assert.NoError(t, err)
+
+			// Create MonoVertexRollout
+			monoVertexRollout := &apiv1.MonoVertexRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: ctlrcommon.DefaultTestNamespace,
+					Name:      "test-monovertex-rollout",
+				},
+				Spec: apiv1.MonoVertexRolloutSpec{
+					MonoVertex: apiv1.MonoVertex{
+						Spec: runtime.RawExtension{Raw: monoVertexSpecBytes},
+					},
+					Riders: tc.riders,
+				},
+			}
+
+			// Set ForcePromote if needed
+			if tc.forcePromoteConfigured {
+				monoVertexRollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
+					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+						Progressive: apiv1.ProgressiveStrategy{
+							ForcePromote: true,
+						},
+					},
+				}
+			}
+
+			skip, _, err := r.SkipProgressiveAssessment(ctx, monoVertexRollout)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedSkip, skip, "skip result mismatch")
+		})
+	}
+}
+
 // Technically, IsUpgradeReplacementRequired() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the MonoVertexRollout controller.
 func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()

@@ -756,6 +756,7 @@ func (r *MonoVertexRolloutReconciler) progressiveUnsupported(ctx context.Context
 	return false
 }
 
+// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the MonoVertexRollout
 func (r *MonoVertexRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 
