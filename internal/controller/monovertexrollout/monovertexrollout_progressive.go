@@ -145,7 +145,8 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 // CheckForDifferences checks to see if the monovertex definition matches the spec and the required metadata
 func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, monoVertexDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	// remove certain fields (which numaplane needs to set) from comparison to test for equality
+	// Remove certain fields (which numaplane needs to set) from comparison to test for equality
+	// However, there is one exception: if the user has set max=0, we cannot ignore that
 	removeFunc := func(monoVertex map[string]interface{}) (map[string]interface{}, error) {
 		var specAsMap map[string]any
 
@@ -153,7 +154,14 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, m
 			return nil, err
 		}
 
-		excludedPaths := []string{"replicas", "scale.min", "scale.max", "scale.disabled"}
+		// Check if scale.max is set and equals 0 - if so, don't exclude it
+		maxValue, maxFound, _ := unstructured.NestedInt64(specAsMap, "scale", "max")
+		hasMaxZero := maxFound && maxValue == 0
+
+		excludedPaths := []string{"replicas", "scale.min", "scale.disabled"}
+		if !hasMaxZero {
+			excludedPaths = append(excludedPaths, "scale.max")
+		}
 		util.RemovePaths(specAsMap, excludedPaths, ".")
 
 		// if "scale" is there and empty, remove it

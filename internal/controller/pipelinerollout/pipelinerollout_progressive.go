@@ -207,11 +207,49 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 		return false, fmt.Errorf("failed to deep copy requiredSpec: %w", err)
 	}
 
-	err := numaflowtypes.PipelineWithoutScaleFields(pipelineCopy.Object)
+	removeFunc := func(pipelineDef map[string]interface{}) error {
+		// for each Vertex, remove the scale min and max:
+		// However, there is one exception: if the vertex is a source vertex and the user has set max=0, we cannot ignore that
+		vertices, _, _ := unstructured.NestedSlice(pipelineDef, "spec", "vertices")
+
+		modifiedVertices := make([]interface{}, 0)
+		for _, vertex := range vertices {
+			if vertexAsMap, ok := vertex.(map[string]any); ok {
+
+				// Check if vertex is a source with max=0
+				_, isSource, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "source")
+				maxValue, maxFound, _ := unstructured.NestedInt64(vertexAsMap, "scale", "max")
+				isSourceWithMaxZero := isSource && maxFound && maxValue == 0
+
+				unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
+				if !isSourceWithMaxZero {
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
+				}
+				unstructured.RemoveNestedField(vertexAsMap, "scale", "disabled")
+
+				// if "scale" is there and empty, remove it
+				scaleMap, found := vertexAsMap["scale"].(map[string]interface{})
+				if found && len(scaleMap) == 0 {
+					unstructured.RemoveNestedField(vertexAsMap, "scale")
+				}
+
+				modifiedVertices = append(modifiedVertices, vertexAsMap)
+			}
+		}
+
+		err := unstructured.SetNestedSlice(pipelineDef, modifiedVertices, "spec", "vertices")
+		if err != nil {
+			return err
+		}
+		return nil
+
+	}
+
+	err := removeFunc(pipelineCopy.Object)
 	if err != nil {
 		return false, err
 	}
-	err = numaflowtypes.PipelineWithoutScaleFields(requiredSpecCopy)
+	err = removeFunc(requiredSpecCopy)
 	if err != nil {
 		return false, err
 	}
