@@ -210,6 +210,8 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 	removeFunc := func(pipelineDef map[string]interface{}) error {
 		// for each Vertex, remove the scale min and max:
 		// However, there is one exception: if the vertex is a source vertex and the user has set max=0, we cannot ignore that
+
+		// TODO: actually we only want to do this is the target is 0, not if the running one is 0
 		vertices, _, _ := unstructured.NestedSlice(pipelineDef, "spec", "vertices")
 
 		modifiedVertices := make([]interface{}, 0)
