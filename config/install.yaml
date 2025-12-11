@@ -327,6 +327,10 @@ spec:
                         description: ForcedSuccess indicates if this promotion was
                           forced to complete
                         type: boolean
+                      forcedSuccessReason:
+                        description: ForcedSuccessReason indicates the reason for
+                          the forced success
+                        type: string
                       initializationComplete:
                         description: InitializationComplete determines if the upgrade
                           process has completed (if it hasn't, we will come back and
@@ -811,6 +815,10 @@ spec:
                         description: ForcedSuccess indicates if this promotion was
                           forced to complete
                         type: boolean
+                      forcedSuccessReason:
+                        description: ForcedSuccessReason indicates the reason for
+                          the forced success
+                        type: string
                       initializationComplete:
                         description: InitializationComplete determines if the upgrade
                           process has completed (if it hasn't, we will come back and
@@ -1783,6 +1791,10 @@ spec:
                         description: ForcedSuccess indicates if this promotion was
                           forced to complete
                         type: boolean
+                      forcedSuccessReason:
+                        description: ForcedSuccessReason indicates the reason for
+                          the forced success
+                        type: string
                       initializationComplete:
                         description: InitializationComplete determines if the upgrade
                           process has completed (if it hasn't, we will come back and

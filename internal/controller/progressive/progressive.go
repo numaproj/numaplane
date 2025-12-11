@@ -364,6 +364,7 @@ func processUpgradingChild(
 
 	if forcePromote || skipAssessment {
 		childStatus.ForcedSuccess = true
+		childStatus.ForcedSuccessReason = string(reason)
 
 		numaLogger.WithValues("reason", reason).Debug("Upgrading child force promoted")
 

@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
 )
@@ -222,6 +223,7 @@ func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec)
 	VerifyMonoVertexRolloutStatusEventually(monoVertexRolloutName, func(status apiv1.MonoVertexRolloutStatus) bool {
 		return status.ProgressiveStatus.UpgradingMonoVertexStatus != nil &&
 			status.ProgressiveStatus.UpgradingMonoVertexStatus.ForcedSuccess &&
+			status.ProgressiveStatus.UpgradingMonoVertexStatus.ForcedSuccessReason == string(progressive.SkipProgressiveAssessmentReasonNoDataIngestion) &&
 			status.ProgressiveStatus.UpgradingMonoVertexStatus.Name == GetInstanceName(monoVertexRolloutName, 1)
 	})
 	DeleteMonoVertexRollout(monoVertexRolloutName)
@@ -249,6 +251,7 @@ func verifyPipelineAnalysisSkipped(updateFunc func(*numaflowv1.PipelineSpec) *nu
 	VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
 		return status.ProgressiveStatus.UpgradingPipelineStatus != nil &&
 			status.ProgressiveStatus.UpgradingPipelineStatus.ForcedSuccess &&
+			status.ProgressiveStatus.UpgradingPipelineStatus.ForcedSuccessReason == string(progressive.SkipProgressiveAssessmentReasonNoDataIngestion) &&
 			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, 1)
 	})
 	DeletePipelineRollout(pipelineRolloutName)
