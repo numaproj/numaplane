@@ -27,7 +27,9 @@ import (
 	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
-type fakeProgressiveController struct{}
+type fakeProgressiveController struct {
+	skipProgressiveAssessment bool
+}
 
 func (fpc fakeProgressiveController) UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject) {
 }
@@ -102,8 +104,11 @@ func (fpc fakeProgressiveController) SetCurrentRiderList(ctx context.Context, ro
 
 }
 
-func (fpc fakeProgressiveController) ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool {
-	return false
+func (fpc fakeProgressiveController) SkipProgressiveAssessment(ctx context.Context, rolloutObject ProgressiveRolloutObject) (bool, SkipProgressiveAssessmentReason, error) {
+	if fpc.skipProgressiveAssessment {
+		return true, SkipProgressiveAssessmentReasonRolloutConfiguration, nil
+	}
+	return false, SkipProgressiveAssessmentReasonUndefined, nil
 }
 
 func (fpc fakeProgressiveController) GetTemplateArguments(pipeline *unstructured.Unstructured) map[string]interface{} {
@@ -127,8 +132,10 @@ func Test_processUpgradingChild(t *testing.T) {
 	defaultExistingPromotedChildDef := createMonoVertex("test")
 
 	testCases := []struct {
-		name                      string
-		rolloutObject             ProgressiveRolloutObject
+		name          string
+		rolloutObject ProgressiveRolloutObject
+		// if set to true, the rolloutController will indicate that we should skip the progressive assessment and force promote
+		skipProgressiveAssessment bool
 		existingUpgradingChildDef *numaflowv1.MonoVertex
 		expectedDone              bool
 		expectedRequeueDelay      time.Duration
@@ -151,6 +158,7 @@ func Test_processUpgradingChild(t *testing.T) {
 				},
 				nil,
 			),
+			skipProgressiveAssessment: false,
 			existingUpgradingChildDef: createMonoVertex("test-success"),
 			expectedDone:              true,
 			expectedRequeueDelay:      0,
@@ -179,6 +187,7 @@ func Test_processUpgradingChild(t *testing.T) {
 					},
 				},
 			),
+			skipProgressiveAssessment: false,
 			existingUpgradingChildDef: createMonoVertex("test-failure"),
 			expectedDone:              false,
 			expectedRequeueDelay:      0,
@@ -207,6 +216,7 @@ func Test_processUpgradingChild(t *testing.T) {
 					},
 				},
 			),
+			skipProgressiveAssessment: true,
 			existingUpgradingChildDef: createMonoVertex("test-force-promote"),
 			expectedDone:              true,
 			expectedRequeueDelay:      0,
@@ -235,6 +245,7 @@ func Test_processUpgradingChild(t *testing.T) {
 				},
 				nil,
 			),
+			skipProgressiveAssessment: false,
 			existingUpgradingChildDef: createMonoVertex("test-analysis-success"),
 			expectedDone:              true,
 			expectedRequeueDelay:      0,
@@ -263,6 +274,7 @@ func Test_processUpgradingChild(t *testing.T) {
 				},
 				nil,
 			),
+			skipProgressiveAssessment: false,
 			existingUpgradingChildDef: createMonoVertex("test-analysis-failure"),
 			expectedDone:              false,
 			expectedRequeueDelay:      0,
@@ -290,7 +302,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			}
 
 			actualDone, actualRequeueDelay, actualErr := processUpgradingChild(
-				ctx, tc.rolloutObject, fakeProgressiveController{}, monoVertexToUnstruct(defaultExistingPromotedChildDef), monoVertexToUnstruct(tc.existingUpgradingChildDef), client)
+				ctx, tc.rolloutObject, fakeProgressiveController{skipProgressiveAssessment: tc.skipProgressiveAssessment}, monoVertexToUnstruct(defaultExistingPromotedChildDef), monoVertexToUnstruct(tc.existingUpgradingChildDef), client)
 
 			if tc.expectedError != nil {
 				assert.Error(t, actualErr)
