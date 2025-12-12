@@ -1322,7 +1322,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
-			expectedPipelinesResultState: map[string]common.ResultState{},
+			expectedPipelinesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateSucceeded,
+			},
 		},
 		{
 			// this is the case of somebody deleting their "promoted" Pipeline during Progressive Rollout
