@@ -1310,6 +1310,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted), // note: this is now "promoted"
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyProgressiveResultState:         string(common.LabelValueResultStateSucceeded),
 				},
 				map[string]string{}),
 			initialRolloutPhase:         apiv1.PhaseDeployed,

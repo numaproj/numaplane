@@ -220,6 +220,41 @@ var (
 			CompletedAt: &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
 		},
 	}
+
+	failedAnalysisRunName = "monovertex-monovertexrollout-test-2"
+	failedAnalysisRun     = argorolloutsv1.AnalysisRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      failedAnalysisRunName,
+			Namespace: ctlrcommon.DefaultTestNamespace,
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AnalysisRun",
+			APIVersion: "argoproj.io/v1alpha1",
+		},
+		Spec: argorolloutsv1.AnalysisRunSpec{
+			Metrics: []argorolloutsv1.Metric{
+				{
+					Name: "return-true",
+					Provider: argorolloutsv1.MetricProvider{
+						Prometheus: &argorolloutsv1.PrometheusMetric{
+							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
+							Query:   "vector(1) == vector(2)",
+						},
+					},
+					SuccessCondition: "true",
+				},
+			},
+			Args: []argorolloutsv1.Argument{
+				{Name: "upgrading-monovertex-name", Value: &failedAnalysisRunName},
+				{Name: "monovertex-namespace", Value: &ctlrcommon.DefaultTestNamespace},
+			},
+		},
+		Status: argorolloutsv1.AnalysisRunStatus{
+			Phase:       argorolloutsv1.AnalysisPhaseFailed,
+			StartedAt:   &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
+			CompletedAt: &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
+		},
+	}
 )
 
 func fakeMonoVertexSpec(t *testing.T) numaflowv1.MonoVertexSpec {
@@ -513,6 +548,9 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 	err = client.Create(ctx, &successfulAnalysisRun)
 	assert.NoError(t, err)
 
+	err = client.Create(ctx, &failedAnalysisRun)
+	assert.NoError(t, err)
+
 	r := NewMonoVertexRolloutReconciler(
 		client,
 		scheme.Scheme,
@@ -662,41 +700,80 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:                           "AnalysisRun failed",
-			newControllerInstanceID:        "1",
-			existingOriginalMonoVertexDef:  &defaultOriginalMonoVertexDef,
-			existingUpgradingMonoVertexDef: defaultUpgradingMonoVertexDef,
-			initialRolloutPhase:            apiv1.PhasePending,
-			initialRolloutNameCount:        2,
-			initialInProgressStrategy:      &progressiveUpgradeStrategy,
+			name:                    "AnalysisRun failed",
+			newControllerInstanceID: "2",
+			existingOriginalMonoVertexDef: ctlrcommon.CreateTestMonoVertexOfSpec(
+				monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-1",
+				numaflowv1.MonoVertexPhaseRunning,
+				numaflowv1.Status{},
+				map[string]string{
+					common.LabelKeyUpgradeState:           string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:          ctlrcommon.DefaultTestMonoVertexRolloutName,
+					common.LabelKeyProgressiveResultState: string(common.LabelValueResultStateSucceeded),
+				},
+				map[string]string{
+					common.AnnotationKeyNumaflowInstanceID: "1",
+				}),
+			existingUpgradingMonoVertexDef: ctlrcommon.CreateTestMonoVertexOfSpec(
+				monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-2",
+				numaflowv1.MonoVertexPhaseRunning,
+				numaflowv1.Status{
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
+							Status:             metav1.ConditionTrue,
+							Reason:             "healthy",
+							LastTransitionTime: metav1.NewTime(time.Now()),
+						},
+					},
+				},
+				map[string]string{
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeTrial),
+					common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
+				},
+				map[string]string{
+					common.AnnotationKeyNumaflowInstanceID: "2",
+				}),
+			initialRolloutPhase:       apiv1.PhasePending,
+			initialRolloutNameCount:   2,
+			initialInProgressStrategy: &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
 				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                     ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+						Name:                     ctlrcommon.DefaultTestMonoVertexRolloutName + "-2",
 						BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 						BasicAssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:         apiv1.AssessmentResultUnknown,
+						AssessmentResult:         apiv1.AssessmentResultFailure,
 						InitializationComplete:   true,
 					},
 					Analysis: apiv1.AnalysisStatus{
-						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-2",
 						StartTime:       &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
 						EndTime:         &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
 						Phase:           argorolloutsv1.AnalysisPhaseFailed,
 					},
 				},
 			},
-			initialPromotedChildStatus:   defaultPromotedChildStatus,
+			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+					},
+					ScaleValues: map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+				},
+			},
 			analysisRun:                  true,
-			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:         apiv1.PhaseDeployed,
-			expectedProgressiveCondition: metav1.ConditionTrue,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:         apiv1.PhasePending,
+			expectedProgressiveCondition: metav1.ConditionFalse,
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueUpgradeTrial,
 			},
-			// expectedMonoVerticesResultState: map[string]common.ResultState{
-			// 	ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateFailed,
-			// },
+			expectedMonoVerticesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateSucceeded,
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueResultStateFailed,
+			},
 		},
 		{
 			name:                           "Handle user deletion of promoted monovertex during Progressive",
@@ -719,9 +796,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
-			// expectedMonoVerticesResultState: map[string]common.ResultState{
-			// 	ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueResultStateSucceeded,
-			// },
+			expectedMonoVerticesResultState: map[string]common.ResultState{},
 		},
 	}
 
