@@ -1217,6 +1217,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
 			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+			common.LabelKeyProgressiveResultState:         string(common.LabelValueResultStateSucceeded),
 		},
 		map[string]string{
 			common.AnnotationKeyRequiresDrain: "true",
@@ -1298,8 +1299,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
 
-		expectedPipelines map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
-
+		expectedPipelines            map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
+		expectedPipelinesResultState map[string]common.ResultState
 	}{
 		{
 			name:                        "Progressive deployed successfully",
@@ -1317,6 +1318,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
+			},
+
+			expectedPipelinesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueResultStateSucceeded,
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateSucceeded,
 			},
 		},
 		{
@@ -1336,6 +1342,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeTrial,
 			},
+
+			expectedPipelinesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueResultStateSucceeded,
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateFailed,
+			},
 		},
 		{
 			name:                        "Progressive deployment failed - going back to original spec",
@@ -1354,6 +1365,10 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 			},
+
+			expectedPipelinesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueResultStateSucceeded,
+			},
 		},
 		{
 			// this one is a weird case in which we've just updated our latest Pipeline (what's referred to below as the "existingUpgradePipelineDef") as "promoted" but maybe we had some resource version conflict failure
@@ -1371,6 +1386,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted), // note: this is now "promoted"
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyProgressiveResultState:         string(common.LabelValueResultStateSucceeded),
 				},
 				map[string]string{}),
 			initialRolloutPhase:         apiv1.PhaseDeployed,
@@ -1382,9 +1398,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
+			expectedPipelinesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateSucceeded,
+			},
 		},
 		{
-			// this is the case of someobdy deleting their "promoted" Pipeline during Progressive Rollout
+			// this is the case of somebody deleting their "promoted" Pipeline during Progressive Rollout
 			// we make sure that we create a new "promoted" one in its place with the latest and greatest spec, and also delete the "upgrading" one
 			name:                        "Handle user deletion of promoted pipeline during Progressive",
 			newPipelineSpec:             pipelineSpec, // this matches the original spec
@@ -1402,6 +1421,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
+			expectedPipelinesResultState: map[string]common.ResultState{},
 		},
 	}
 
@@ -1479,6 +1499,15 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				resultUpgradeState, found := pipeline.Labels[common.LabelKeyUpgradeState]
 				assert.True(t, found)
 				assert.Equal(t, string(expectedPipelineUpgradeState), resultUpgradeState)
+
+				if len(tc.expectedPipelinesResultState) > 0 {
+					expectedPipelineResultState, found := tc.expectedPipelinesResultState[pipeline.Name]
+					if found {
+						resultState, labelFound := pipeline.Labels[common.LabelKeyProgressiveResultState]
+						assert.True(t, labelFound)
+						assert.Equal(t, string(expectedPipelineResultState), resultState)
+					}
+				}
 			}
 		})
 	}
