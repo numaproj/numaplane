@@ -151,6 +151,7 @@ test-progressive-monovertex-e2e:
 test-progressive-pipeline-e2e:
 test-progressive-analysis-monovertex-e2e:
 test-progressive-analysis-pipeline-e2e:
+test-skip-progressive-e2e:
 test-pipeline-rider-e2e:
 test-monovertex-rider-e2e:
 test-rollback-e2e:
