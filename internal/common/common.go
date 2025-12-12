@@ -30,6 +30,10 @@ type UpgradeState string
 // UpgradeStateReason is the enum to track reasons for UpgradeState, to provide additional information when useful
 type UpgradeStateReason string
 
+// ResultState is the enum to the track the possible result state of
+// a resource upgrade: it can be `failed`, `succeeded`, or `force-promoted`.
+type ResultState string
+
 const (
 	// SSAManager is the default numaplane manager name used by server-side apply syncs
 	SSAManager = "numaplane-controller"
@@ -86,6 +90,22 @@ const (
 	// LabelKeyAllowDataLoss is the label key on a Pipeline to indicate that PPND strategy can skip the usual pausing required
 	// this includes both the case of pausing for Pipeline updating as well as for NumaflowController and isbsvc updating
 	LabelKeyAllowDataLoss = KeyNumaplanePrefix + "allow-data-loss"
+
+	// LabelKeyProgressiveResultState is the label key used to identify the progressive result state of a resource
+	// that is managed by a NumaRollout.
+	LabelKeyProgressiveResultState = KeyNumaplanePrefix + "progressive-result-state"
+
+	// LabelValueResultStateFailed is the label value indicating that the progressive upgrade of a resource
+	// managed by a NumaRollout failed.
+	LabelValueResultStateFailed ResultState = "failed"
+
+	// LabelValueResultStateForcePromoted is the label value indicating that the progressive upgrade of a resource
+	// managed by a NumaRollout was force promoted.
+	LabelValueResultStateForcePromoted ResultState = "force-promoted"
+
+	// LabelValueResultStateSucceeded is the label value indicating that the progressive upgrade of a resource
+	// managed by a NumaRollout succeeded.
+	LabelValueResultStateSucceeded ResultState = "succeeded"
 
 	// LabelKeyUpgradeState is the label key used to identify the upgrade state of a resource that is managed by
 	// a NumaRollout.

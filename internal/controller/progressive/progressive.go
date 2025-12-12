@@ -368,6 +368,11 @@ func processUpgradingChild(
 
 		numaLogger.WithValues("reason", reason).Debug("Upgrading child force promoted")
 
+		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef)
+		if err != nil {
+			return false, 0, err
+		}
+
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, 0, err
@@ -418,6 +423,11 @@ func processUpgradingChild(
 			status.ChildStatus.Raw = childSts
 		})
 
+		err = ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateFailed, existingUpgradingChildDef)
+		if err != nil {
+			return false, 0, err
+		}
+
 		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 		if err != nil {
 			return false, 0, err
@@ -436,6 +446,10 @@ func processUpgradingChild(
 		return false, 0, nil
 
 	case apiv1.AssessmentResultSuccess:
+		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef)
+		if err != nil {
+			return true, 0, err
+		}
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, 0, err

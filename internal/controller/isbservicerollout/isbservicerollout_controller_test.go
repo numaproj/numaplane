@@ -461,8 +461,8 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
 
-		expectedISBServices map[string]common.UpgradeState // after reconcile(), these are the only interstepbufferservices we expect to exist along with their expected UpgradeState
-
+		expectedISBServices            map[string]common.UpgradeState // after reconcile(), these are the only interstepbufferservices we expect to exist along with their expected UpgradeState
+		expectedISBServicesResultState map[string]common.ResultState
 	}{
 		{
 			// the Rollout's specified jetstream version - 2.10.11 - differs from the running one - 2.10.3
@@ -486,6 +486,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				defaultPromotedISBSvcName:  common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName: common.LabelValueUpgradeTrial,
 			},
+			expectedISBServicesResultState: map[string]common.ResultState{},
 		},
 		{
 			// the "upgrading" isbsvc succeeds (given that its pipeline succeeded)
@@ -517,6 +518,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				// note: the original isbsvc got garbage collected so it's no longer there
 				defaultUpgradingISBSvcName: common.LabelValueUpgradePromoted,
 			},
+			expectedISBServicesResultState: map[string]common.ResultState{
+				defaultUpgradingISBSvcName: common.LabelValueResultStateSucceeded,
+			},
 		},
 		{
 			// the "upgrading" isbsvc fails because the "upgrading" pipeline on it has failed
@@ -537,6 +541,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:  common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName: common.LabelValueUpgradeTrial,
+			},
+			expectedISBServicesResultState: map[string]common.ResultState{
+				defaultUpgradingISBSvcName: common.LabelValueResultStateFailed,
 			},
 		},
 		{
@@ -561,6 +568,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				defaultUpgradingISBSvcName:                     common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestISBSvcRolloutName + "-2": common.LabelValueUpgradeTrial,
 			},
+			expectedISBServicesResultState: map[string]common.ResultState{},
 		},
 		{
 			name:                           "Handle user deletion of Promoted isbsvc during Progressive failure",
@@ -581,6 +589,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestISBSvcRolloutName + "-2": common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName:                     common.LabelValueUpgradeRecyclable,
 			},
+			expectedISBServicesResultState: map[string]common.ResultState{},
 		},
 	}
 
@@ -659,6 +668,15 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				resultUpgradeState, found := isbsvc.Labels[common.LabelKeyUpgradeState]
 				assert.True(t, found)
 				assert.Equal(t, string(expectedUpgradeState), resultUpgradeState)
+
+				if len(tc.expectedISBServicesResultState) > 0 {
+					expectedISBServiceResultState, found := tc.expectedISBServicesResultState[isbsvc.Name]
+					if found {
+						resultState, labelFound := isbsvc.Labels[common.LabelKeyProgressiveResultState]
+						assert.True(t, labelFound)
+						assert.Equal(t, string(expectedISBServiceResultState), resultState)
+					}
+				}
 			}
 		})
 	}
