@@ -184,8 +184,13 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 	numaLogger := logger.FromContext(ctx)
 	analysis := pipelineRollout.GetAnalysis()
 
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", fmt.Errorf("error getting the global config: %v", err)
+	}
+
 	// only check for and create AnalysisRun if templates are specified
-	if len(analysis.Templates) > 0 {
+	if len(analysis.Templates) > 0 && !globalConfig.FeatureFlagDisableAnalysisRunsForPipeline {
 		// this will create an AnalysisRun if it doesn't exist yet; or otherwise it will check if it's finished running
 		numaLogger.Debugf("Performing analysis for upgrading child %s", existingUpgradingChildDef.GetName())
 		analysisStatus, err := progressive.PerformAnalysis(ctx, existingUpgradingChildDef, pipelineRollout, pipelineRollout.GetAnalysis(), pipelineRollout.GetAnalysisStatus(), r.client)

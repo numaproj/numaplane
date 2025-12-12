@@ -34,8 +34,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"github.com/numaproj/numaplane/internal/controller/config"
 )
 
 // This function is repurposed from the Argo Rollout codebase here:
@@ -210,16 +208,6 @@ func AssessAnalysisStatus(
 	existingUpgradingChildDef *unstructured.Unstructured,
 	analysisStatus *apiv1.AnalysisStatus) (apiv1.AssessmentResult, string, error) {
 	numaLogger := logger.FromContext(ctx)
-
-	// check for feature flag to skip checking the AnalysisRun
-	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", fmt.Errorf("error getting the global config: %v", err)
-	}
-	if globalConfig.FeatureFlagIgnoreAnalysisResult {
-		numaLogger.Debugf("Feature flag set to ignore AnalysisRun")
-		return apiv1.AssessmentResultSuccess, "", nil
-	}
 
 	// make sure we haven't gone past the max time allowed for an AnalysisRun
 	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
