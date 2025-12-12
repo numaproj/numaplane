@@ -102,16 +102,11 @@ type GlobalConfig struct {
 	// Configuration specific to Pipeline Type
 	Pipeline PipelineConfig `json:"pipeline" mapstructure:"pipeline"`
 
-	// TODO: remove when no longer needed
-	// FeatureFlagDisallowProgressiveForNonMonoVertex is a TEMPORARY feature flag to disable progressive upgrades for resources other than MonoVertex
-	FeatureFlagDisallowProgressiveForNonMonoVertex bool `json:"featureFlagDisallowProgressiveForNonMonoVertex" mapstructure:"featureFlagDisallowProgressiveForNonMonoVertex"`
-
-	// TODO: remove when no longer needed
-	// FeatureFlagIgnoreAnalysisResult is a TEMPORARY feature flag to ignore the result of an AnalysisRun
-	FeatureFlagIgnoreAnalysisResult bool `json:"featureFlagIgnoreAnalysisResult" mapstructure:"featureFlagIgnoreAnalysisResult"`
-
 	// List of permitted Kinds for Riders
 	PermittedRiders string `json:"permittedRiders" mapstructure:"permittedRiders"`
+
+	// FeatureFlagDisableAnalysisRunsForPipeline is a temporary feature flag to turn off analysis runs for Pipeline type
+	FeatureFlagDisableAnalysisRunsForPipeline bool `json:"featureFlagDisableAnalysisRunsForPipeline" mapstructure:"featureFlagDisableAnalysisRunsForPipeline"`
 }
 
 type PipelineConfig struct {
