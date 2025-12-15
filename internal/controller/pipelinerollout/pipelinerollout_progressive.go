@@ -198,7 +198,13 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 }
 
 // CheckForDifferences checks to see if the pipeline definition matches the spec and the required metadata
-func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pipelineDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
+func (r *PipelineRolloutReconciler) CheckForDifferences(
+	ctx context.Context,
+	pipelineDef *unstructured.Unstructured,
+	requiredSpec map[string]interface{},
+	requiredMetadata map[string]interface{},
+	ignoreProgressiveModifiedFields bool) (bool, error) {
+
 	numaLogger := logger.FromContext(ctx)
 	pipelineCopy := pipelineDef.DeepCopy()
 
@@ -207,53 +213,58 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 		return false, fmt.Errorf("failed to deep copy requiredSpec: %w", err)
 	}
 
-	removeFunc := func(pipelineDef map[string]interface{}) error {
-		// for each Vertex, remove the scale min and max:
-		// However, there is one exception: if the vertex is a source vertex and the user has set max=0, we cannot ignore that
+	if ignoreProgressiveModifiedFields {
+		removeFunc := func(pipelineDef map[string]interface{}, allowZeroSource bool) error {
+			// for each Vertex, remove the scale min and max:
+			// However, there is one exception: if the vertex is a source vertex and the user has set max=0, we cannot ignore that
 
-		// TODO: actually we only want to do this is the target is 0, not if the running one is 0
-		vertices, _, _ := unstructured.NestedSlice(pipelineDef, "spec", "vertices")
+			vertices, _, _ := unstructured.NestedSlice(pipelineDef, "spec", "vertices")
 
-		modifiedVertices := make([]interface{}, 0)
-		for _, vertex := range vertices {
-			if vertexAsMap, ok := vertex.(map[string]any); ok {
+			modifiedVertices := make([]interface{}, 0)
+			for _, vertex := range vertices {
+				if vertexAsMap, ok := vertex.(map[string]any); ok {
 
-				// Check if vertex is a source with max=0
-				_, isSource, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "source")
-				maxValue, maxFound, _ := unstructured.NestedInt64(vertexAsMap, "scale", "max")
-				isSourceWithMaxZero := isSource && maxFound && maxValue == 0
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
+					if allowZeroSource {
+						// Check if vertex is a source with max=0
+						_, isSource, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "source")
+						maxValue, maxFound, _ := unstructured.NestedInt64(vertexAsMap, "scale", "max")
+						isSourceWithMaxZero := isSource && maxFound && maxValue == 0
 
-				unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
-				if !isSourceWithMaxZero {
-					unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
+						if !isSourceWithMaxZero {
+							unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
+						}
+					} else {
+						unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
+					}
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "disabled")
+
+					// if "scale" is there and empty, remove it
+					scaleMap, found := vertexAsMap["scale"].(map[string]interface{})
+					if found && len(scaleMap) == 0 {
+						unstructured.RemoveNestedField(vertexAsMap, "scale")
+					}
+
+					modifiedVertices = append(modifiedVertices, vertexAsMap)
 				}
-				unstructured.RemoveNestedField(vertexAsMap, "scale", "disabled")
-
-				// if "scale" is there and empty, remove it
-				scaleMap, found := vertexAsMap["scale"].(map[string]interface{})
-				if found && len(scaleMap) == 0 {
-					unstructured.RemoveNestedField(vertexAsMap, "scale")
-				}
-
-				modifiedVertices = append(modifiedVertices, vertexAsMap)
 			}
+
+			err := unstructured.SetNestedSlice(pipelineDef, modifiedVertices, "spec", "vertices")
+			if err != nil {
+				return err
+			}
+			return nil
+
 		}
 
-		err := unstructured.SetNestedSlice(pipelineDef, modifiedVertices, "spec", "vertices")
+		err := removeFunc(pipelineCopy.Object, false)
 		if err != nil {
-			return err
+			return false, err
 		}
-		return nil
-
-	}
-
-	err := removeFunc(pipelineCopy.Object)
-	if err != nil {
-		return false, err
-	}
-	err = removeFunc(requiredSpecCopy)
-	if err != nil {
-		return false, err
+		err = removeFunc(requiredSpecCopy, true)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
@@ -274,7 +285,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 // that would be produced by the Rollout definition.
 // This implements a function of the progressiveController interface
 // In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
-func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, ignoreProgressiveModifiedFields bool) (bool, error) {
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 
@@ -290,7 +301,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 		return false, err
 	}
 	rolloutDefinedMetadata, _ := rolloutBasedPipelineDef.Object["metadata"].(map[string]interface{})
-	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata)
+	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata, ignoreProgressiveModifiedFields)
 }
 
 /*

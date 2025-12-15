@@ -143,44 +143,56 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 }
 
 // CheckForDifferences checks to see if the monovertex definition matches the spec and the required metadata
-func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, monoVertexDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
+func (r *MonoVertexRolloutReconciler) CheckForDifferences(
+	ctx context.Context,
+	monoVertexDef *unstructured.Unstructured,
+	requiredSpec map[string]interface{},
+	requiredMetadata map[string]interface{},
+	ignoreProgressiveModifiedFields bool) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	// Remove certain fields (which numaplane needs to set) from comparison to test for equality
-	// However, there is one exception: if the user has set max=0, we cannot ignore that
-	removeFunc := func(monoVertex map[string]interface{}) (map[string]interface{}, error) {
-		var specAsMap map[string]any
 
-		if err := util.StructToStruct(monoVertex["spec"], &specAsMap); err != nil {
-			return nil, err
-		}
-
-		// Check if scale.max is set and equals 0 - if so, don't exclude it
-		maxValue, maxFound, _ := unstructured.NestedInt64(specAsMap, "scale", "max")
-		hasMaxZero := maxFound && maxValue == 0
-
-		excludedPaths := []string{"replicas", "scale.min", "scale.disabled"}
-		if !hasMaxZero {
-			excludedPaths = append(excludedPaths, "scale.max")
-		}
-		util.RemovePaths(specAsMap, excludedPaths, ".")
-
-		// if "scale" is there and empty, remove it
-		// (this enables accurate comparison between one monovertex with "scale" empty and one with "scale" not present)
-		scaleMap, found := specAsMap["scale"].(map[string]interface{})
-		if found && len(scaleMap) == 0 {
-			unstructured.RemoveNestedField(specAsMap, "scale")
-		}
-
-		return specAsMap, nil
-	}
-
-	from, err := removeFunc(monoVertexDef.Object)
-	if err != nil {
+	var from, to map[string]interface{}
+	if err := util.StructToStruct(monoVertexDef.Object["spec"], &from); err != nil {
 		return false, err
 	}
-	to, err := removeFunc(requiredSpec)
-	if err != nil {
+
+	if err := util.StructToStruct(requiredSpec["spec"], &to); err != nil {
 		return false, err
+	}
+
+	if ignoreProgressiveModifiedFields {
+		// Remove certain fields (which numaplane needs to set) from comparison to test for equality
+		// However, there is one exception: if the user has set max=0, we cannot ignore that
+		removeFunc := func(spec map[string]interface{}) error {
+
+			// Check if scale.max is set and equals 0 - if so, don't exclude it
+			maxValue, maxFound, _ := unstructured.NestedInt64(spec, "scale", "max")
+			hasMaxZero := maxFound && maxValue == 0
+
+			excludedPaths := []string{"replicas", "scale.min", "scale.disabled"}
+			if !hasMaxZero {
+				excludedPaths = append(excludedPaths, "scale.max")
+			}
+			util.RemovePaths(spec, excludedPaths, ".")
+
+			// if "scale" is there and empty, remove it
+			// (this enables accurate comparison between one monovertex with "scale" empty and one with "scale" not present)
+			scaleMap, found := spec["scale"].(map[string]interface{})
+			if found && len(scaleMap) == 0 {
+				unstructured.RemoveNestedField(spec, "scale")
+			}
+
+			return nil
+		}
+
+		err := removeFunc(from)
+		if err != nil {
+			return false, err
+		}
+		err = removeFunc(to)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
@@ -203,7 +215,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, m
 // that would be produced by the Rollout definition.
 // This implements a function of the progressiveController interface
 // In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
-func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, ignoreProgressiveModifiedFields bool) (bool, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 
 	// In order to effectively compare, we need to create a MonoVertex Definition from the MonoVertexRollout which uses the same name as our current MonoVertex
@@ -214,7 +226,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 	}
 
 	rolloutDefinedMetadata, _ := rolloutBasedMVDef.Object["metadata"].(map[string]interface{})
-	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata)
+	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata, ignoreProgressiveModifiedFields)
 }
 
 /*
