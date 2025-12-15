@@ -227,7 +227,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
-		if err := r.client.Update(ctx, pipelineRollout); err != nil {
+		patch := client.MergeFrom(pipelineRolloutOrig)
+		if err := r.client.Patch(ctx, pipelineRollout, patch); err != nil {
 			r.ErrorHandler(ctx, pipelineRollout, err, "UpdateFailed", "Failed to update PipelineRollout")
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
@@ -362,7 +363,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		if controllerutil.ContainsFinalizer(pipelineRollout, common.FinalizerName) {
 			// delete the PipelineRollout child objects once the PipelineRollout is being deleted
 			requeue, err := r.listAndDeleteChildPipelines(ctx, pipelineRollout)
-			if err != nil {
+			if err != nil && !apierrors.IsNotFound(err) {
 				return 0, nil, fmt.Errorf("error deleting pipelineRollout child: %v", err)
 			}
 			// if we have any pipelines that are still in the process of being deleted, requeue

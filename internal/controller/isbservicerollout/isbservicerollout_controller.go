@@ -132,7 +132,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRollout, err := getLiveISBServiceRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			numaLogger.Infof("ISBServiceRollout not found, %v", err)
+			numaLogger.Debugf("ISBServiceRollout not found, %v", err)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
@@ -157,7 +157,8 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(isbServiceRolloutOrig, isbServiceRollout) {
-		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
+		patch := client.MergeFrom(isbServiceRolloutOrig)
+		if err := r.client.Patch(ctx, isbServiceRollout, patch); err != nil {
 			r.ErrorHandler(ctx, isbServiceRollout, err, "UpdateFailed", "Failed to update isb service rollout")
 			if statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(ctx, isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
@@ -209,7 +210,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			ppnd.GetPauseModule().DeletePauseRequest(isbsvcKey)
 			// delete the ISBServiceRollout child objects once the ISBServiceRollout is being deleted
 			requeue, err := r.listAndDeleteChildISBServices(ctx, isbServiceRollout)
-			if err != nil {
+			if err != nil && !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, fmt.Errorf("error deleting ISBServiceRollout child: %v", err)
 			}
 			// if we have any ISBServices that are still in the process of being deleted, requeue
@@ -699,8 +700,9 @@ func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Conte
 	} else {
 		// Update the pdb if needed
 		if existingPDB.Spec.MaxUnavailable != pdb.Spec.MaxUnavailable {
+			orig := existingPDB.DeepCopy()
 			existingPDB.Spec.MaxUnavailable = pdb.Spec.MaxUnavailable
-			if err := r.client.Update(ctx, existingPDB); err != nil {
+			if err := r.client.Patch(ctx, existingPDB, client.MergeFrom(orig)); err != nil {
 				return err
 			}
 		}
@@ -874,7 +876,7 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatus(ctx context.
 		liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				numaLogger.Infof("ISBServiceRollout not found, %v", err)
+				numaLogger.Debugf("ISBServiceRollout not found, %v", err)
 				return nil
 			}
 			return fmt.Errorf("error getting the live ISBServiceRollout after attempting to update the ISBServiceRollout Status: %w", err)
