@@ -416,6 +416,7 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			DeleteISBServiceRollout(isbServiceRolloutName)
 			DeleteNumaflowControllerRollout()
 
+			time.Sleep(15 * time.Second)
 		})
 
 	}
