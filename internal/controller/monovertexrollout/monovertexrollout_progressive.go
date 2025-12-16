@@ -161,22 +161,11 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 	}
 
 	if ignoreProgressiveModifiedFields {
-		// Remove certain fields (which numaplane needs to set) from comparison to test for equality
-		// However, there is one exception: if the user has set max=0, we cannot ignore that
-		removeFunc := func(spec map[string]interface{}, allowZeroSource bool) error {
 
-			excludedPaths := []string{"replicas", "scale.min", "scale.disabled"}
-			if allowZeroSource {
-				// Check if scale.max is set and equals 0 - if so, don't exclude it
-				maxInterface, maxFound, _ := unstructured.NestedFieldNoCopy(spec, "scale", "max")
-				maxValue, maxValid := util.ToInt64(maxInterface)
-				hasMaxZero := maxFound && maxValid && maxValue == 0
-				if !hasMaxZero {
-					excludedPaths = append(excludedPaths, "scale.max")
-				}
-			} else {
-				excludedPaths = append(excludedPaths, "scale.max")
-			}
+		// Remove certain fields (which numaplane needs to set) from comparison to test for equality
+		removeFunc := func(spec map[string]interface{}) error {
+
+			excludedPaths := []string{"replicas", "scale.min", "scale.max", "scale.disabled"}
 
 			util.RemovePaths(spec, excludedPaths, ".")
 
@@ -190,13 +179,22 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 			return nil
 		}
 
-		err := removeFunc(from, false)
-		if err != nil {
-			return false, err
-		}
-		err = removeFunc(to, true)
-		if err != nil {
-			return false, err
+		// Check if the MonoVertexRollout is set to 0 replicas
+		// If it is, we cannot ignore that
+		maxInterface, maxFound, _ := unstructured.NestedFieldNoCopy(to, "scale", "max")
+		maxValue, maxValid := util.ToInt64(maxInterface)
+		hasMaxZero := maxFound && maxValid && maxValue == 0
+
+		// if it's not set to 0, then go ahead and remove the scale fields from the comparison
+		if !hasMaxZero {
+			err := removeFunc(from)
+			if err != nil {
+				return false, err
+			}
+			err = removeFunc(to)
+			if err != nil {
+				return false, err
+			}
 		}
 	}
 

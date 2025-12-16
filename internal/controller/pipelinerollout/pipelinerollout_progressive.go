@@ -214,7 +214,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 	}
 
 	if ignoreProgressiveModifiedFields {
-		removeFunc := func(pipelineDef map[string]interface{}, allowZeroSource bool) error {
+		removeFunc := func(pipelineDef map[string]interface{}) error {
 			// for each Vertex, remove the scale min and max:
 			// However, there is one exception: if the vertex is a source vertex and the user has set max=0, we cannot ignore that
 
@@ -225,19 +225,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 				if vertexAsMap, ok := vertex.(map[string]any); ok {
 
 					unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
-					if allowZeroSource {
-						// Check if vertex is a source with max=0
-						_, isSource, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "source")
-						maxInterface, maxFound, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "scale", "max")
-						maxValue, maxValid := util.ToInt64(maxInterface)
-						isSourceWithMaxZero := isSource && maxFound && maxValid && maxValue == 0
-
-						if !isSourceWithMaxZero {
-							unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
-						}
-					} else {
-						unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
-					}
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
 					unstructured.RemoveNestedField(vertexAsMap, "scale", "disabled")
 
 					// if "scale" is there and empty, remove it
@@ -258,13 +246,23 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 
 		}
 
-		err := removeFunc(pipelineCopy.Object, false)
+		// Check if the PipelineRollout Source Vertices are set to 0 replicas
+		// If they are, we cannot ignore that
+		requiredPipelineSpec, _ := requiredSpecCopy["spec"].(map[string]interface{})
+		allSourcesScaledToZero, err := numaflowtypes.AllSourceVerticesScaledToZero(ctx, requiredPipelineSpec)
 		if err != nil {
 			return false, err
 		}
-		err = removeFunc(requiredSpecCopy, true)
-		if err != nil {
-			return false, err
+
+		if !allSourcesScaledToZero {
+			err := removeFunc(pipelineCopy.Object)
+			if err != nil {
+				return false, err
+			}
+			err = removeFunc(requiredSpecCopy)
+			if err != nil {
+				return false, err
+			}
 		}
 	}
 

@@ -138,49 +138,46 @@ func CheckPipelineDrained(ctx context.Context, pipeline *unstructured.Unstructur
 	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
 }
 
-// CanPipelineIngestData checks if the pipeline is set to desiredPhase=Running(or unset) plus if a source vertex has scale.max>0
-func CanPipelineIngestData(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
-	vertexScaleDefinitions, err := GetScaleValuesFromPipelineDefinition(ctx, pipeline)
-	if err != nil {
-		return false, fmt.Errorf("failed to check pipeline set to run: %v", err)
+func AllSourceVerticesScaledToZero(ctx context.Context, pipelineSpec map[string]interface{}) (bool, error) {
+	vertices, found, _ := unstructured.NestedSlice(pipelineSpec, "vertices")
+	if !found {
+		return false, fmt.Errorf("no vertices found in pipeline spec?: %+v", pipelineSpec)
 	}
 
-	// if any Source Vertex has max>0, it can consume data
-	currentVertexSpecs, err := GetPipelineVertexDefinitions(pipeline)
-	if err != nil {
-		return false, fmt.Errorf("failed to check pipeline set to run: %v", err)
-	}
-
-	sourceIsScalable := false
-	for _, currentVertexSpec := range currentVertexSpecs {
-
-		if vertexAsMap, ok := currentVertexSpec.(map[string]any); ok {
-
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]interface{}); ok {
 			_, isSource, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "source")
 			if isSource {
-
-				// Get the vertex's name
-				vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
-				if err != nil {
-					return false, err
+				maxInterface, maxFound, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "scale", "max")
+				// If max is not found, it defaults to 1 (not scaled to zero)
+				if !maxFound {
+					return false, nil
 				}
-				if !found {
-					return false, errors.New("a vertex must have a name")
-				}
-
-				for _, scaleDef := range vertexScaleDefinitions {
-					if scaleDef.VertexName == vertexName {
-						if scaleDef.Max() > 0 {
-							sourceIsScalable = true
-						}
-					}
+				maxValue, maxValid := util.ToInt64(maxInterface)
+				// If max is found and is not 0, it's not scaled to zero
+				if maxValid && maxValue != 0 {
+					return false, nil
 				}
 			}
 		}
 	}
+	return true, nil
+}
+
+// CanPipelineIngestData checks if the pipeline is set to desiredPhase=Running(or unset) plus if a source vertex has scale.max>0
+func CanPipelineIngestData(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
+	pipelineSpec, found := pipeline.Object["spec"].(map[string]interface{})
+	if !found {
+		return false, fmt.Errorf("failed to get spec from pipeline %s", pipeline.GetName())
+	}
+
+	allSourcesScaledToZero, err := AllSourceVerticesScaledToZero(ctx, pipelineSpec)
+	if err != nil {
+		return false, fmt.Errorf("failed to check pipeline set to run: %v", err)
+	}
 
 	desiredPhase, err := GetPipelineDesiredPhase(pipeline)
-	return desiredPhase == string(numaflowv1.PipelinePhaseRunning) && sourceIsScalable, err
+	return desiredPhase == string(numaflowv1.PipelinePhaseRunning) && !allSourcesScaledToZero, err
 }
 
 // CheckPipelineLiveObservedGeneration verifies that the observedGeneration is not less than the generation, meaning it's been reconciled by Numaflow since being updated
@@ -321,6 +318,23 @@ func GetPipelineVertexDefinitions(pipeline *unstructured.Unstructured) ([]interf
 	}
 
 	return vertexDefinitions, nil
+}
+
+// CheckForVertex iterates over vertices in a pipeline spec and returns true if any vertex satisfies the check function
+func CheckForVertex(pipelineSpec map[string]interface{}, check func(map[string]interface{}) bool) (bool, error) {
+	vertices, found, _ := unstructured.NestedSlice(pipelineSpec, "vertices")
+	if !found {
+		return false, fmt.Errorf("no vertices found in pipeline spec?: %+v", pipelineSpec)
+	}
+
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]interface{}); ok {
+			if check(vertexAsMap) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // find all the Pipeline Vertices in K8S using the Pipeline's definition: return a map of vertex name to resource found

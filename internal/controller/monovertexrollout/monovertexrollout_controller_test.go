@@ -838,7 +838,7 @@ func Test_CheckForDifferences(t *testing.T) {
 		expectedError                   bool
 		expectedResult                  bool
 	}{
-		/*{
+		{
 			name: "ObjectsEqual",
 
 			from: func() *unstructured.Unstructured {
@@ -945,7 +945,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			ignoreProgressiveModifiedFields: true,
 			expectedError:                   false,
 			expectedResult:                  false,
-		},*/
+		},
 		{
 			name: "ScalesDiffer",
 			from: &unstructured.Unstructured{
