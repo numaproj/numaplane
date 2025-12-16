@@ -828,13 +828,15 @@ func Test_CheckForDifferences(t *testing.T) {
 
 	one := int64(1)
 	two := int64(2)
+	zero := int64(0)
 
 	tests := []struct {
-		name           string
-		from           *unstructured.Unstructured
-		to             *unstructured.Unstructured
-		expectedError  bool
-		expectedResult bool
+		name                            string
+		from                            *unstructured.Unstructured
+		to                              *unstructured.Unstructured
+		ignoreProgressiveModifiedFields bool
+		expectedError                   bool
+		expectedResult                  bool
 	}{
 		{
 			name: "ObjectsEqual",
@@ -861,8 +863,9 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			expectedError:  false,
-			expectedResult: false,
+			ignoreProgressiveModifiedFields: true,
+			expectedError:                   false,
+			expectedResult:                  false,
 		},
 		{
 			name: "RequiredLabelsNotPresent",
@@ -876,8 +879,9 @@ func Test_CheckForDifferences(t *testing.T) {
 				obj.SetLabels(map[string]string{"key": "value2"})
 				return obj
 			}(),
-			expectedError:  false,
-			expectedResult: true,
+			ignoreProgressiveModifiedFields: true,
+			expectedError:                   false,
+			expectedResult:                  true,
 		},
 		{
 			name: "RequiredAnnotationsNotPresent",
@@ -890,8 +894,9 @@ func Test_CheckForDifferences(t *testing.T) {
 				obj.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"})
 				return obj
 			}(),
-			expectedError:  false,
-			expectedResult: true,
+			ignoreProgressiveModifiedFields: true,
+			expectedError:                   false,
+			expectedResult:                  true,
 		},
 		{
 			name: "SpecsDiffer",
@@ -911,8 +916,9 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			expectedError:  false,
-			expectedResult: true,
+			ignoreProgressiveModifiedFields: true,
+			expectedError:                   false,
+			expectedResult:                  true,
 		},
 		{
 			name: "OnlyReplicasDiffer",
@@ -936,8 +942,97 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			expectedError:  false,
-			expectedResult: false,
+			ignoreProgressiveModifiedFields: true,
+			expectedError:                   false,
+			expectedResult:                  false,
+		},
+		{
+			name: "ScalesDiffer",
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": one,
+							"max": two,
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			ignoreProgressiveModifiedFields: true,
+			expectedError:                   false,
+			expectedResult:                  false,
+		},
+		{
+			name: "ScaleSetToZero",
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": one,
+							"max": two,
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": zero,
+							"max": zero,
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			ignoreProgressiveModifiedFields: true,
+			expectedError:                   false,
+			expectedResult:                  true,
+		},
+		{
+			name: "DontIgnoreProgressiveModifiedFields",
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": one,
+							"max": two,
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			ignoreProgressiveModifiedFields: false,
+			expectedError:                   false,
+			expectedResult:                  true,
 		},
 	}
 
@@ -974,7 +1069,7 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			}
-			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout)
+			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout, tt.ignoreProgressiveModifiedFields)
 
 			if tt.expectedError {
 				assert.Error(t, err)

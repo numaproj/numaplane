@@ -228,8 +228,9 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 					if allowZeroSource {
 						// Check if vertex is a source with max=0
 						_, isSource, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "source")
-						maxValue, maxFound, _ := unstructured.NestedInt64(vertexAsMap, "scale", "max")
-						isSourceWithMaxZero := isSource && maxFound && maxValue == 0
+						maxInterface, maxFound, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "scale", "max")
+						maxValue, maxValid := util.ToInt64(maxInterface)
+						isSourceWithMaxZero := isSource && maxFound && maxValid && maxValue == 0
 
 						if !isSourceWithMaxZero {
 							unstructured.RemoveNestedField(vertexAsMap, "scale", "max")

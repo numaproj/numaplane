@@ -451,7 +451,7 @@ var specWithEmptyScale = `
 }
 `
 
-var specWithNonEmptyScale = `
+var specWithNonEmptyNonZeroScale = `
 {
 	  "interStepBufferServiceName": "default",
 	  "vertices": [
@@ -498,6 +498,61 @@ var specWithNonEmptyScale = `
 }
 `
 
+var specWithZeroScale = `
+{
+	  "interStepBufferServiceName": "default",
+	  "vertices": [
+		{
+		  "name": "in",
+	      "scale": {
+		    "min": 0,
+	        "max": 0
+	      },
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+	      "scale": {
+		    "min": 0,
+	        "max": 0
+	      },
+		  "udf": {
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+	      "scale": {
+		    "min": 0,
+	        "max": 0
+	      },
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
 func Test_CheckForDifferences(t *testing.T) {
 
 	_, _, client, _, err := commontest.PrepareK8SEnvironment()
@@ -512,47 +567,68 @@ func Test_CheckForDifferences(t *testing.T) {
 		recorder)
 
 	testCases := []struct {
-		name                  string
-		spec1                 string
-		spec2                 string
-		labels1               map[string]string
-		labels2               map[string]string
-		annotations1          map[string]string
-		annotations2          map[string]string
-		expectedNeedsUpdating bool
-		expectedError         bool
+		name                            string
+		spec1                           string
+		spec2                           string
+		labels1                         map[string]string
+		labels2                         map[string]string
+		annotations1                    map[string]string
+		annotations2                    map[string]string
+		ignoreProgressiveModifiedFields bool
+		expectedNeedsUpdating           bool
+		expectedError                   bool
 	}{
 		{
-			name:                  "Equal - just scale different",
-			spec1:                 specNoScale,
-			spec2:                 specWithEmptyScale,
-			expectedNeedsUpdating: false,
-			expectedError:         false,
+			name:                            "Equal - just scale different",
+			spec1:                           specNoScale,
+			spec2:                           specWithEmptyScale,
+			ignoreProgressiveModifiedFields: true,
+			expectedNeedsUpdating:           false,
+			expectedError:                   false,
 		},
 		{
-			name:                  "Equal - just scale min/max different",
-			spec1:                 specWithEmptyScale,
-			spec2:                 specWithNonEmptyScale,
-			expectedNeedsUpdating: false,
-			expectedError:         false,
+			name:                            "Equal - just scale min/max different (and not equal to 0)",
+			spec1:                           specWithEmptyScale,
+			spec2:                           specWithNonEmptyNonZeroScale,
+			ignoreProgressiveModifiedFields: true,
+			expectedNeedsUpdating:           false,
+			expectedError:                   false,
 		},
 		{
-			name:                  "Required Labels not Present",
-			spec1:                 specNoScale,
-			spec2:                 specNoScale,
-			labels1:               map[string]string{"app": "test1"},
-			labels2:               map[string]string{"app": "test2"},
-			expectedNeedsUpdating: true,
-			expectedError:         false,
+			name:                            "Equal - user wants to set scale min/max to 0 which needs to be detected",
+			spec1:                           specWithNonEmptyNonZeroScale,
+			spec2:                           specWithZeroScale,
+			ignoreProgressiveModifiedFields: true,
+			expectedNeedsUpdating:           true,
+			expectedError:                   false,
 		},
 		{
-			name:                  "Required Annotations Present",
-			spec1:                 specNoScale,
-			spec2:                 specNoScale,
-			annotations1:          map[string]string{"key1": "test1"},
-			annotations2:          nil,
-			expectedNeedsUpdating: false,
-			expectedError:         false,
+			name:                            "Required Labels not Present",
+			spec1:                           specNoScale,
+			spec2:                           specNoScale,
+			labels1:                         map[string]string{"app": "test1"},
+			labels2:                         map[string]string{"app": "test2"},
+			ignoreProgressiveModifiedFields: true,
+			expectedNeedsUpdating:           true,
+			expectedError:                   false,
+		},
+		{
+			name:                            "Required Annotations Present",
+			spec1:                           specNoScale,
+			spec2:                           specNoScale,
+			annotations1:                    map[string]string{"key1": "test1"},
+			annotations2:                    nil,
+			ignoreProgressiveModifiedFields: true,
+			expectedNeedsUpdating:           false,
+			expectedError:                   false,
+		},
+		{
+			name:                            "Don't ignore progressive modified fields",
+			spec1:                           specNoScale,
+			spec2:                           specWithEmptyScale,
+			ignoreProgressiveModifiedFields: false,
+			expectedNeedsUpdating:           true,
+			expectedError:                   false,
 		},
 	}
 
@@ -586,7 +662,7 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			}
 
-			needsUpdating, err := r.CheckForDifferencesWithRolloutDef(context.Background(), obj1, pipelineRollout)
+			needsUpdating, err := r.CheckForDifferencesWithRolloutDef(context.Background(), obj1, pipelineRollout, tc.ignoreProgressiveModifiedFields)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {

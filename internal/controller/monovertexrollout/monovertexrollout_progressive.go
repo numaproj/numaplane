@@ -166,8 +166,9 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		removeFunc := func(spec map[string]interface{}) error {
 
 			// Check if scale.max is set and equals 0 - if so, don't exclude it
-			maxValue, maxFound, _ := unstructured.NestedInt64(spec, "scale", "max")
-			hasMaxZero := maxFound && maxValue == 0
+			maxInterface, maxFound, _ := unstructured.NestedFieldNoCopy(spec, "scale", "max")
+			maxValue, maxValid := util.ToInt64(maxInterface)
+			hasMaxZero := maxFound && maxValid && maxValue == 0
 
 			excludedPaths := []string{"replicas", "scale.min", "scale.disabled"}
 			if !hasMaxZero {
