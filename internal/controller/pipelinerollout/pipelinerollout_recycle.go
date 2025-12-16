@@ -727,7 +727,26 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 		return true, nil
 	}
 
-	// Check if the max recyclable duration has been exceeded: if so, delete the pipeline
+	expired, err := r.checkForRecycleExpirationTime(ctx, pipeline)
+	if err != nil {
+		return false, err
+	}
+	if expired {
+		numaLogger.Info("Pipeline has reached the max recyclable duration and will be deleted now")
+		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_NeverDrained)
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// checkForRecycleExpirationTime checks if the max recyclable duration has been exceeded.
+// Returns true if the pipeline should be deleted due to expiration.
+func (r *PipelineRolloutReconciler) checkForRecycleExpirationTime(
+	ctx context.Context,
+	pipeline *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
 	recyclableStartTimeStr, err := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyRecyclableStartTime)
 	if err != nil {
 		return false, fmt.Errorf("failed to get recyclable start time annotation: %w", err)
@@ -746,8 +765,7 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 			numaLogger.WithValues("recyclableStartTime", recyclableStartTime, "elapsedMinutes", elapsedMinutes, "maxDurationMinutes", maxDurationMinutes).
 				Info("Time expired on force draining: deleting pipeline now")
 
-			r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_NeverDrained)
-			return true, err
+			return true, nil
 		}
 	}
 
