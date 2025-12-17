@@ -727,7 +727,7 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 		return true, nil
 	}
 
-	expired, err := r.checkForRecycleExpirationTime(ctx, pipeline)
+	expired, err := r.isRecycledPipelineExpired(ctx, pipeline)
 	if err != nil {
 		return false, err
 	}
@@ -740,9 +740,9 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 	return false, nil
 }
 
-// checkForRecycleExpirationTime checks if the max recyclable duration has been exceeded.
+// isRecycledPipelineExpired checks if the max recyclable duration has been exceeded.
 // Returns true if the pipeline should be deleted due to expiration.
-func (r *PipelineRolloutReconciler) checkForRecycleExpirationTime(
+func (r *PipelineRolloutReconciler) isRecycledPipelineExpired(
 	ctx context.Context,
 	pipeline *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
