@@ -173,7 +173,7 @@ func CanPipelineIngestData(ctx context.Context, pipeline *unstructured.Unstructu
 
 	allSourcesScaledToZero, err := AllSourceVerticesScaledToZero(ctx, pipelineSpec)
 	if err != nil {
-		return false, fmt.Errorf("failed to check pipeline set to run: %v", err)
+		return false, fmt.Errorf("failed to check pipeline source vertices scaled to zero: %v", err)
 	}
 
 	desiredPhase, err := GetPipelineDesiredPhase(pipeline)

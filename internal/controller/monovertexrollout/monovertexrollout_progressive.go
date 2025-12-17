@@ -451,7 +451,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex pre-upgrade", rolloutObject)
 	}
 
-	err := scaleDownUpgradingMonoVertex(monoVertexRollout, upgradingMonoVertexDef)
+	err := scaleDownUpgradingMonoVertex(ctx, monoVertexRollout, upgradingMonoVertexDef)
 	if err != nil {
 		return true, err
 	}
@@ -464,9 +464,12 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 // scaleDownUpgradingMonoVertex sets the upgrading MonoVertex's scale definition to the number of Pods
 // that were removed from the promoted MonoVertex
 func scaleDownUpgradingMonoVertex(
+	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	upgradingMonoVertexDef *unstructured.Unstructured,
 ) error {
+	numaLogger := logger.FromContext(ctx)
+
 	// Update the scale values of the Upgrading Child, but first save the original scale values
 	originalScaleMinMaxString, err := progressive.ExtractScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
@@ -476,6 +479,12 @@ func scaleDownUpgradingMonoVertex(
 	originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
 		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
+	}
+
+	// if the new MonoVertex is scaled to zero, we leave that one as is: it's the user's intention that this not be processing any data
+	if originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max == 0 {
+		numaLogger.Debug("upgrading monovertex is scaled to zero, so no need to scale down")
+		return nil
 	}
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {

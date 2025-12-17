@@ -545,48 +545,61 @@ func createScaledDownUpgradingPipelineDef(
 		return err
 	}
 
-	// map each vertex name to new min/max, which is based on the number of Pods that were removed from the corresponding
-	// Vertex on the "promomoted" Pipeline, assuming it exists there
-	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertexDefinitions))
-	for index, vertex := range vertexDefinitions {
-		vertexAsMap := vertex.(map[string]interface{})
-		vertexName := vertexAsMap["name"].(string)
-		originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
-		if err != nil {
-			return fmt.Errorf("cannot extract the scale min and max values from the upgrading pipeline vertex %s: %w", vertexName, err)
-		}
-		scaleValue, vertexFound := pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[vertexName]
-		var upgradingVertexScaleTo int64
-		if !vertexFound {
-			// this must be a new vertex: we still need to set min=max so we will effectively be able to perform resource health check for readyReplicas without
-			// autoscaling interfering with the assessment
-			// simplest thing is to set min=max=1
-			upgradingVertexScaleTo = 1
-			numaLogger.WithValues("vertex", vertexName).Debugf("vertex not found previously; scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
-		} else {
-			// nominal case: found the same vertex from the "promoted" pipeline: set min and max to the number of Pods that were removed from the "promoted" one
-			// if for some reason there were no Pods running in the promoted Pipeline's vertex at the time (i.e. maybe some failure) and the Max was not set to 0 explicitly,
-			// then we don't want to set our Pods to 0 so set to 1 at least
-			upgradingVertexScaleTo = scaleValue.Initial - scaleValue.ScaleTo
-			maxZero := originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max == 0
-			if upgradingVertexScaleTo <= 0 && !maxZero {
-				upgradingVertexScaleTo = 1
-			}
-			numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
-		}
-
-		vertexScaleDefinitions[index] = apiv1.VertexScaleDefinition{
-			VertexName: vertexName,
-			ScaleDefinition: &apiv1.ScaleDefinition{
-				Min: &upgradingVertexScaleTo,
-				Max: &upgradingVertexScaleTo,
-			},
-		}
-
+	// if the new Pipeline has all Source Vertices scaled to zero, we leave that one as is: it's the user's intention that this not be processing any data
+	allSourcesScaledToZero, err := numaflowtypes.AllSourceVerticesScaledToZero(ctx, upgradingPipelineDef.Object["spec"].(map[string]interface{}))
+	if err != nil {
+		return fmt.Errorf("failed to check pipeline source vertices scaled to zero: %v", err)
 	}
 
-	// apply the scale values for each vertex to the new min/max
-	return numaflowtypes.ApplyScaleValuesToPipelineDefinition(ctx, upgradingPipelineDef, vertexScaleDefinitions)
+	if allSourcesScaledToZero {
+		numaLogger.Debug("upgrading pipeline has all Source Vertices scaled to zero, so no need to scale down")
+		return nil
+	} else {
+
+		// map each vertex name to new min/max, which is based on the number of Pods that were removed from the corresponding
+		// Vertex on the "promomoted" Pipeline, assuming it exists there
+		vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertexDefinitions))
+		for index, vertex := range vertexDefinitions {
+			vertexAsMap := vertex.(map[string]interface{})
+			vertexName := vertexAsMap["name"].(string)
+			originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+			if err != nil {
+				return fmt.Errorf("cannot extract the scale min and max values from the upgrading pipeline vertex %s: %w", vertexName, err)
+			}
+			scaleValue, vertexFound := pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[vertexName]
+			var upgradingVertexScaleTo int64
+			if !vertexFound {
+				// this must be a new vertex: we still need to set min=max so we will effectively be able to perform resource health check for readyReplicas without
+				// autoscaling interfering with the assessment
+				// simplest thing is to set min=max=1
+				upgradingVertexScaleTo = 1
+				numaLogger.WithValues("vertex", vertexName).Debugf("vertex not found previously; scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
+			} else {
+				// nominal case: found the same vertex from the "promoted" pipeline: set min and max to the number of Pods that were removed from the "promoted" one
+				// if for some reason there were no Pods running in the promoted Pipeline's vertex at the time (i.e. maybe some failure) and the Max was not set to 0 explicitly,
+				// then we don't want to set our Pods to 0 so set to 1 at least
+				upgradingVertexScaleTo = scaleValue.Initial - scaleValue.ScaleTo
+				maxZero := originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max == 0
+				if upgradingVertexScaleTo <= 0 && !maxZero {
+					upgradingVertexScaleTo = 1
+				}
+				numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
+			}
+
+			vertexScaleDefinitions[index] = apiv1.VertexScaleDefinition{
+				VertexName: vertexName,
+				ScaleDefinition: &apiv1.ScaleDefinition{
+					Min: &upgradingVertexScaleTo,
+					Max: &upgradingVertexScaleTo,
+				},
+			}
+
+		}
+
+		// apply the scale values for each vertex to the new min/max
+		return numaflowtypes.ApplyScaleValuesToPipelineDefinition(ctx, upgradingPipelineDef, vertexScaleDefinitions)
+	}
+
 }
 
 /*
