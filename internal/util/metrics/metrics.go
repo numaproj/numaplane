@@ -133,10 +133,11 @@ var (
 	isbServiceLock sync.Mutex
 	monoVertexLock sync.Mutex
 
-	LabelValueDrainResult_PipelineFailed LabelValueDrainResult = "PipelineFailed"
-	LabelValueDrainResult_NeverDrained   LabelValueDrainResult = "DrainIncomplete"
-	LabelValueDrainResult_StandardDrain  LabelValueDrainResult = "StandardDrain"
-	LabelValueDrainResult_ForceDrain     LabelValueDrainResult = "ForceDrain"
+	LabelValueDrainResult_PipelineFailed   LabelValueDrainResult = "PipelineFailed"
+	LabelValueDrainResult_NeverDrained     LabelValueDrainResult = "DrainIncomplete"
+	LabelValueDrainResult_StandardDrain    LabelValueDrainResult = "StandardDrain"
+	LabelValueDrainResult_ForceDrain       LabelValueDrainResult = "ForceDrain"
+	LabelValueDrainResult_DrainNotRequired LabelValueDrainResult = "DrainNotRequired"
 
 	// pipelinesRolloutHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
 	pipelinesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
