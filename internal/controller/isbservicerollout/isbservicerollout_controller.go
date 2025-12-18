@@ -210,7 +210,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			ppnd.GetPauseModule().DeletePauseRequest(isbsvcKey)
 			// delete the ISBServiceRollout child objects once the ISBServiceRollout is being deleted
 			requeue, err := r.listAndDeleteChildISBServices(ctx, isbServiceRollout)
-			if err != nil && !apierrors.IsNotFound(err) {
+			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error deleting ISBServiceRollout child: %v", err)
 			}
 			// if we have any ISBServices that are still in the process of being deleted, requeue
@@ -1122,7 +1122,7 @@ func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.
 		isbServiceRollout.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyParentRollout, isbServiceRollout.Name), "")
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			numaLogger.Warnf("no child ISBServices found for ISBServiceRollout %s/%s: %v", isbServiceRollout.Namespace, isbServiceRollout.Name, err)
+			numaLogger.Debugf("no child ISBServices found for ISBServiceRollout %s/%s: %v", isbServiceRollout.Namespace, isbServiceRollout.Name, err)
 			return false, nil
 		}
 		return false, err
@@ -1131,7 +1131,7 @@ func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.
 		// Delete all isbServices that are children of this ISBServiceRollout
 		numaLogger.Infof("Deleting ISBService %s/%s", isbServiceRollout.Namespace, isbServiceRollout.Name)
 		for _, isbService := range isbServiceList.Items {
-			if err := r.client.Delete(ctx, &isbService); err != nil {
+			if err := r.client.Delete(ctx, &isbService); err != nil && !apierrors.IsNotFound(err) {
 				return false, err
 			}
 		}

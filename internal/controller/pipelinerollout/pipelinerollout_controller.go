@@ -363,7 +363,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		if controllerutil.ContainsFinalizer(pipelineRollout, common.FinalizerName) {
 			// delete the PipelineRollout child objects once the PipelineRollout is being deleted
 			requeue, err := r.listAndDeleteChildPipelines(ctx, pipelineRollout)
-			if err != nil && !apierrors.IsNotFound(err) {
+			if err != nil {
 				return 0, nil, fmt.Errorf("error deleting pipelineRollout child: %v", err)
 			}
 			// if we have any pipelines that are still in the process of being deleted, requeue
@@ -1404,7 +1404,7 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 		pipelineRollout.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyParentRollout, pipelineRollout.Name), "")
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			numaLogger.Warnf("no child pipeline found for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
+			numaLogger.Debugf("no child pipeline found for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
 			return false, nil
 		}
 		return false, err
@@ -1413,7 +1413,7 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 		// Delete all pipelines that are children of this PipelineRollout
 		numaLogger.Infof("Deleting pipeline %s/%s", pipelineRollout.Namespace, pipelineRollout.Name)
 		for _, pipeline := range pipelineList.Items {
-			if err := r.client.Delete(ctx, &pipeline); err != nil {
+			if err := r.client.Delete(ctx, &pipeline); err != nil && !apierrors.IsNotFound(err) {
 				return false, err
 			}
 		}
