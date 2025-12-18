@@ -7,7 +7,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -424,15 +423,6 @@ func GetUserStrategy(ctx context.Context, namespace, resourceKind string) (confi
 		} else {
 			userUpgradeStrategy = namespaceConfig.UpgradeStrategy
 		}
-	}
-
-	// TODO: remove when FeatureFlagDisallowProgressiveForNonMonoVertex no longer needed
-	if userUpgradeStrategy == config.ProgressiveStrategyID &&
-		resourceKind != numaflowv1.MonoVertexGroupVersionKind.Kind &&
-		globalConfig.FeatureFlagDisallowProgressiveForNonMonoVertex {
-
-		// Use the next most conservative strategy: PPND
-		userUpgradeStrategy = config.PPNDStrategyID
 	}
 
 	return userUpgradeStrategy, nil

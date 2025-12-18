@@ -1141,6 +1141,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
 			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+			common.LabelKeyProgressiveResultState:         string(common.LabelValueResultStateSucceeded),
 		},
 		map[string]string{
 			common.AnnotationKeyRequiresDrain: "true",
@@ -1222,8 +1223,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
 
-		expectedPipelines map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
-
+		expectedPipelines            map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
+		expectedPipelinesResultState map[string]common.ResultState
 	}{
 		{
 			name:                        "Progressive deployed successfully",
@@ -1241,6 +1242,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
+			},
+
+			expectedPipelinesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueResultStateSucceeded,
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateSucceeded,
 			},
 		},
 		{
@@ -1260,6 +1266,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeTrial,
 			},
+
+			expectedPipelinesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueResultStateSucceeded,
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateFailed,
+			},
 		},
 		{
 			name:                        "Progressive deployment failed - going back to original spec",
@@ -1278,6 +1289,10 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 			},
+
+			expectedPipelinesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueResultStateSucceeded,
+			},
 		},
 		{
 			// this one is a weird case in which we've just updated our latest Pipeline (what's referred to below as the "existingUpgradePipelineDef") as "promoted" but maybe we had some resource version conflict failure
@@ -1295,6 +1310,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted), // note: this is now "promoted"
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyProgressiveResultState:         string(common.LabelValueResultStateSucceeded),
 				},
 				map[string]string{}),
 			initialRolloutPhase:         apiv1.PhaseDeployed,
@@ -1306,9 +1322,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
+			expectedPipelinesResultState: map[string]common.ResultState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateSucceeded,
+			},
 		},
 		{
-			// this is the case of someobdy deleting their "promoted" Pipeline during Progressive Rollout
+			// this is the case of somebody deleting their "promoted" Pipeline during Progressive Rollout
 			// we make sure that we create a new "promoted" one in its place with the latest and greatest spec, and also delete the "upgrading" one
 			name:                        "Handle user deletion of promoted pipeline during Progressive",
 			newPipelineSpec:             pipelineSpec, // this matches the original spec
@@ -1326,6 +1345,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
+			expectedPipelinesResultState: map[string]common.ResultState{},
 		},
 	}
 
@@ -1403,6 +1423,15 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				resultUpgradeState, found := pipeline.Labels[common.LabelKeyUpgradeState]
 				assert.True(t, found)
 				assert.Equal(t, string(expectedPipelineUpgradeState), resultUpgradeState)
+
+				if len(tc.expectedPipelinesResultState) > 0 {
+					expectedPipelineResultState, found := tc.expectedPipelinesResultState[pipeline.Name]
+					if found {
+						resultState, labelFound := pipeline.Labels[common.LabelKeyProgressiveResultState]
+						assert.True(t, labelFound)
+						assert.Equal(t, string(expectedPipelineResultState), resultState)
+					}
+				}
 			}
 		})
 	}
@@ -1489,7 +1518,7 @@ func TestProgressiveUnsupported(t *testing.T) {
 				},
 			}
 
-			result := reconciler.ProgressiveUnsupported(ctx, pipelineRollout)
+			result := reconciler.progressiveUnsupported(ctx, pipelineRollout)
 			assert.Equal(t, tt.expected, result, "ProgressiveUnsupported should return %v for test case: %s", tt.expected, tt.name)
 		})
 	}
@@ -1914,6 +1943,179 @@ func setRiderHashAnnotation(ctx context.Context, t *testing.T, rider *unstructur
 	annotations := rider.GetAnnotations()
 	annotations[common.AnnotationKeyHash] = hash
 	rider.SetAnnotations(annotations)
+}
+
+func Test_SkipProgressiveAssessment(t *testing.T) {
+	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	recorder := record.NewFakeRecorder(64)
+	r := NewPipelineRolloutReconciler(
+		client,
+		scheme.Scheme,
+		ctlrcommon.TestCustomMetrics,
+		recorder)
+
+	// Helper function to create a pipeline spec
+	createPipelineSpecWithLifecycle := func(desiredPhase string) numaflowv1.PipelineSpec {
+		spec := pipelineSpec.DeepCopy()
+		if desiredPhase != "" {
+			spec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhase(desiredPhase)
+		}
+		return *spec
+	}
+
+	// Helper function to create a pipeline spec with source vertex scaled to 0
+	createPipelineSpecScaledToZero := func() numaflowv1.PipelineSpec {
+		spec := pipelineSpec.DeepCopy()
+		zero := int32(0)
+		spec.Vertices[0].Scale = numaflowv1.Scale{Max: &zero}
+		return *spec
+	}
+
+	testCases := []struct {
+		name                   string
+		pipelineSpec           numaflowv1.PipelineSpec
+		forcePromoteConfigured bool
+		riders                 []apiv1.PipelineRider
+		expectedSkip           bool
+	}{
+		{
+			name:                   "Pipeline can ingest data, no ForcePromote, no HPA rider - should NOT skip",
+			pipelineSpec:           pipelineSpec,
+			forcePromoteConfigured: false,
+			riders:                 nil,
+			expectedSkip:           false,
+		},
+		{
+			name:                   "Pipeline paused - should skip",
+			pipelineSpec:           createPipelineSpecWithLifecycle("Paused"),
+			forcePromoteConfigured: false,
+			riders:                 nil,
+			expectedSkip:           true,
+		},
+		{
+			name:                   "Pipeline source vertex scaled to 0 - should skip",
+			pipelineSpec:           createPipelineSpecScaledToZero(),
+			forcePromoteConfigured: false,
+			riders:                 nil,
+			expectedSkip:           true,
+		},
+		{
+			name:                   "ForcePromote set to true - should skip",
+			pipelineSpec:           pipelineSpec,
+			forcePromoteConfigured: true,
+			riders:                 nil,
+			expectedSkip:           true,
+		},
+		{
+			name:                   "HPA rider present - should skip",
+			pipelineSpec:           pipelineSpec,
+			forcePromoteConfigured: false,
+			riders: []apiv1.PipelineRider{
+				{
+					Rider: apiv1.Rider{
+						Progressive: true,
+						Definition: runtime.RawExtension{
+							Raw: createHPARawExtension(t),
+						},
+					},
+				},
+			},
+			expectedSkip: true,
+		},
+		{
+			name:                   "ConfigMap rider only (no HPA) - should NOT skip",
+			pipelineSpec:           pipelineSpec,
+			forcePromoteConfigured: false,
+			riders: []apiv1.PipelineRider{
+				{
+					Rider: apiv1.Rider{
+						Progressive: true,
+						Definition: runtime.RawExtension{
+							Raw: createConfigMapRawExtension(t),
+						},
+					},
+				},
+			},
+			expectedSkip: false,
+		},
+		{
+			name:                   "Mixed riders including HPA - should skip",
+			pipelineSpec:           pipelineSpec,
+			forcePromoteConfigured: false,
+			riders: []apiv1.PipelineRider{
+				{
+					Rider: apiv1.Rider{
+						Progressive: true,
+						Definition: runtime.RawExtension{
+							Raw: createConfigMapRawExtension(t),
+						},
+					},
+				},
+				{
+					Rider: apiv1.Rider{
+						Progressive: true,
+						Definition: runtime.RawExtension{
+							Raw: createHPARawExtension(t),
+						},
+					},
+				},
+			},
+			expectedSkip: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Marshal pipelineSpec to RawExtension
+			pipelineSpecBytes, err := json.Marshal(tc.pipelineSpec)
+			assert.NoError(t, err)
+
+			// Create PipelineRollout
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: ctlrcommon.DefaultTestNamespace,
+					Name:      "test-pipeline-rollout",
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{Raw: pipelineSpecBytes},
+					},
+					Riders: tc.riders,
+				},
+			}
+
+			// Set ForcePromote if needed
+			if tc.forcePromoteConfigured {
+				pipelineRollout.Spec.Strategy = &apiv1.PipelineStrategy{
+					PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
+						PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+							Progressive: apiv1.ProgressiveStrategy{
+								ForcePromote: true,
+							},
+						},
+					},
+				}
+			}
+
+			skip, _, err := r.SkipProgressiveAssessment(ctx, pipelineRollout)
+
+			// Verify results
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedSkip, skip, "skip result mismatch")
+		})
+	}
 }
 
 // Technically, CheckRidersForDifferences() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the PipelineRollout controller.

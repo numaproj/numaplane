@@ -133,6 +133,7 @@ jobs:
     # We already have a timeout in "go test" call: we don't also need this
     #timeout-minutes: 35 # If we start getting error in CI as "The operation was canceled", we need to increase this value.
     strategy:
+      max-parallel: 15
       fail-fast: false
       matrix:
         strategy: ["pause-and-drain", "progressive", "no-strategy"]
@@ -156,6 +157,8 @@ jobs:
             case: "force-drain"
           - strategy: "progressive"
             case: "no-drain"
+          - strategy: "progressive"
+            case: "skip-progressive"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3

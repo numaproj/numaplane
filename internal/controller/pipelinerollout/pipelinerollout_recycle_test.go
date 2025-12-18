@@ -25,10 +25,12 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -37,9 +39,20 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	commontest "github.com/numaproj/numaplane/tests/common"
 )
+
+// createTestMetrics creates a minimal CustomMetrics instance for testing
+func createTestMetrics() *metrics.CustomMetrics {
+	return &metrics.CustomMetrics{
+		ProgressivePipelineDrains: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "test_progressive_pipeline_drains",
+			Help: "Test metric",
+		}, []string{metrics.LabelNamespace, metrics.LabelPipelineRollout, metrics.LabelPipeline, metrics.LabelDrainComplete, metrics.LabelDrainResult}),
+	}
+}
 
 func Test_calculateScaleForRecycle(t *testing.T) {
 	ctx := context.Background()
@@ -635,7 +648,11 @@ func Test_Recycle(t *testing.T) {
 			}
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, promotedPipeline)
 
-			reconciler := &PipelineRolloutReconciler{client: client}
+			reconciler := &PipelineRolloutReconciler{
+				client:        client,
+				customMetrics: createTestMetrics(),
+				recorder:      record.NewFakeRecorder(100),
+			}
 
 			deleted, err := reconciler.Recycle(ctx, &pipelineUnstructured)
 			assert.NoError(t, err)
@@ -787,6 +804,138 @@ func Test_checkForValueInCommaDelimitedAnnotation(t *testing.T) {
 
 			result := checkForValueInCommaDelimitedAnnotation(pipeline, tc.value, tc.annotationKey)
 			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name                    string
+		forcePromoteStrategy    bool
+		requiresDrainAnnotation string
+		recyclableStartTime     string
+		expectedResult          bool
+		expectedError           bool
+	}{
+		{
+			name:                    "ForcePromote Strategy is set - should delete",
+			forcePromoteStrategy:    true,
+			requiresDrainAnnotation: "true",
+			recyclableStartTime:     "",
+			expectedResult:          true,
+			expectedError:           false,
+		},
+		{
+			name:                    "No requires-drain annotation - should delete",
+			forcePromoteStrategy:    false,
+			requiresDrainAnnotation: "",
+			recyclableStartTime:     "",
+			expectedResult:          true,
+			expectedError:           false,
+		},
+		{
+			name:                    "requires-drain is false - should delete",
+			forcePromoteStrategy:    false,
+			requiresDrainAnnotation: "false",
+			recyclableStartTime:     "",
+			expectedResult:          true,
+			expectedError:           false,
+		},
+		{
+			name:                    "requires-drain is true, no expiration - should not delete",
+			forcePromoteStrategy:    false,
+			requiresDrainAnnotation: "true",
+			recyclableStartTime:     "",
+			expectedResult:          false,
+			expectedError:           false,
+		},
+		{
+			name:                    "requires-drain is true, not yet expired - should not delete",
+			forcePromoteStrategy:    false,
+			requiresDrainAnnotation: "true",
+			recyclableStartTime:     time.Now().Format(time.RFC3339), // just started, not expired
+			expectedResult:          false,
+			expectedError:           false,
+		},
+		{
+			name:                    "requires-drain is true, expired - should delete",
+			forcePromoteStrategy:    false,
+			requiresDrainAnnotation: "true",
+			recyclableStartTime:     time.Now().Add(-2 * time.Hour).Format(time.RFC3339), // 2 hours ago, should be expired
+			expectedResult:          true,
+			expectedError:           false,
+		},
+		{
+			name:                    "requires-drain is true, invalid time format - should return error",
+			forcePromoteStrategy:    false,
+			requiresDrainAnnotation: "true",
+			recyclableStartTime:     "invalid-time-format",
+			expectedResult:          false,
+			expectedError:           true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create pipeline rollout
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pipeline",
+					Namespace: "test-namespace",
+				},
+				Spec: apiv1.PipelineRolloutSpec{},
+			}
+
+			if tc.forcePromoteStrategy {
+				pipelineRollout.Spec.Strategy = &apiv1.PipelineStrategy{
+					PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
+						PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+							Progressive: apiv1.ProgressiveStrategy{
+								ForcePromote: true,
+							},
+						},
+					},
+				}
+			}
+
+			// Create pipeline
+			pipeline := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "numaflow.numaproj.io/v1alpha1",
+					"kind":       "Pipeline",
+					"metadata": map[string]interface{}{
+						"name":      "test-pipeline-5",
+						"namespace": "test-namespace",
+					},
+				},
+			}
+
+			annotations := map[string]string{}
+			if tc.requiresDrainAnnotation != "" {
+				annotations[common.AnnotationKeyRequiresDrain] = tc.requiresDrainAnnotation
+			}
+			if tc.recyclableStartTime != "" {
+				annotations[common.AnnotationKeyRecyclableStartTime] = tc.recyclableStartTime
+			}
+			if len(annotations) > 0 {
+				pipeline.SetAnnotations(annotations)
+			}
+
+			reconciler := &PipelineRolloutReconciler{
+				customMetrics: createTestMetrics(),
+				recorder:      record.NewFakeRecorder(100),
+			}
+
+			result, err := reconciler.shouldDeleteRecyclablePipeline(ctx, pipelineRollout, pipeline)
+
+			if tc.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedResult, result)
+			}
 		})
 	}
 }

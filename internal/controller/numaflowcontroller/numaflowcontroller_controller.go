@@ -171,7 +171,8 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(numaflowControllerOrig, numaflowController) {
-		if err := r.client.Update(ctx, numaflowController); err != nil {
+		patch := client.MergeFrom(numaflowControllerOrig)
+		if err := r.client.Patch(ctx, numaflowController, patch); err != nil {
 			r.ErrorHandler(ctx, numaflowController, err, "UpdateFailed", "Failed to update NumaflowController")
 			if statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err); statusUpdateErr != nil {
 				r.ErrorHandler(ctx, numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")

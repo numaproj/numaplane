@@ -181,12 +181,19 @@ func MarkRecyclable(ctx context.Context, c client.Client, upgradeStateReason *co
 
 }
 
+// update the in-memory object with the new result state Label and patch the object in K8S
+func UpdateResultState(ctx context.Context, c client.Client, resultState common.ResultState, childObject *unstructured.Unstructured) error {
+
+	labelsToSet := map[string]string{
+		common.LabelKeyProgressiveResultState: string(resultState),
+	}
+
+	// Patch the labels in Kubernetes
+	return kubernetes.SetAndPatchLabels(ctx, c, childObject, labelsToSet)
+}
+
 // update the in-memory object with the new Label and patch the object in K8S
 func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
-	numaLogger := logger.FromContext(ctx)
-
-	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", util.OptionalString(upgradeStateReason)).Debugf("patching upgradeState and upgradeStateReason to %s:%s/%s",
-		childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 
 	labelsToSet := map[string]string{
 		common.LabelKeyUpgradeState: string(upgradeState),
@@ -200,26 +207,19 @@ func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState commo
 }
 
 func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstructured.Unstructured) (*common.UpgradeState, *common.UpgradeStateReason) {
-	numaLogger := logger.FromContext(ctx)
-
 	upgradeStateStr, found := childObject.GetLabels()[common.LabelKeyUpgradeState]
 	if !found {
-		numaLogger.Debug("upgradeState unset for %s:%s/%s", childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 		return nil, nil
-	} else {
-		reasonStr, found := childObject.GetLabels()[common.LabelKeyUpgradeStateReason]
-		numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", util.OptionalString(reasonStr)).Debugf("reading upgradeState and upgradeStateReason for %s:%s/%s",
-			childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
-		if !found {
-			upgradeState := common.UpgradeState(upgradeStateStr)
-			return &upgradeState, nil
-		} else {
-			upgradeState := common.UpgradeState(upgradeStateStr)
-			reason := common.UpgradeStateReason(reasonStr)
-			return &upgradeState, &reason
-		}
 	}
 
+	upgradeState := common.UpgradeState(upgradeStateStr)
+	reasonStr, found := childObject.GetLabels()[common.LabelKeyUpgradeStateReason]
+	if !found {
+		return &upgradeState, nil
+	}
+
+	reason := common.UpgradeStateReason(reasonStr)
+	return &upgradeState, &reason
 }
 
 // get the name of the child whose parent is "rolloutObject" and whose upgrade state is "upgradeState" (and if upgradeStateReason is that, check that as well)
