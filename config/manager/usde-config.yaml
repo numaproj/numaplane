@@ -41,6 +41,9 @@ data:
         includeSubfields: true
       - path: spec.vertices.source.udsource.container.envfrom
         includeSubfields: true
+      - path: spec.vertices.source.transformer.container.image
+      - path: spec.vertices.source.transformer.container.volumeMounts
+        includeSubfields: true
       - path: spec.vertices.source.transformer.container.command
       - path: spec.vertices.source.transformer.container.args
       - path: spec.vertices.source.transformer.container.env
