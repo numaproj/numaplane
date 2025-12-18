@@ -227,7 +227,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
-		if err := r.client.Update(ctx, pipelineRollout); err != nil {
+		patch := client.MergeFrom(pipelineRolloutOrig)
+		if err := r.client.Patch(ctx, pipelineRollout, patch); err != nil {
 			r.ErrorHandler(ctx, pipelineRollout, err, "UpdateFailed", "Failed to update PipelineRollout")
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
@@ -1403,7 +1404,7 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 		pipelineRollout.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyParentRollout, pipelineRollout.Name), "")
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			numaLogger.Warnf("no child pipeline found for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
+			numaLogger.Debugf("no child pipeline found for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
 			return false, nil
 		}
 		return false, err
@@ -1412,7 +1413,7 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 		// Delete all pipelines that are children of this PipelineRollout
 		numaLogger.Infof("Deleting pipeline %s/%s", pipelineRollout.Namespace, pipelineRollout.Name)
 		for _, pipeline := range pipelineList.Items {
-			if err := r.client.Delete(ctx, &pipeline); err != nil {
+			if err := r.client.Delete(ctx, &pipeline); err != nil && !apierrors.IsNotFound(err) {
 				return false, err
 			}
 		}
