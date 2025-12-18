@@ -148,7 +148,8 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(numaflowControllerRolloutOrig, numaflowControllerRollout) {
-		if err := r.client.Update(ctx, numaflowControllerRollout); err != nil {
+		patch := client.MergeFrom(numaflowControllerRolloutOrig)
+		if err := r.client.Patch(ctx, numaflowControllerRollout, patch); err != nil {
 			r.ErrorHandler(ctx, numaflowControllerRollout, err, "UpdateFailed", "Failed to update NumaflowControllerRollout")
 			if statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(ctx, numaflowControllerRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowControllerRollout")
