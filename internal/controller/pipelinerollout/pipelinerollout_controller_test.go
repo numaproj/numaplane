@@ -567,60 +567,60 @@ func Test_CheckForDifferences(t *testing.T) {
 		recorder)
 
 	testCases := []struct {
-		name                     string
-		spec1                    string // existing pipeline spec (from)
-		spec2                    string // rollout definition spec (to)
-		labels1                  map[string]string
-		labels2                  map[string]string
-		annotations1             map[string]string
-		annotations2             map[string]string
-		existingIsUpgrading      bool
-		originalScaleDefinitions []string // only used when existingIsUpgrading is true (one per vertex)
-		expectedNeedsUpdating    bool
-		expectedError            bool
+		name                      string
+		spec1                     string // existing pipeline spec (from)
+		spec2                     string // rollout definition spec (to)
+		labels1                   map[string]string
+		labels2                   map[string]string
+		annotations1              map[string]string
+		annotations2              map[string]string
+		existingChildUpgradeState common.UpgradeState
+		originalScaleDefinitions  []string // only used when existingChildUpgradeState=trial (one per vertex)
+		expectedNeedsUpdating     bool
+		expectedError             bool
 	}{
 		{
-			name:                  "Equal specs not upgrading",
-			spec1:                 specNoScale,
-			spec2:                 specNoScale,
-			existingIsUpgrading:   false,
-			expectedNeedsUpdating: false,
-			expectedError:         false,
+			name:                      "Equal specs not upgrading",
+			spec1:                     specNoScale,
+			spec2:                     specNoScale,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedNeedsUpdating:     false,
+			expectedError:             false,
 		},
 		{
-			name:                  "Scales differ but this is not an Upgrading child",
-			spec1:                 specNoScale,
-			spec2:                 specWithNonEmptyNonZeroScale,
-			existingIsUpgrading:   false,
-			expectedNeedsUpdating: true, // direct comparison, scales differ
-			expectedError:         false,
+			name:                      "Scales differ but this is not an Upgrading child",
+			spec1:                     specNoScale,
+			spec2:                     specWithNonEmptyNonZeroScale,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedNeedsUpdating:     false, // scale fields are excluded from comparison for promoted children
+			expectedError:             false,
 		},
 		{
-			name:                  "Required Labels not Present",
-			spec1:                 specNoScale,
-			spec2:                 specNoScale,
-			labels1:               map[string]string{"app": "test1"},
-			labels2:               map[string]string{"app": "test2"},
-			existingIsUpgrading:   false,
-			expectedNeedsUpdating: true,
-			expectedError:         false,
+			name:                      "Required Labels not Present",
+			spec1:                     specNoScale,
+			spec2:                     specNoScale,
+			labels1:                   map[string]string{"app": "test1"},
+			labels2:                   map[string]string{"app": "test2"},
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedNeedsUpdating:     true,
+			expectedError:             false,
 		},
 		{
-			name:                  "Required Annotations Present",
-			spec1:                 specNoScale,
-			spec2:                 specNoScale,
-			annotations1:          map[string]string{"key1": "test1"},
-			annotations2:          nil,
-			existingIsUpgrading:   false,
-			expectedNeedsUpdating: false,
-			expectedError:         false,
+			name:                      "Required Annotations Present",
+			spec1:                     specNoScale,
+			spec2:                     specNoScale,
+			annotations1:              map[string]string{"key1": "test1"},
+			annotations2:              nil,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedNeedsUpdating:     false,
+			expectedError:             false,
 		},
 		{
 			name:  "Upgrading - original scale matches rollout",
 			spec1: specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
 			spec2: specNoScale,                  // rollout definition
 			// this is our Upgrading child
-			existingIsUpgrading: true,
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
 			// original scale definitions (one per vertex: in, cat, out) - all had no scale originally
 			originalScaleDefinitions: []string{"null", "null", "null"},
 			// this is basically our Rollout definition - also has no scale
@@ -632,7 +632,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			spec1: specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
 			spec2: specWithZeroScale,            // new rollout definition wants zero scale
 			// this is our Upgrading child
-			existingIsUpgrading: true,
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
 			// original scale definitions - had non-zero scale
 			originalScaleDefinitions: []string{`{"min":3,"max":5}`, "null", "null"},
 			// this is basically our Rollout definition - wants zero scale
@@ -644,7 +644,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			spec1: specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
 			spec2: specWithNonEmptyNonZeroScale, // rollout definition has scale
 			// this is our Upgrading child
-			existingIsUpgrading: true,
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
 			// original scale definitions - all had no scale
 			originalScaleDefinitions: []string{"null", "null", "null"},
 			// this is basically our Rollout definition - has scale
@@ -656,7 +656,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			spec1: specWithZeroScale,            // current upgrading pipeline (modified by progressive)
 			spec2: specWithNonEmptyNonZeroScale, // rollout definition
 			// this is our Upgrading child
-			existingIsUpgrading: true,
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
 			// original scale definitions match the rollout
 			originalScaleDefinitions: []string{`{"min":3,"max":5}`, "null", "null"},
 			// this is basically our Rollout definition
@@ -695,15 +695,15 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			}
 
-			// If existingIsUpgrading, set up the UpgradingPipelineStatus
-			if tc.existingIsUpgrading {
+			// If comparing to an upgrading child, set up the UpgradingPipelineStatus
+			if tc.existingChildUpgradeState == common.LabelValueUpgradeTrial {
 				pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &apiv1.UpgradingPipelineStatus{
 					OriginalScaleDefinitions: tc.originalScaleDefinitions,
 				}
 				pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Name = obj1.GetName()
 			}
 
-			needsUpdating, err := r.CheckForDifferencesWithRolloutDef(context.Background(), obj1, pipelineRollout, tc.existingIsUpgrading)
+			needsUpdating, err := r.CheckForDifferencesWithRolloutDef(context.Background(), obj1, pipelineRollout, tc.existingChildUpgradeState)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -2284,7 +2284,7 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 		verifyTemplateEval          func(t *testing.T, riders []riders.Rider) // Custom verification function
 		existingVPADefinition       *map[string]interface{}                   // If nil, no existing VPA riders; if set, create existing VPA riders from this definition
 		existingConfigMapDefinition *map[string]interface{}                   // If nil, no existing ConfigMap riders; if set, create existing ConfigMap riders from this definition
-		existingIsUpgrading         bool                                      // If true, existing child is Upgrading; if false, existing child is Promoted
+		existingChildUpgradeState   common.UpgradeState                       // Upgrade state of the existing child (e.g., "promoted", "in-progress")
 		expectedDifferencesFound    bool                                      // Expected result from CheckRidersForDifferences
 	}{
 		{
@@ -2314,9 +2314,9 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 				}
 			},
 			existingVPADefinition:       &defaultVPARiderDef,
-			existingConfigMapDefinition: nil,   // No existing ConfigMaps
-			existingIsUpgrading:         true,  // Existing child is Upgrading
-			expectedDifferencesFound:    false, // No differences expected since existing riders match rollout
+			existingConfigMapDefinition: nil,                          // No existing ConfigMaps
+			existingChildUpgradeState:   common.LabelValueUpgradeTrial, // Existing child is Upgrading
+			expectedDifferencesFound:    false,                        // No differences expected since existing riders match rollout
 		},
 		{
 			name:                        "Compare VPA per-vertex rider to Promoted Pipeline riders - no differences",
@@ -2345,9 +2345,9 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 				}
 			},
 			existingVPADefinition:       &defaultVPARiderDef,
-			existingConfigMapDefinition: nil,   // No existing ConfigMaps
-			existingIsUpgrading:         false, // Existing child is Promoted
-			expectedDifferencesFound:    false, // No differences expected since existing riders match rollout
+			existingConfigMapDefinition: nil,                             // No existing ConfigMaps
+			existingChildUpgradeState:   common.LabelValueUpgradePromoted, // Existing child is Promoted
+			expectedDifferencesFound:    false,                           // No differences expected since existing riders match rollout
 		},
 		{
 			name:                        "Compare VPA per-vertex rider to Upgrading Pipeline riders - the Vertex names have changed",
@@ -2376,9 +2376,9 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 				}
 			},
 			existingVPADefinition:       &defaultVPARiderDef,
-			existingConfigMapDefinition: nil,  // No existing ConfigMaps
-			existingIsUpgrading:         true, // Existing child is Upgrading
-			expectedDifferencesFound:    true, // Differences expected - existing has "transform" rider, rollout wants "cat" rider
+			existingConfigMapDefinition: nil,                          // No existing ConfigMaps
+			existingChildUpgradeState:   common.LabelValueUpgradeTrial, // Existing child is Upgrading
+			expectedDifferencesFound:    true,                         // Differences expected - existing has "transform" rider, rollout wants "cat" rider
 		},
 		{
 			name: "Compare ConfigMap per-Pipeline Rider to Upgrading Pipeline rider: spec has changed",
@@ -2423,8 +2423,8 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 					"namespace":     "{{.pipeline-namespace}}", // Same as rollout
 				},
 			},
-			existingIsUpgrading:      true, // Existing child is Upgrading
-			expectedDifferencesFound: true, // Differences expected since existing ConfigMap has different data
+			existingChildUpgradeState: common.LabelValueUpgradeTrial, // Existing child is Upgrading
+			expectedDifferencesFound:  true,                         // Differences expected since existing ConfigMap has different data
 		},
 	}
 
@@ -2599,7 +2599,7 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 
 			// Update the PipelineRollout status to include the rider list
 			// Set riders in the appropriate status based on whether existing is Upgrading or Promoted
-			if tc.existingIsUpgrading {
+			if tc.existingChildUpgradeState == common.LabelValueUpgradeTrial {
 				pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Riders = riderStatusList
 			} else {
 				// For promoted child, riders are stored at the top-level Status
@@ -2612,9 +2612,9 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 				ctx,
 				reconciler,
 				pipelineRollout,
-				existingPipelineDef,    // existing child definition
-				tc.existingIsUpgrading, // whether existing child is Upgrading (vs Promoted)
-				newPipelineDef,         // new upgrading child definition
+				existingPipelineDef,          // existing child definition
+				tc.existingChildUpgradeState, // upgrade state of existing child
+				newPipelineDef,               // new upgrading child definition
 			)
 			assert.NoError(t, err, "CheckRidersForDifferences should not return an error")
 			assert.Equal(t, tc.expectedDifferencesFound, differencesFound,

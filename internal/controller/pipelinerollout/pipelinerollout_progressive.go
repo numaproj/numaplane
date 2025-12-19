@@ -208,7 +208,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 	pipelineDef *unstructured.Unstructured,
 	requiredSpec map[string]interface{},
 	requiredMetadata map[string]interface{},
-	existingIsUpgrading bool) (bool, error) {
+	existingChildUpgradeState common.UpgradeState) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 	pipelineCopy := pipelineDef.DeepCopy()
@@ -218,17 +218,20 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 		return false, fmt.Errorf("failed to deep copy requiredSpec: %w", err)
 	}
 
+	// During a Progressive Upgrade, we need to be aware of the fact that our promoted and upgrading pipelines have been scaled down,
+	// so we need to be careful about how we compare to the target definition
+
 	// If we are comparing to an existing "upgrading" pipeline, we need to re-form its definition from prior to when we
 	// rescaled it for Progressive, in order to effectively compare it to the new desired spec
-	if existingIsUpgrading {
+	if existingChildUpgradeState == common.LabelValueUpgradeTrial {
 		pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
 		if upgradingPipelineStatus == nil {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus is nil")
 		}
-		/*if upgradingPipelineStatus.Name != pipelineDef.GetName() {
+		if upgradingPipelineStatus.Name != pipelineDef.GetName() {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus.Name %s != existing pipeline name %s", upgradingPipelineStatus.Name, pipelineDef.GetName())
-		}*/
+		}
 
 		// Temporary code for backward compatibility: if OriginalScaleDefinitions wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says
 		// TODO: remove later
@@ -244,8 +247,10 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 		if err != nil {
 			return false, err
 		}
+	} else if existingChildUpgradeState == common.LabelValueUpgradePromoted {
 
-		/*removeFunc := func(pipelineDef map[string]interface{}) error {
+		// If we are comparing to an existing "promoted" pipeline, we will just ignore scale altogether
+		removeScaleFieldsFunc := func(pipelineDef map[string]interface{}) error {
 			// for each Vertex, remove the scale min and max:
 			// However, there is one exception: if the vertex is a source vertex and the user has set max=0, we cannot ignore that
 
@@ -277,16 +282,14 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 
 		}
 
-
-		err := removeFunc(pipelineCopy.Object)
+		err := removeScaleFieldsFunc(pipelineCopy.Object)
 		if err != nil {
 			return false, err
 		}
-		err = removeFunc(requiredSpecCopy)
+		err = removeScaleFieldsFunc(requiredSpecCopy)
 		if err != nil {
 			return false, err
-		}*/
-
+		}
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
@@ -307,7 +310,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 // that would be produced by the Rollout definition.
 // This implements a function of the progressiveController interface
 // In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
-func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingIsUpgrading bool) (bool, error) {
+func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingChildUpgradeState common.UpgradeState) (bool, error) {
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 
@@ -323,7 +326,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 		return false, err
 	}
 	rolloutDefinedMetadata, _ := rolloutBasedPipelineDef.Object["metadata"].(map[string]interface{})
-	return r.CheckForDifferences(ctx, pipelineRollout, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata, existingIsUpgrading)
+	return r.CheckForDifferences(ctx, pipelineRollout, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata, existingChildUpgradeState)
 }
 
 /*

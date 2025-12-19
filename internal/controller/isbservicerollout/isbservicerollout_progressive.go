@@ -126,7 +126,7 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferences(
 	isbsvcDef *unstructured.Unstructured,
 	requiredSpec map[string]interface{},
 	requiredMetadata map[string]interface{},
-	existingIsUpgrading bool) (bool, error) {
+	existingChildUpgradeState common.UpgradeState) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	specsEqual := util.CompareStructNumTypeAgnostic(isbsvcDef.Object["spec"], requiredSpec["spec"])
@@ -150,7 +150,7 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(
 	ctx context.Context,
 	existingISBSvc *unstructured.Unstructured,
 	rolloutObject ctlrcommon.RolloutObject,
-	existingIsUpgrading bool) (bool, error) {
+	existingChildUpgradeState common.UpgradeState) (bool, error) {
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
 	rolloutBasedISBSvcDef, err := r.makeISBServiceDefinition(isbsvcRollout, existingISBSvc.GetName(), isbsvcRollout.Spec.InterStepBufferService.Metadata)
@@ -159,7 +159,7 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(
 	}
 
 	rolloutDefinedMetadata, _ := rolloutBasedISBSvcDef.Object["metadata"].(map[string]interface{})
-	return r.CheckForDifferences(ctx, rolloutObject, existingISBSvc, rolloutBasedISBSvcDef.Object, rolloutDefinedMetadata, existingIsUpgrading)
+	return r.CheckForDifferences(ctx, rolloutObject, existingISBSvc, rolloutBasedISBSvcDef.Object, rolloutDefinedMetadata, existingChildUpgradeState)
 }
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(

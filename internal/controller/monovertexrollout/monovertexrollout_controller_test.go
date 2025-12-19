@@ -927,13 +927,13 @@ func Test_CheckForDifferences(t *testing.T) {
 	numaLogger := logger.FromContext(ctx)
 
 	tests := []struct {
-		name                    string
-		from                    *unstructured.Unstructured
-		to                      *unstructured.Unstructured
-		existingIsUpgrading     bool
-		originalScaleDefinition string // only used when existingIsUpgrading is true
-		expectedError           bool
-		expectedResult          bool
+		name                      string
+		from                      *unstructured.Unstructured
+		to                        *unstructured.Unstructured
+		existingChildUpgradeState common.UpgradeState
+		originalScaleDefinition   string // only used when existingChildUpgradeState=trial
+		expectedError             bool
+		expectedResult            bool
 	}{
 		{
 			name: "ObjectsEqual",
@@ -959,9 +959,9 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			existingIsUpgrading: false,
-			expectedError:       false,
-			expectedResult:      false,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            false,
 		},
 		{
 			name: "RequiredLabelsNotPresent",
@@ -975,9 +975,9 @@ func Test_CheckForDifferences(t *testing.T) {
 				obj.SetLabels(map[string]string{"key": "value2"})
 				return obj
 			}(),
-			existingIsUpgrading: false,
-			expectedError:       false,
-			expectedResult:      true,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            true,
 		},
 		{
 			name: "RequiredAnnotationsNotPresent",
@@ -990,9 +990,9 @@ func Test_CheckForDifferences(t *testing.T) {
 				obj.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"})
 				return obj
 			}(),
-			existingIsUpgrading: false,
-			expectedError:       false,
-			expectedResult:      true,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            true,
 		},
 		{
 			name: "SpecsDiffer",
@@ -1012,9 +1012,9 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			existingIsUpgrading: false,
-			expectedError:       false,
-			expectedResult:      true,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            true,
 		},
 		{
 			name: "ScalesDifferNotUpgrading",
@@ -1040,9 +1040,9 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			existingIsUpgrading: false,
-			expectedError:       false,
-			expectedResult:      true, // scales differ, not upgrading so we compare directly
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            false, // scale fields are excluded from comparison for promoted children
 		},
 		{
 			name: "UpgradingOriginalScaleMatchesRollout",
@@ -1077,10 +1077,10 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			existingIsUpgrading:     true,
-			originalScaleDefinition: `{"min":1,"max":2}`, // original matches rollout
-			expectedError:           false,
-			expectedResult:          false, // no difference because original matches rollout
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			originalScaleDefinition:   `{"min":1,"max":2}`, // original matches rollout
+			expectedError:             false,
+			expectedResult:            false, // no difference because original matches rollout
 		},
 		{
 			name: "UpgradingOriginalScaleDiffersFromRollout",
@@ -1115,10 +1115,10 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			existingIsUpgrading:     true,
-			originalScaleDefinition: `{"min":1,"max":2}`, // original differs from new rollout
-			expectedError:           false,
-			expectedResult:          true, // difference because original scale != new rollout scale
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			originalScaleDefinition:   `{"min":1,"max":2}`, // original differs from new rollout
+			expectedError:             false,
+			expectedResult:            true, // difference because original scale != new rollout scale
 		},
 		{
 			name: "UpgradingOriginalScaleNullRolloutHasNoScale",
@@ -1149,10 +1149,10 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			existingIsUpgrading:     true,
-			originalScaleDefinition: "null", // original had no scale
-			expectedError:           false,
-			expectedResult:          false, // no difference because original (null) matches rollout (no scale)
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			originalScaleDefinition:   "null", // original had no scale
+			expectedError:             false,
+			expectedResult:            false, // no difference because original (null) matches rollout (no scale)
 		},
 		{
 			name: "UpgradingOriginalScaleNullRolloutHasScale",
@@ -1187,10 +1187,10 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			existingIsUpgrading:     true,
-			originalScaleDefinition: "null", // original had no scale, but rollout now has scale
-			expectedError:           false,
-			expectedResult:          true, // difference because original (null) != rollout (has scale)
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			originalScaleDefinition:   "null", // original had no scale, but rollout now has scale
+			expectedError:             false,
+			expectedResult:            true, // difference because original (null) != rollout (has scale)
 		},
 	}
 
@@ -1226,15 +1226,15 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			}
 
-			// If existingIsUpgrading, set up the UpgradingMonoVertexStatus
-			if tt.existingIsUpgrading {
+			// If comparing to an upgrading child, set up the UpgradingMonoVertexStatus
+			if tt.existingChildUpgradeState == common.LabelValueUpgradeTrial {
 				mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &apiv1.UpgradingMonoVertexStatus{
 					OriginalScaleDefinition: tt.originalScaleDefinition,
 				}
 				mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Name = tt.from.GetName()
 			}
 
-			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout, tt.existingIsUpgrading)
+			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout, tt.existingChildUpgradeState)
 
 			if tt.expectedError {
 				assert.Error(t, err)

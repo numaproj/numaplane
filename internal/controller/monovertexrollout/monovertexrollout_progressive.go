@@ -150,7 +150,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 	monoVertexDef *unstructured.Unstructured,
 	requiredSpec map[string]interface{},
 	requiredMetadata map[string]interface{},
-	existingIsUpgrading bool) (bool, error) {
+	existingChildUpgradeState common.UpgradeState) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	var from, to map[string]interface{}
@@ -162,17 +162,20 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		return false, err
 	}
 
-	// If we are comparing to an existing "upgrading" pipeline, we need to re-form its definition from prior to when we
+	// During a Progressive Upgrade, we need to be aware of the fact that our promoted and upgrading monovertices have been scaled down,
+	// so we need to be careful about how we compare to the target definition
+
+	// If we are comparing to an existing "upgrading" monovertex, we need to re-form its definition from prior to when we
 	// rescaled it for Progressive, in order to effectively compare it to the new desired spec
-	if existingIsUpgrading {
+	if existingChildUpgradeState == common.LabelValueUpgradeTrial {
 		monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 		upgradingMonoVertexStatus := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus
 		if upgradingMonoVertexStatus == nil {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus is nil")
 		}
-		/*if upgradingMonoVertexStatus.Name != monoVertexDef.GetName() {
+		if upgradingMonoVertexStatus.Name != monoVertexDef.GetName() {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus.Name %s != existing monovertex name %s", upgradingMonoVertexStatus.Name, monoVertexDef.GetName())
-		}*/
+		}
 
 		originalScaleDefinition := upgradingMonoVertexStatus.OriginalScaleDefinition
 		// Temporary code for backward compatibility: if OriginalScaleDefinition wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says initially
@@ -201,11 +204,11 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 			from["scale"] = scaleMap
 		}
 
-	}
-	/*if ignoreProgressiveModifiedFields {
+	} else if existingChildUpgradeState == common.LabelValueUpgradePromoted {
 
-		// Remove certain fields (which numaplane needs to set) from comparison to test for equality
-		removeFunc := func(spec map[string]interface{}) error {
+		// If we are comparing to an existing "promoted" monovertex, we will just ignore scale altogether
+
+		removeScaleFieldsFunc := func(spec map[string]interface{}) error {
 
 			excludedPaths := []string{"replicas", "scale.min", "scale.max", "scale.disabled"}
 
@@ -229,16 +232,16 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 
 		// if it's not set to 0, then go ahead and remove the scale fields from the comparison
 		if !hasMaxZero {
-			err := removeFunc(from)
+			err := removeScaleFieldsFunc(from)
 			if err != nil {
 				return false, err
 			}
-			err = removeFunc(to)
+			err = removeScaleFieldsFunc(to)
 			if err != nil {
 				return false, err
 			}
 		}
-	}*/
+	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
 
@@ -260,7 +263,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 // that would be produced by the Rollout definition.
 // This implements a function of the progressiveController interface
 // In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
-func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingIsUpgrading bool) (bool, error) {
+func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingChildUpgradeState common.UpgradeState) (bool, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 
 	// In order to effectively compare, we need to create a MonoVertex Definition from the MonoVertexRollout which uses the same name as our current MonoVertex
@@ -271,7 +274,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 	}
 
 	rolloutDefinedMetadata, _ := rolloutBasedMVDef.Object["metadata"].(map[string]interface{})
-	return r.CheckForDifferences(ctx, monoVertexRollout, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata, existingIsUpgrading)
+	return r.CheckForDifferences(ctx, monoVertexRollout, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata, existingChildUpgradeState)
 }
 
 /*

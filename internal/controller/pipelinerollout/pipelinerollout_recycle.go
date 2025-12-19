@@ -326,7 +326,7 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 
 	// Compare the rollout definition to the "promoted" pipeline
 	// In order to compare, we need to update the rollout definition to use the identical isbsvc name as the "promoted" pipeline so we can ignore that
-	different, err := r.CheckForDifferencesWithRolloutDef(ctx, currentPromotedPipeline, pipelineRollout, false)
+	different, err := r.CheckForDifferencesWithRolloutDef(ctx, currentPromotedPipeline, pipelineRollout, common.LabelValueUpgradePromoted)
 	if err != nil {
 		return nil, err
 	}
