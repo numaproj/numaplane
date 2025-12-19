@@ -2708,6 +2708,12 @@ data:
       - path: spec.vertices.source.udsource.container.image
       - path: spec.vertices.source.udsource.container.volumeMounts
         includeSubfields: true
+      - path: spec.vertices.source.udsource.container.command
+      - path: spec.vertices.source.udsource.container.args
+      - path: spec.vertices.source.udsource.container.env
+        includeSubfields: true
+      - path: spec.vertices.source.udsource.container.envfrom
+        includeSubfields: true
       - path: spec.vertices.source.transformer.container.image
       - path: spec.vertices.source.transformer.container.volumeMounts
         includeSubfields: true
@@ -2754,9 +2760,6 @@ data:
       - path: spec.sideInputs.container.envfrom
         includeSubfields: true
       - path: spec.templates     # note: this one could be broken down further into just the fields that are at risk
-        includeSubfields: true
-      
-      - path: spec.sideInputs.container.envfrom
         includeSubfields: true
   interstepbufferservice: |
     recreate:
