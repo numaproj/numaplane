@@ -1608,7 +1608,7 @@ func Test_CanPipelineIngestData(t *testing.T) {
 	}
 }
 
-func TestGenerateAndApplyFullScaleDefinitions(t *testing.T) {
+func Test_GenerateAndApplyFullScaleDefinitions(t *testing.T) {
 	// Pipeline with a mix of vertices:
 	// - "in": scale undefined
 	// - "cat": scale defined but empty (no children)

@@ -112,6 +112,10 @@ type UpgradingPipelineStatus struct {
 	// If 'disabled==true", then "min" and "max" probably wouldn't be set, and if they are they'll be ignored.
 	OriginalScaleMinMax []VertexScaleDefinition `json:"originalScaleMinMax,omitempty"`
 
+	// OriginalScaleDefinitions stores the original scale definitions for each vertex as JSON string
+	// The Vertices are in the same order as they're listed in the pipeline spec
+	// The difference between this and OriginalScaleMinMax is that this represents the full definition for scale
+	// If scale is not defined for a Vertex, it will be represented as "null"
 	OriginalScaleDefinitions []string `json:"originalScaleDefinitions,omitempty"`
 }
 

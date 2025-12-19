@@ -139,6 +139,7 @@ func CheckPipelineDrained(ctx context.Context, pipeline *unstructured.Unstructur
 	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
 }
 
+// AllSourceVerticesScaledToZero determines if all Source Vertices in the Pipeline definition have max=0
 func AllSourceVerticesScaledToZero(ctx context.Context, pipelineSpec map[string]interface{}) (bool, error) {
 	vertices, found, _ := unstructured.NestedSlice(pipelineSpec, "vertices")
 	if !found {
@@ -165,7 +166,7 @@ func AllSourceVerticesScaledToZero(ctx context.Context, pipelineSpec map[string]
 	return true, nil
 }
 
-// CanPipelineIngestData checks if the pipeline is set to desiredPhase=Running(or unset) plus if a source vertex has scale.max>0
+// CanPipelineIngestData checks if the pipeline is set to desiredPhase=Running(or unset) or if a source vertex has scale.max>0
 func CanPipelineIngestData(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
 	pipelineSpec, found := pipeline.Object["spec"].(map[string]interface{})
 	if !found {

@@ -75,6 +75,9 @@ type UpgradingMonoVertexStatus struct {
 	// If 'disabled==true", then "min" and "max" probably wouldn't be set, and if they are they'll be ignored.
 	OriginalScaleMinMax string `json:"originalScaleMinMax"`
 
+	// OriginalScaleDefinition stores the original scale definition for the monovertex as JSON string
+	// The difference between this and OriginalScaleMinMax is that this represents the full definition for scale
+	// If scale is not defined, it will be represented as "null"
 	OriginalScaleDefinition string `json:"originalScaleDefinition,omitempty"`
 }
 
