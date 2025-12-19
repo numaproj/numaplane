@@ -311,20 +311,30 @@ func UpdatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.Pipe
 func UpdatePipelineInK8S(name string, f func(*unstructured.Unstructured) (*unstructured.Unstructured, error)) {
 	By("updating Pipeline")
 
+	retryCount := 0
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		retryCount++
 		pipeline, err := dynamicClient.Resource(GetGVRForPipeline()).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
+			GinkgoWriter.Printf("UpdatePipelineInK8S: Get failed (attempt %d): %v\n", retryCount, err)
 			return err
 		}
 
 		updatedPipeline, err := f(pipeline)
 		if err != nil {
+			GinkgoWriter.Printf("UpdatePipelineInK8S: transform function failed (attempt %d): %v\n", retryCount, err)
 			return err
 		}
 
 		_, err = dynamicClient.Resource(GetGVRForPipeline()).Namespace(Namespace).Update(ctx, updatedPipeline, metav1.UpdateOptions{})
+		if err != nil {
+			GinkgoWriter.Printf("UpdatePipelineInK8S: Update failed (attempt %d), resourceVersion=%s: %v\n", retryCount, pipeline.GetResourceVersion(), err)
+		}
 		return err
 	})
+	if err != nil {
+		GinkgoWriter.Printf("UpdatePipelineInK8S: final error after %d attempts: %v\n", retryCount, err)
+	}
 	Expect(err).ShouldNot(HaveOccurred())
 }
 

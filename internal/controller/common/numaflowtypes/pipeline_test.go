@@ -1608,6 +1608,8 @@ func Test_CanPipelineIngestData(t *testing.T) {
 	}
 }
 
+// Test_GenerateAndApplyFullScaleDefinitions tests the GenerateFullScaleDefinitionsFromPipelineMap and ApplyFullScaleDefinitionsToPipelineMap functions
+// It confirms that we can go from pipeline spec to full scale definitions and back to original pipeline spec
 func Test_GenerateAndApplyFullScaleDefinitions(t *testing.T) {
 	// Pipeline with a mix of vertices:
 	// - "in": scale undefined

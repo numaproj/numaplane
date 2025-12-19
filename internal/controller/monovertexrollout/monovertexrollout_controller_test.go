@@ -1948,6 +1948,7 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 			if upgradingStatus == nil {
 				upgradingStatus = &apiv1.UpgradingMonoVertexStatus{}
 			}
+			upgradingStatus.Name = tc.upgradingChildName
 			mvRollout := ctlrcommon.CreateTestMVRollout(
 				tc.rolloutSpec,
 				map[string]string{}, // rollout annotations

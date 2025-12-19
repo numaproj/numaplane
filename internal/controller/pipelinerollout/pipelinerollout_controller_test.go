@@ -1952,6 +1952,7 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 			if upgradingStatus == nil {
 				upgradingStatus = &apiv1.UpgradingPipelineStatus{}
 			}
+			upgradingStatus.Name = tc.upgradingChildName
 			pipelineRollout := ctlrcommon.CreateTestPipelineRollout(
 				tc.rolloutSpec,
 				map[string]string{}, // rollout annotations
