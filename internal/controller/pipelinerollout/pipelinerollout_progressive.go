@@ -466,30 +466,6 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 	return false, err
 }
 
-func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
-	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingPipelineDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-	/*
-		pipelineRollout, ok := rolloutObject.(*apiv1.PipelineRollout)
-		if !ok {
-			return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading pipeline post-success", rolloutObject)
-		}
-
-		// For each Pipeline vertex, patch to the original scale definition
-		// Note this is not expected to be executed repeatedly, so we don't need to worry about first verifying it's not already set that way
-
-		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
-		if upgradingPipelineStatus == nil {
-			return fmt.Errorf("can't process upgrading pipeline post-success; missing UpgradingPipelineStatus which should contain scale values")
-		}
-
-		return numaflowtypes.ApplyScaleValuesToLivePipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)*/
-	return nil
-}
-
 /*
 ProcessUpgradingChildPreUpgrade handles the processing of an upgrading pipeline before it's been created
 It performs the following pre-upgrade operations:
