@@ -425,37 +425,37 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 	upgradingMonoVertexDef *unstructured.Unstructured,
 	c client.Client,
 ) error {
+	/*
+		numaLogger := logger.FromContext(ctx).WithName("ProcessUpgradingChildPostSuccess").WithName("MonoVertexRollout").
+			WithValues("upgradingMonoVertexNamespace", upgradingMonoVertexDef.GetNamespace(), "upgradingMonoVertexName", upgradingMonoVertexDef.GetName())
 
-	numaLogger := logger.FromContext(ctx).WithName("ProcessUpgradingChildPostSuccess").WithName("MonoVertexRollout").
-		WithValues("upgradingMonoVertexNamespace", upgradingMonoVertexDef.GetNamespace(), "upgradingMonoVertexName", upgradingMonoVertexDef.GetName())
+		numaLogger.Debug("started post-success processing of upgrading monovertex")
 
-	numaLogger.Debug("started post-success processing of upgrading monovertex")
-
-	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
-	if !ok {
-		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
-	}
-
-	// Scale the Upgrading MonoVertex back to its original min and max values
-	originalScaleMinMax := "null"
-	upgradingMonoVertexStatus := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus
-	if upgradingMonoVertexStatus == nil {
-		numaLogger.Error(errors.New("UpgradingMonoVertexStatus field nil"), "UpgradingMonoVertexStatus is nil; will default scale to null")
-	} else {
-		originalScaleMinMax = upgradingMonoVertexStatus.OriginalScaleMinMax
-		if originalScaleMinMax == "" {
-			numaLogger.Error(errors.New("OriginalScaleMinMax unset"), "OriginalScaleMinMax is not set; will default scale to null")
-			originalScaleMinMax = "null"
+		monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
+		if !ok {
+			return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
 		}
-	}
 
-	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, originalScaleMinMax)
-	if err := kubernetes.PatchResource(ctx, c, upgradingMonoVertexDef, patchJson, k8stypes.MergePatchType); err != nil {
-		return fmt.Errorf("error scaling the existing upgrading monovertex to original values: %w", err)
-	}
+		// Scale the Upgrading MonoVertex back to its original min and max values
+		originalScaleMinMax := "null"
+		upgradingMonoVertexStatus := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus
+		if upgradingMonoVertexStatus == nil {
+			numaLogger.Error(errors.New("UpgradingMonoVertexStatus field nil"), "UpgradingMonoVertexStatus is nil; will default scale to null")
+		} else {
+			originalScaleMinMax = upgradingMonoVertexStatus.OriginalScaleMinMax
+			if originalScaleMinMax == "" {
+				numaLogger.Error(errors.New("OriginalScaleMinMax unset"), "OriginalScaleMinMax is not set; will default scale to null")
+				originalScaleMinMax = "null"
+			}
+		}
 
-	numaLogger.WithValues("originalScaleMinMax", originalScaleMinMax).Debug("updated scale values for upgrading monovertex to desired scale values, completed post-success processing of upgrading monovertex")
+		patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, originalScaleMinMax)
+		if err := kubernetes.PatchResource(ctx, c, upgradingMonoVertexDef, patchJson, k8stypes.MergePatchType); err != nil {
+			return fmt.Errorf("error scaling the existing upgrading monovertex to original values: %w", err)
+		}
 
+		numaLogger.WithValues("originalScaleMinMax", originalScaleMinMax).Debug("updated scale values for upgrading monovertex to desired scale values, completed post-success processing of upgrading monovertex")
+	*/
 	return nil
 }
 
