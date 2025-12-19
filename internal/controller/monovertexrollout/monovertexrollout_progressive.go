@@ -170,9 +170,9 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		if upgradingMonoVertexStatus == nil {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus is nil")
 		}
-		if upgradingMonoVertexStatus.Name != monoVertexDef.GetName() {
+		/*if upgradingMonoVertexStatus.Name != monoVertexDef.GetName() {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus.Name %s != existing monovertex name %s", upgradingMonoVertexStatus.Name, monoVertexDef.GetName())
-		}
+		}*/
 
 		originalScaleDefinition := upgradingMonoVertexStatus.OriginalScaleDefinition
 		// Temporary code for backward compatibility: if OriginalScaleDefinition wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says initially

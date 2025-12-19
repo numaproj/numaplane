@@ -226,9 +226,9 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 		if upgradingPipelineStatus == nil {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus is nil")
 		}
-		if upgradingPipelineStatus.Name != pipelineDef.GetName() {
+		/*if upgradingPipelineStatus.Name != pipelineDef.GetName() {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus.Name %s != existing pipeline name %s", upgradingPipelineStatus.Name, pipelineDef.GetName())
-		}
+		}*/
 
 		// Temporary code for backward compatibility: if OriginalScaleDefinitions wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says
 		// TODO: remove later
