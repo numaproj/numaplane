@@ -89,10 +89,6 @@ func (fpc fakeProgressiveController) ProcessUpgradingChildPostFailure(ctx contex
 	return false, nil
 }
 
-func (fpc fakeProgressiveController) ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error {
-	return nil
-}
-
 func (fpc fakeProgressiveController) ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
 	return false, nil
 }

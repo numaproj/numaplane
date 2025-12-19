@@ -82,9 +82,6 @@ type progressiveController interface {
 	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
-	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
-
 	// SkipProgressiveAssessment checks to see if we should skip progressive assessment for this Rollout
 	SkipProgressiveAssessment(ctx context.Context, rolloutObject ProgressiveRolloutObject) (bool, SkipProgressiveAssessmentReason, error)
 
@@ -772,15 +769,10 @@ func declareSuccess(
 
 	numaLogger := logger.FromContext(ctx)
 
-	err := controller.ProcessUpgradingChildPostSuccess(ctx, rolloutObject, existingUpgradingChildDef, c)
-	if err != nil {
-		return false, err
-	}
-
 	// Label the new child as promoted and then remove the label from the old one
 	numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName()).Debug("replacing 'promoted' child")
 	reasonSuccess := common.LabelValueProgressiveSuccess
-	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
+	err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
