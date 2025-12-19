@@ -931,7 +931,7 @@ func Test_CheckForDifferences(t *testing.T) {
 		from                      *unstructured.Unstructured
 		to                        *unstructured.Unstructured
 		existingChildUpgradeState common.UpgradeState
-		originalScaleDefinition   string // only used when existingChildUpgradeState=trial
+		upgradingMonoVertexStatus *apiv1.UpgradingMonoVertexStatus // only used when existingChildUpgradeState=trial
 		expectedError             bool
 		expectedResult            bool
 	}{
@@ -1017,7 +1017,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			expectedResult:            true,
 		},
 		{
-			name: "ScalesDifferNotUpgrading",
+			name: "Scales Differ - Promoted child",
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
@@ -1045,7 +1045,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			expectedResult:            false, // scale fields are excluded from comparison for promoted children
 		},
 		{
-			name: "UpgradingOriginalScaleMatchesRollout",
+			name: "Scales Match between Upgrading child and Rollout definition",
 			// this is our Upgrading child
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -1078,12 +1078,19 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			},
 			existingChildUpgradeState: common.LabelValueUpgradeTrial,
-			originalScaleDefinition:   `{"min":1,"max":2}`, // original matches rollout
-			expectedError:             false,
-			expectedResult:            false, // no difference because original matches rollout
+			upgradingMonoVertexStatus: &apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name: "test-mv",
+					},
+				},
+				OriginalScaleDefinition: `{"min":1,"max":2}`, // original matches rollout
+			},
+			expectedError:  false,
+			expectedResult: false, // no difference because original matches rollout
 		},
 		{
-			name: "UpgradingOriginalScaleDiffersFromRollout",
+			name: "Scales Differ between Upgrading child and Rollout definition",
 			// this is our Upgrading child
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -1116,12 +1123,19 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			},
 			existingChildUpgradeState: common.LabelValueUpgradeTrial,
-			originalScaleDefinition:   `{"min":1,"max":2}`, // original differs from new rollout
-			expectedError:             false,
-			expectedResult:            true, // difference because original scale != new rollout scale
+			upgradingMonoVertexStatus: &apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name: "test-mv",
+					},
+				},
+				OriginalScaleDefinition: `{"min":1,"max":2}`, // original differs from new rollout
+			},
+			expectedError:  false,
+			expectedResult: true, // difference because original scale != new rollout scale
 		},
 		{
-			name: "UpgradingOriginalScaleNullRolloutHasNoScale",
+			name: "Scales Match between Upgrading child and Rollout definition - neither defined with scale",
 			// this is our Upgrading child
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -1150,12 +1164,19 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			},
 			existingChildUpgradeState: common.LabelValueUpgradeTrial,
-			originalScaleDefinition:   "null", // original had no scale
-			expectedError:             false,
-			expectedResult:            false, // no difference because original (null) matches rollout (no scale)
+			upgradingMonoVertexStatus: &apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name: "test-mv",
+					},
+				},
+				OriginalScaleDefinition: "null", // original had no scale
+			},
+			expectedError:  false,
+			expectedResult: false, // no difference because original (null) matches rollout (no scale)
 		},
 		{
-			name: "UpgradingOriginalScaleNullRolloutHasScale",
+			name: "Scales Differ between Upgrading child and Rollout definition - Upgrading child was not defined with scale",
 			// this is our Upgrading child
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -1188,9 +1209,16 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			},
 			existingChildUpgradeState: common.LabelValueUpgradeTrial,
-			originalScaleDefinition:   "null", // original had no scale, but rollout now has scale
-			expectedError:             false,
-			expectedResult:            true, // difference because original (null) != rollout (has scale)
+			upgradingMonoVertexStatus: &apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name: "test-mv",
+					},
+				},
+				OriginalScaleDefinition: "null", // original had no scale, but rollout now has scale
+			},
+			expectedError:  false,
+			expectedResult: true, // difference because original (null) != rollout (has scale)
 		},
 	}
 
@@ -1227,11 +1255,8 @@ func Test_CheckForDifferences(t *testing.T) {
 			}
 
 			// If comparing to an upgrading child, set up the UpgradingMonoVertexStatus
-			if tt.existingChildUpgradeState == common.LabelValueUpgradeTrial {
-				mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &apiv1.UpgradingMonoVertexStatus{
-					OriginalScaleDefinition: tt.originalScaleDefinition,
-				}
-				mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Name = tt.from.GetName()
+			if tt.upgradingMonoVertexStatus != nil {
+				mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = tt.upgradingMonoVertexStatus
 			}
 
 			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout, tt.existingChildUpgradeState)
