@@ -827,6 +827,8 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      originalScaleDefinition:
+                        type: string
                       originalScaleMinMax:
                         description: |-
                           OriginalScaleMinMax stores the original scale min and max values as JSON string
@@ -1807,6 +1809,10 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      originalScaleDefinitions:
+                        items:
+                          type: string
+                        type: array
                       originalScaleMinMax:
                         description: |-
                           OriginalScaleMinMax stores for each vertex, the original scale min and max values as JSON string

@@ -74,6 +74,8 @@ type UpgradingMonoVertexStatus struct {
 	// Note 'disabled' is a field in numaflow used to represent if scaling is performed by numaflow.
 	// If 'disabled==true", then "min" and "max" probably wouldn't be set, and if they are they'll be ignored.
 	OriginalScaleMinMax string `json:"originalScaleMinMax"`
+
+	OriginalScaleDefinition string `json:"originalScaleDefinition,omitempty"`
 }
 
 // PromotedMonoVertexStatus describes the status of the promoted child

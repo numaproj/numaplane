@@ -18,6 +18,7 @@ package numaflowtypes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -561,6 +562,79 @@ func GetScaleValuesFromPipelineDefinition(ctx context.Context, pipelineDef *unst
 		}
 	}
 	return scaleDefinitions, nil
+}
+
+// GenerateFullScaleDefinitionsFromPipelineMap extracts the full scale definitions from the pipeline map.
+// It returns an array of JSON strings representing the full scale definition for each vertex.
+// The array order matches the order of vertices in the pipeline spec.
+// If a vertex has no scale defined, "null" is returned for that vertex.
+func GenerateFullScaleDefinitionsFromPipelineMap(pipelineMap map[string]interface{}) ([]string, error) {
+	vertices, _, err := unstructured.NestedSlice(pipelineMap, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error getting spec.vertices: %w", err)
+	}
+
+	scaleDefinitions := make([]string, len(vertices))
+
+	for i, vertex := range vertices {
+		vertexAsMap, ok := vertex.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("vertex at index %d is not a map", i)
+		}
+
+		scale, found, err := unstructured.NestedMap(vertexAsMap, "scale")
+		if err != nil {
+			return nil, fmt.Errorf("error getting scale from vertex at index %d: %w", i, err)
+		}
+
+		if !found || scale == nil {
+			scaleDefinitions[i] = "null"
+		} else {
+			jsonBytes, err := json.Marshal(scale)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal scale definition at index %d: %w", i, err)
+			}
+			scaleDefinitions[i] = string(jsonBytes)
+		}
+	}
+
+	return scaleDefinitions, nil
+}
+
+// ApplyFullScaleDefinitionsToPipelineMap applies the full scale definitions to the pipeline map.
+// It takes an array of JSON strings representing the full scale definition for each vertex.
+// The array order must match the order of vertices in the pipeline spec.
+// If the JSON string is empty or "null", the scale field is removed from the vertex.
+func ApplyFullScaleDefinitionsToPipelineMap(pipelineMap map[string]interface{}, scaleDefinitions []string) error {
+	vertices, _, err := unstructured.NestedSlice(pipelineMap, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error getting spec.vertices: %w", err)
+	}
+
+	if len(vertices) != len(scaleDefinitions) {
+		return fmt.Errorf("mismatch between number of vertices (%d) and scale definitions (%d)", len(vertices), len(scaleDefinitions))
+	}
+
+	for i, vertex := range vertices {
+		vertexAsMap, ok := vertex.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("vertex at index %d is not a map", i)
+		}
+
+		scaleDef := scaleDefinitions[i]
+		if scaleDef == "" || scaleDef == "null" {
+			unstructured.RemoveNestedField(vertexAsMap, "scale")
+		} else {
+			var scaleMap map[string]interface{}
+			if err := json.Unmarshal([]byte(scaleDef), &scaleMap); err != nil {
+				return fmt.Errorf("failed to unmarshal scale definition at index %d: %w", i, err)
+			}
+			vertexAsMap["scale"] = scaleMap
+		}
+		vertices[i] = vertexAsMap
+	}
+
+	return unstructured.SetNestedSlice(pipelineMap, vertices, "spec", "vertices")
 }
 
 func ApplyScaleValuesToPipelineDefinition(

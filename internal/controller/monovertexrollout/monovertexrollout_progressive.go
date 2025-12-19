@@ -172,31 +172,10 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		if upgradingMonoVertexStatus.Name != monoVertexDef.GetName() {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus.Name %s != existing monovertex name %s", upgradingMonoVertexStatus.Name, monoVertexDef.GetName())
 		}
-		scaleDef, err := numaflowtypes.JsonStringToScaleDef(upgradingMonoVertexStatus.OriginalScaleMinMax)
-		if err != nil {
-			return false, fmt.Errorf("can't CheckForDifferences: error converting OriginalScaleMinMax to ScaleDefinition: %w", err)
-		}
-		// Apply the original scale values to the 'from' map so we can compare accurately
-		if scaleDef == nil {
-			unstructured.RemoveNestedField(from, "scale")
-		} else {
-			if scaleDef.Min != nil {
-				if err := unstructured.SetNestedField(from, *scaleDef.Min, "scale", "min"); err != nil {
-					return false, err
-				}
-			} else {
-				unstructured.RemoveNestedField(from, "scale", "min")
-			}
-			if scaleDef.Max != nil {
-				if err := unstructured.SetNestedField(from, *scaleDef.Max, "scale", "max"); err != nil {
-					return false, err
-				}
-			} else {
-				unstructured.RemoveNestedField(from, "scale", "max")
-			}
-			if err := unstructured.SetNestedField(from, scaleDef.Disabled, "scale", "disabled"); err != nil {
-				return false, err
-			}
+		// replace the entire scale definition in from["scale"] with upgradingMonoVertexStatus.OriginalScaleDefinition
+		originalScaleDefinition := upgradingMonoVertexStatus.OriginalScaleDefinition
+		if originalScaleDefinition != "" {
+			from["scale"] = originalScaleDefinition
 		}
 	}
 	/*if ignoreProgressiveModifiedFields {

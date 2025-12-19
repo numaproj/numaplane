@@ -230,9 +230,18 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus.Name %s != existing pipeline name %s", upgradingPipelineStatus.Name, pipelineDef.GetName())
 		}
 
-		err := numaflowtypes.ApplyScaleValuesToPipelineDefinition(ctx, pipelineCopy, upgradingPipelineStatus.OriginalScaleMinMax)
+		// Backward compatibility: if OriginalScaleDefinitions wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says
+		if len(upgradingPipelineStatus.OriginalScaleDefinitions) == 0 {
+			originalScaleDefinitions, err := numaflowtypes.GenerateFullScaleDefinitionsFromPipelineMap(pipelineCopy.Object)
+			if err != nil {
+				return false, err
+			}
+			upgradingPipelineStatus.OriginalScaleDefinitions = originalScaleDefinitions
+		}
+
+		err := numaflowtypes.ApplyFullScaleDefinitionsToPipelineMap(pipelineCopy.Object, upgradingPipelineStatus.OriginalScaleDefinitions)
 		if err != nil {
-			return false, fmt.Errorf("can't CheckForDifferences: error applying scale values to pipeline definition: %w", err)
+			return false, err
 		}
 
 		/*removeFunc := func(pipelineDef map[string]interface{}) error {
@@ -504,6 +513,11 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	}
 
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scaleDefinitions
+	originalScaleDefinitions, err := numaflowtypes.GenerateFullScaleDefinitionsFromPipelineMap(upgradingPipelineDef.Object)
+	if err != nil {
+		return false, err
+	}
+	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleDefinitions = originalScaleDefinitions
 
 	err = createScaledDownUpgradingPipelineDef(ctx, pipelineRollout, upgradingPipelineDef)
 	if err != nil {

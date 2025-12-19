@@ -111,6 +111,8 @@ type UpgradingPipelineStatus struct {
 	// Note 'disabled' is a field in numaflow used to represent if scaling is performed by numaflow.
 	// If 'disabled==true", then "min" and "max" probably wouldn't be set, and if they are they'll be ignored.
 	OriginalScaleMinMax []VertexScaleDefinition `json:"originalScaleMinMax,omitempty"`
+
+	OriginalScaleDefinitions []string `json:"originalScaleDefinitions,omitempty"`
 }
 
 // ScaleDefinition is a struct to encapsulate scale values (can be used for a Vertex)

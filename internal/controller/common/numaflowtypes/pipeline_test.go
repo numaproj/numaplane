@@ -1607,3 +1607,118 @@ func Test_CanPipelineIngestData(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateAndApplyFullScaleDefinitions(t *testing.T) {
+	// Pipeline with a mix of vertices:
+	// - "in": scale undefined
+	// - "cat": scale defined but empty (no children)
+	// - "cat-2": scale defined with some fields (min, max)
+	// - "out": scale defined with all fields including disabled
+	pipelineSpec := `
+{
+	"interStepBufferServiceName": "default",
+	"vertices": [
+		{
+			"name": "in",
+			"source": {
+				"generator": {
+					"rpu": 5,
+					"duration": "1s"
+				}
+			}
+		},
+		{
+			"name": "cat",
+			"scale": {},
+			"udf": {
+				"container": {
+					"image": "quay.io/numaio/numaflow-go/map-cat:stable"
+				}
+			}
+		},
+		{
+			"name": "cat-2",
+			"scale": {
+				"min": 2,
+				"max": 10
+			},
+			"udf": {
+				"container": {
+					"image": "quay.io/numaio/numaflow-go/map-cat:stable"
+				}
+			}
+		},
+		{
+			"name": "out",
+			"scale": {
+				"min": 1,
+				"max": 5,
+				"disabled": true,
+				"lookbackSeconds": 120
+			},
+			"sink": {
+				"log": {}
+			}
+		}
+	],
+	"edges": [
+		{"from": "in", "to": "cat"},
+		{"from": "cat", "to": "cat-2"},
+		{"from": "cat-2", "to": "out"}
+	]
+}`
+
+	// Parse the pipeline spec into a map and wrap it in a "spec" key
+	// (to match the structure of pipelineDef.Object)
+	var specMap map[string]interface{}
+	err := json.Unmarshal([]byte(pipelineSpec), &specMap)
+	assert.NoError(t, err)
+
+	originalPipelineMap := map[string]interface{}{
+		"spec": specMap,
+	}
+
+	// Make a deep copy for modification
+	var pipelineMapCopy map[string]interface{}
+	err = util.StructToStruct(originalPipelineMap, &pipelineMapCopy)
+	assert.NoError(t, err)
+
+	// Step 1: Generate full scale definitions from the pipeline map
+	scaleDefinitions, err := GenerateFullScaleDefinitionsFromPipelineMap(originalPipelineMap)
+	assert.NoError(t, err)
+	assert.Len(t, scaleDefinitions, 4, "Expected 4 scale definitions, one per vertex")
+
+	// Verify the scale definitions
+	// Vertex 0 ("in"): no scale defined
+	assert.Equal(t, "null", scaleDefinitions[0], "Vertex 'in' should have null scale")
+
+	// Vertex 1 ("cat"): scale defined but empty
+	var scale1 map[string]interface{}
+	err = json.Unmarshal([]byte(scaleDefinitions[1]), &scale1)
+	assert.NoError(t, err)
+	assert.Empty(t, scale1, "Vertex 'cat' should have empty scale object")
+
+	// Vertex 2 ("cat-2"): scale with min and max
+	var scale2 map[string]interface{}
+	err = json.Unmarshal([]byte(scaleDefinitions[2]), &scale2)
+	assert.NoError(t, err)
+	assert.NotNil(t, scale2["min"], "Vertex 'cat-2' should have min")
+	assert.NotNil(t, scale2["max"], "Vertex 'cat-2' should have max")
+
+	// Vertex 3 ("out"): scale with all fields
+	var scale3 map[string]interface{}
+	err = json.Unmarshal([]byte(scaleDefinitions[3]), &scale3)
+	assert.NoError(t, err)
+	assert.NotNil(t, scale3["min"], "Vertex 'out' should have min")
+	assert.NotNil(t, scale3["max"], "Vertex 'out' should have max")
+	assert.NotNil(t, scale3["disabled"], "Vertex 'out' should have disabled")
+	assert.NotNil(t, scale3["lookbackSeconds"], "Vertex 'out' should have lookbackSeconds")
+
+	// Step 2: Apply the scale definitions back to the copy
+	err = ApplyFullScaleDefinitionsToPipelineMap(pipelineMapCopy, scaleDefinitions)
+	assert.NoError(t, err)
+
+	// Step 3: Verify the original and modified pipeline maps are equal
+	assert.Equal(t, originalPipelineMap, pipelineMapCopy,
+		"Pipeline map should be unchanged after generate and apply round-trip")
+}
