@@ -145,10 +145,11 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 // CheckForDifferences checks to see if the monovertex definition matches the spec and the required metadata
 func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
 	monoVertexDef *unstructured.Unstructured,
 	requiredSpec map[string]interface{},
 	requiredMetadata map[string]interface{},
-	ignoreProgressiveModifiedFields bool) (bool, error) {
+	existingIsUpgrading bool) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	var from, to map[string]interface{}
@@ -160,7 +161,45 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		return false, err
 	}
 
-	if ignoreProgressiveModifiedFields {
+	// If we are comparing to an existing "upgrading" pipeline, we need to re-form its definition from prior to when we
+	// rescaled it for Progressive, in order to effectively compare it to the new desired spec
+	if existingIsUpgrading {
+		monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+		upgradingMonoVertexStatus := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus
+		if upgradingMonoVertexStatus == nil {
+			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus is nil")
+		}
+		if upgradingMonoVertexStatus.Name != monoVertexDef.GetName() {
+			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus.Name %s != existing monovertex name %s", upgradingMonoVertexStatus.Name, monoVertexDef.GetName())
+		}
+		scaleDef, err := numaflowtypes.JsonStringToScaleDef(upgradingMonoVertexStatus.OriginalScaleMinMax)
+		if err != nil {
+			return false, fmt.Errorf("can't CheckForDifferences: error converting OriginalScaleMinMax to ScaleDefinition: %w", err)
+		}
+		// Apply the original scale values to the 'from' map so we can compare accurately
+		if scaleDef == nil {
+			unstructured.RemoveNestedField(from, "scale")
+		} else {
+			if scaleDef.Min != nil {
+				if err := unstructured.SetNestedField(from, *scaleDef.Min, "scale", "min"); err != nil {
+					return false, err
+				}
+			} else {
+				unstructured.RemoveNestedField(from, "scale", "min")
+			}
+			if scaleDef.Max != nil {
+				if err := unstructured.SetNestedField(from, *scaleDef.Max, "scale", "max"); err != nil {
+					return false, err
+				}
+			} else {
+				unstructured.RemoveNestedField(from, "scale", "max")
+			}
+			if err := unstructured.SetNestedField(from, scaleDef.Disabled, "scale", "disabled"); err != nil {
+				return false, err
+			}
+		}
+	}
+	/*if ignoreProgressiveModifiedFields {
 
 		// Remove certain fields (which numaplane needs to set) from comparison to test for equality
 		removeFunc := func(spec map[string]interface{}) error {
@@ -196,7 +235,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 				return false, err
 			}
 		}
-	}
+	}*/
 
 	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
 
@@ -218,7 +257,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 // that would be produced by the Rollout definition.
 // This implements a function of the progressiveController interface
 // In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
-func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, ignoreProgressiveModifiedFields bool) (bool, error) {
+func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingIsUpgrading bool) (bool, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 
 	// In order to effectively compare, we need to create a MonoVertex Definition from the MonoVertexRollout which uses the same name as our current MonoVertex
@@ -229,7 +268,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 	}
 
 	rolloutDefinedMetadata, _ := rolloutBasedMVDef.Object["metadata"].(map[string]interface{})
-	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata, ignoreProgressiveModifiedFields)
+	return r.CheckForDifferences(ctx, monoVertexRollout, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata, existingIsUpgrading)
 }
 
 /*

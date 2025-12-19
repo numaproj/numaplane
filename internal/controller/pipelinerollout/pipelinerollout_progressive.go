@@ -2,7 +2,6 @@ package pipelinerollout
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -268,24 +267,16 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 
 		}
 
-		// Check if the PipelineRollout Source Vertices are set to 0 replicas
-		// If they are, we cannot ignore that
-		requiredPipelineSpec, _ := requiredSpecCopy["spec"].(map[string]interface{})
-		allSourcesScaledToZero, err := numaflowtypes.AllSourceVerticesScaledToZero(ctx, requiredPipelineSpec)
+
+		err := removeFunc(pipelineCopy.Object)
 		if err != nil {
 			return false, err
 		}
-
-		if !allSourcesScaledToZero {
-			err := removeFunc(pipelineCopy.Object)
-			if err != nil {
-				return false, err
-			}
-			err = removeFunc(requiredSpecCopy)
-			if err != nil {
-				return false, err
-			}
+		err = removeFunc(requiredSpecCopy)
+		if err != nil {
+			return false, err
 		}*/
+
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
@@ -806,43 +797,14 @@ func scalePromotedPipelineToOriginalScale(
 				return fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
-			if vertexScaleValues.OriginalScaleMinMax == "null" {
-				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
-					VertexName: vertexName,
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: nil,
-						Max: nil,
-					},
-				}
-			} else {
-				scaleAsMap := map[string]any{}
-				err = json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
-				if err != nil {
-					return fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
-				}
+			scaleDef, err := numaflowtypes.JsonStringToScaleDef(vertexScaleValues.OriginalScaleMinMax)
+			if err != nil {
+				return err
+			}
 
-				var min, max *int64
-				if scaleAsMap["min"] != nil {
-					minInt := int64(scaleAsMap["min"].(float64))
-					min = &minInt
-				}
-				if scaleAsMap["max"] != nil {
-					maxInt := int64(scaleAsMap["max"].(float64))
-					max = &maxInt
-				}
-				disabled := false
-				if scaleAsMap["disabled"] != nil && scaleAsMap["disabled"].(bool) {
-					disabled = true
-				}
-
-				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
-					VertexName: vertexName,
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min:      min,
-						Max:      max,
-						Disabled: disabled,
-					},
-				}
+			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
+				VertexName:      vertexName,
+				ScaleDefinition: scaleDef,
 			}
 		}
 	}

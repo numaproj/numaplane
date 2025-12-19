@@ -1,6 +1,7 @@
 package numaflowtypes
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/util"
@@ -55,4 +56,28 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*apiv1.Sca
 	}
 
 	return &scaleMinMax, nil
+}
+
+// JsonStringToScaleDef converts a JSON string representation of scale values to a ScaleDefinition.
+// If the JSON string is "null", it returns an empty ScaleDefinition.
+func JsonStringToScaleDef(jsonString string) (*apiv1.ScaleDefinition, error) {
+	if jsonString == "null" {
+		return &apiv1.ScaleDefinition{}, nil
+	}
+
+	scaleAsMap := map[string]any{}
+	err := json.Unmarshal([]byte(jsonString), &scaleAsMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal scale JSON: %w", err)
+	}
+
+	scaleDef, err := ExtractScaleMinMax(scaleAsMap, []string{})
+	if err != nil {
+		return nil, err
+	}
+	if scaleDef == nil {
+		scaleDef = &apiv1.ScaleDefinition{}
+	}
+
+	return scaleDef, nil
 }
