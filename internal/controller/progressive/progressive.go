@@ -50,7 +50,7 @@ type progressiveController interface {
 	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// CheckForDifferences determines if the rollout-defined child definition is different from the existing child's definition and also whether the required metadata is present
-	CheckForDifferences(ctx context.Context, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}, ignoreProgressiveModifiedFields bool) (bool, error)
+	CheckForDifferences(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}, ignoreProgressiveModifiedFields bool) (bool, error)
 
 	// CheckForDifferencesWithRolloutDef determines if the rollout-defined child definition is different from the existing child's definition
 	CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, ignoreProgressiveModifiedFields bool) (bool, error)
@@ -611,7 +611,7 @@ func checkForDifferences(
 		return false, err
 	}
 	// now compare the spec from the existing child with the new child, plus verify the desired metadata is present
-	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newChildDef.Object, templatedMetadata, true)
+	childNeedsUpdating, err := controller.CheckForDifferences(ctx, rolloutObject, existingChildDef, newChildDef.Object, templatedMetadata, true)
 	if err != nil {
 		return false, err
 	}

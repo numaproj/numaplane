@@ -205,10 +205,11 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 // CheckForDifferences checks to see if the pipeline definition matches the spec and the required metadata
 func (r *PipelineRolloutReconciler) CheckForDifferences(
 	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
 	pipelineDef *unstructured.Unstructured,
 	requiredSpec map[string]interface{},
 	requiredMetadata map[string]interface{},
-	ignoreProgressiveModifiedFields bool) (bool, error) {
+	existingIsUpgrading bool) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 	pipelineCopy := pipelineDef.DeepCopy()
@@ -218,8 +219,24 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 		return false, fmt.Errorf("failed to deep copy requiredSpec: %w", err)
 	}
 
-	if ignoreProgressiveModifiedFields {
-		removeFunc := func(pipelineDef map[string]interface{}) error {
+	// If we are comparing to an existing "upgrading" pipeline, we need to re-form its definition from prior to when we
+	// rescaled it for Progressive, in order to effectively compare it to the new desired spec
+	if existingIsUpgrading {
+		pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
+		if upgradingPipelineStatus == nil {
+			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus is nil")
+		}
+		if upgradingPipelineStatus.Name != pipelineDef.GetName() {
+			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus.Name %s != existing pipeline name %s", upgradingPipelineStatus.Name, pipelineDef.GetName())
+		}
+
+		err := numaflowtypes.ApplyScaleValuesToPipelineDefinition(ctx, pipelineCopy, upgradingPipelineStatus.OriginalScaleMinMax)
+		if err != nil {
+			return false, fmt.Errorf("can't CheckForDifferences: error applying scale values to pipeline definition: %w", err)
+		}
+
+		/*removeFunc := func(pipelineDef map[string]interface{}) error {
 			// for each Vertex, remove the scale min and max:
 			// However, there is one exception: if the vertex is a source vertex and the user has set max=0, we cannot ignore that
 
@@ -268,7 +285,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 			if err != nil {
 				return false, err
 			}
-		}
+		}*/
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
@@ -289,7 +306,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 // that would be produced by the Rollout definition.
 // This implements a function of the progressiveController interface
 // In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
-func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, ignoreProgressiveModifiedFields bool) (bool, error) {
+func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingIsUpgrading bool) (bool, error) {
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 
@@ -305,7 +322,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 		return false, err
 	}
 	rolloutDefinedMetadata, _ := rolloutBasedPipelineDef.Object["metadata"].(map[string]interface{})
-	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata, ignoreProgressiveModifiedFields)
+	return r.CheckForDifferences(ctx, pipelineRollout, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata, existingIsUpgrading)
 }
 
 /*
