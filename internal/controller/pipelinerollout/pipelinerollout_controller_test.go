@@ -567,68 +567,101 @@ func Test_CheckForDifferences(t *testing.T) {
 		recorder)
 
 	testCases := []struct {
-		name                            string
-		spec1                           string
-		spec2                           string
-		labels1                         map[string]string
-		labels2                         map[string]string
-		annotations1                    map[string]string
-		annotations2                    map[string]string
-		ignoreProgressiveModifiedFields bool
-		expectedNeedsUpdating           bool
-		expectedError                   bool
+		name                     string
+		spec1                    string // existing pipeline spec (from)
+		spec2                    string // rollout definition spec (to)
+		labels1                  map[string]string
+		labels2                  map[string]string
+		annotations1             map[string]string
+		annotations2             map[string]string
+		existingIsUpgrading      bool
+		originalScaleDefinitions []string // only used when existingIsUpgrading is true (one per vertex)
+		expectedNeedsUpdating    bool
+		expectedError            bool
 	}{
 		{
-			name:                            "Equal - just scale different",
-			spec1:                           specNoScale,
-			spec2:                           specWithEmptyScale,
-			ignoreProgressiveModifiedFields: true,
-			expectedNeedsUpdating:           false,
-			expectedError:                   false,
+			name:                  "Equal specs not upgrading",
+			spec1:                 specNoScale,
+			spec2:                 specNoScale,
+			existingIsUpgrading:   false,
+			expectedNeedsUpdating: false,
+			expectedError:         false,
 		},
 		{
-			name:                            "Equal - just scale min/max different (and not equal to 0)",
-			spec1:                           specWithEmptyScale,
-			spec2:                           specWithNonEmptyNonZeroScale,
-			ignoreProgressiveModifiedFields: true,
-			expectedNeedsUpdating:           false,
-			expectedError:                   false,
+			name:                  "Scales differ but this is not an Upgrading child",
+			spec1:                 specNoScale,
+			spec2:                 specWithNonEmptyNonZeroScale,
+			existingIsUpgrading:   false,
+			expectedNeedsUpdating: true, // direct comparison, scales differ
+			expectedError:         false,
 		},
 		{
-			name:                            "Equal - user wants to set scale min/max to 0 which needs to be detected",
-			spec1:                           specWithNonEmptyNonZeroScale,
-			spec2:                           specWithZeroScale,
-			ignoreProgressiveModifiedFields: true,
-			expectedNeedsUpdating:           true,
-			expectedError:                   false,
+			name:                  "Required Labels not Present",
+			spec1:                 specNoScale,
+			spec2:                 specNoScale,
+			labels1:               map[string]string{"app": "test1"},
+			labels2:               map[string]string{"app": "test2"},
+			existingIsUpgrading:   false,
+			expectedNeedsUpdating: true,
+			expectedError:         false,
 		},
 		{
-			name:                            "Required Labels not Present",
-			spec1:                           specNoScale,
-			spec2:                           specNoScale,
-			labels1:                         map[string]string{"app": "test1"},
-			labels2:                         map[string]string{"app": "test2"},
-			ignoreProgressiveModifiedFields: true,
-			expectedNeedsUpdating:           true,
-			expectedError:                   false,
+			name:                  "Required Annotations Present",
+			spec1:                 specNoScale,
+			spec2:                 specNoScale,
+			annotations1:          map[string]string{"key1": "test1"},
+			annotations2:          nil,
+			existingIsUpgrading:   false,
+			expectedNeedsUpdating: false,
+			expectedError:         false,
 		},
 		{
-			name:                            "Required Annotations Present",
-			spec1:                           specNoScale,
-			spec2:                           specNoScale,
-			annotations1:                    map[string]string{"key1": "test1"},
-			annotations2:                    nil,
-			ignoreProgressiveModifiedFields: true,
-			expectedNeedsUpdating:           false,
-			expectedError:                   false,
+			name:  "Upgrading - original scale matches rollout",
+			spec1: specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
+			spec2: specNoScale,                  // rollout definition
+			// this is our Upgrading child
+			existingIsUpgrading: true,
+			// original scale definitions (one per vertex: in, cat, out) - all had no scale originally
+			originalScaleDefinitions: []string{"null", "null", "null"},
+			// this is basically our Rollout definition - also has no scale
+			expectedNeedsUpdating: false, // no difference because original matches rollout
+			expectedError:         false,
 		},
 		{
-			name:                            "Don't ignore progressive modified fields",
-			spec1:                           specNoScale,
-			spec2:                           specWithEmptyScale,
-			ignoreProgressiveModifiedFields: false,
-			expectedNeedsUpdating:           true,
-			expectedError:                   false,
+			name:  "Upgrading - original scale differs from rollout",
+			spec1: specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
+			spec2: specWithZeroScale,            // new rollout definition wants zero scale
+			// this is our Upgrading child
+			existingIsUpgrading: true,
+			// original scale definitions - had non-zero scale
+			originalScaleDefinitions: []string{`{"min":3,"max":5}`, "null", "null"},
+			// this is basically our Rollout definition - wants zero scale
+			expectedNeedsUpdating: true, // difference because original scale != new rollout scale
+			expectedError:         false,
+		},
+		{
+			name:  "Upgrading - original scale null, rollout has scale",
+			spec1: specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
+			spec2: specWithNonEmptyNonZeroScale, // rollout definition has scale
+			// this is our Upgrading child
+			existingIsUpgrading: true,
+			// original scale definitions - all had no scale
+			originalScaleDefinitions: []string{"null", "null", "null"},
+			// this is basically our Rollout definition - has scale
+			expectedNeedsUpdating: true, // difference because original (null) != rollout (has scale)
+			expectedError:         false,
+		},
+		{
+			name:  "Upgrading - original scale matches rollout with scale",
+			spec1: specWithZeroScale,            // current upgrading pipeline (modified by progressive)
+			spec2: specWithNonEmptyNonZeroScale, // rollout definition
+			// this is our Upgrading child
+			existingIsUpgrading: true,
+			// original scale definitions match the rollout
+			originalScaleDefinitions: []string{`{"min":3,"max":5}`, "null", "null"},
+			// this is basically our Rollout definition
+			expectedNeedsUpdating: false, // no difference because original matches rollout
+			expectedError:         false,
 		},
 	}
 
@@ -639,6 +672,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			err := json.Unmarshal([]byte(tc.spec1), &yaml1Spec)
 			assert.NoError(t, err)
 			obj1.Object["spec"] = yaml1Spec
+			obj1.SetName("test-pipeline")
 			if tc.labels1 != nil {
 				obj1.SetLabels(tc.labels1)
 			}
@@ -647,7 +681,6 @@ func Test_CheckForDifferences(t *testing.T) {
 			}
 
 			// Create the RolloutObject with the defined spec and metadata
-
 			pipelineRollout := &apiv1.PipelineRollout{
 				Spec: apiv1.PipelineRolloutSpec{
 					Pipeline: apiv1.Pipeline{
@@ -662,7 +695,15 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			}
 
-			needsUpdating, err := r.CheckForDifferencesWithRolloutDef(context.Background(), obj1, pipelineRollout, tc.ignoreProgressiveModifiedFields)
+			// If existingIsUpgrading, set up the UpgradingPipelineStatus
+			if tc.existingIsUpgrading {
+				pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &apiv1.UpgradingPipelineStatus{
+					OriginalScaleDefinitions: tc.originalScaleDefinitions,
+				}
+				pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Name = obj1.GetName()
+			}
+
+			needsUpdating, err := r.CheckForDifferencesWithRolloutDef(context.Background(), obj1, pipelineRollout, tc.existingIsUpgrading)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {

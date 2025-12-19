@@ -204,7 +204,7 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 // CheckForDifferences checks to see if the pipeline definition matches the spec and the required metadata
 func (r *PipelineRolloutReconciler) CheckForDifferences(
 	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
+	rolloutObject ctlrcommon.RolloutObject,
 	pipelineDef *unstructured.Unstructured,
 	requiredSpec map[string]interface{},
 	requiredMetadata map[string]interface{},
@@ -230,7 +230,8 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus.Name %s != existing pipeline name %s", upgradingPipelineStatus.Name, pipelineDef.GetName())
 		}
 
-		// Backward compatibility: if OriginalScaleDefinitions wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says
+		// Temporary code for backward compatibility: if OriginalScaleDefinitions wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says
+		// TODO: remove later
 		if len(upgradingPipelineStatus.OriginalScaleDefinitions) == 0 {
 			originalScaleDefinitions, err := numaflowtypes.GenerateFullScaleDefinitionsFromPipelineMap(pipelineCopy.Object)
 			if err != nil {

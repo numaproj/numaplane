@@ -50,7 +50,7 @@ type progressiveController interface {
 	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// CheckForDifferences determines if the rollout-defined child definition is different from the existing child's definition and also whether the required metadata is present
-	CheckForDifferences(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}, ignoreProgressiveModifiedFields bool) (bool, error)
+	CheckForDifferences(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}, existingIsUpgrading bool) (bool, error)
 
 	// CheckForDifferencesWithRolloutDef determines if the rollout-defined child definition is different from the existing child's definition
 	CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, ignoreProgressiveModifiedFields bool) (bool, error)

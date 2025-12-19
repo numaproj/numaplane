@@ -2,6 +2,7 @@ package monovertexrollout
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -145,7 +146,7 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 // CheckForDifferences checks to see if the monovertex definition matches the spec and the required metadata
 func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
+	rolloutObject ctlrcommon.RolloutObject,
 	monoVertexDef *unstructured.Unstructured,
 	requiredSpec map[string]interface{},
 	requiredMetadata map[string]interface{},
@@ -172,11 +173,34 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		if upgradingMonoVertexStatus.Name != monoVertexDef.GetName() {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus.Name %s != existing monovertex name %s", upgradingMonoVertexStatus.Name, monoVertexDef.GetName())
 		}
-		// replace the entire scale definition in from["scale"] with upgradingMonoVertexStatus.OriginalScaleDefinition
+
 		originalScaleDefinition := upgradingMonoVertexStatus.OriginalScaleDefinition
-		if originalScaleDefinition != "" {
-			from["scale"] = originalScaleDefinition
+		// Temporary code for backward compatibility: if OriginalScaleDefinition wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says initially
+		// TODO: remove later
+		if originalScaleDefinition == "" {
+			if from["scale"] == nil {
+				originalScaleDefinition = "null"
+			} else {
+				jsonBytes, err := json.Marshal(from["scale"])
+				if err != nil {
+					return false, fmt.Errorf("can't CheckForDifferences: error marshaling scale from monovertex: %w", err)
+				}
+				originalScaleDefinition = string(jsonBytes)
+			}
+			upgradingMonoVertexStatus.OriginalScaleDefinition = originalScaleDefinition
 		}
+
+		// replace the entire scale definition in the Rollout-defined spec with upgradingMonoVertexStatus.OriginalScaleDefinition
+		if originalScaleDefinition == "" || originalScaleDefinition == "null" {
+			delete(from, "scale")
+		} else {
+			var scaleMap map[string]interface{}
+			if err := json.Unmarshal([]byte(originalScaleDefinition), &scaleMap); err != nil {
+				return false, fmt.Errorf("can't CheckForDifferences: error unmarshaling OriginalScaleDefinition: %w", err)
+			}
+			from["scale"] = scaleMap
+		}
+
 	}
 	/*if ignoreProgressiveModifiedFields {
 
@@ -443,6 +467,17 @@ func scaleDownUpgradingMonoVertex(
 	originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
 		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
+	}
+
+	scaleMap := upgradingMonoVertexDef.Object["spec"].(map[string]interface{})["scale"]
+	if scaleMap == nil {
+		monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleDefinition = "null"
+	} else {
+		jsonBytes, err := json.Marshal(scaleMap)
+		if err != nil {
+			return fmt.Errorf("can't scale down upgrading monovertex: error marshaling scale from monovertex: %w", err)
+		}
+		monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleDefinition = string(jsonBytes)
 	}
 
 	// if the new MonoVertex is scaled to zero, we leave that one as is: it's the user's intention that this not be processing any data

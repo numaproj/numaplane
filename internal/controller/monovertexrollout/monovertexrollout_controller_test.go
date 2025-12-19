@@ -926,21 +926,17 @@ func Test_CheckForDifferences(t *testing.T) {
 	ctx := context.Background()
 	numaLogger := logger.FromContext(ctx)
 
-	one := int64(1)
-	two := int64(2)
-	zero := int64(0)
-
 	tests := []struct {
-		name                            string
-		from                            *unstructured.Unstructured
-		to                              *unstructured.Unstructured
-		ignoreProgressiveModifiedFields bool
-		expectedError                   bool
-		expectedResult                  bool
+		name                    string
+		from                    *unstructured.Unstructured
+		to                      *unstructured.Unstructured
+		existingIsUpgrading     bool
+		originalScaleDefinition string // only used when existingIsUpgrading is true
+		expectedError           bool
+		expectedResult          bool
 	}{
 		{
 			name: "ObjectsEqual",
-
 			from: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -963,9 +959,9 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			ignoreProgressiveModifiedFields: true,
-			expectedError:                   false,
-			expectedResult:                  false,
+			existingIsUpgrading: false,
+			expectedError:       false,
+			expectedResult:      false,
 		},
 		{
 			name: "RequiredLabelsNotPresent",
@@ -979,9 +975,9 @@ func Test_CheckForDifferences(t *testing.T) {
 				obj.SetLabels(map[string]string{"key": "value2"})
 				return obj
 			}(),
-			ignoreProgressiveModifiedFields: true,
-			expectedError:                   false,
-			expectedResult:                  true,
+			existingIsUpgrading: false,
+			expectedError:       false,
+			expectedResult:      true,
 		},
 		{
 			name: "RequiredAnnotationsNotPresent",
@@ -994,9 +990,9 @@ func Test_CheckForDifferences(t *testing.T) {
 				obj.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"})
 				return obj
 			}(),
-			ignoreProgressiveModifiedFields: true,
-			expectedError:                   false,
-			expectedResult:                  true,
+			existingIsUpgrading: false,
+			expectedError:       false,
+			expectedResult:      true,
 		},
 		{
 			name: "SpecsDiffer",
@@ -1016,44 +1012,18 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			ignoreProgressiveModifiedFields: true,
-			expectedError:                   false,
-			expectedResult:                  true,
+			existingIsUpgrading: false,
+			expectedError:       false,
+			expectedResult:      true,
 		},
 		{
-			name: "OnlyReplicasDiffer",
-			from: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"spec": map[string]interface{}{
-						"replicas": one,
-						"some_map": map[string]interface{}{
-							"key": "value1",
-						},
-					},
-				},
-			},
-			to: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"spec": map[string]interface{}{
-						"replicas": two,
-						"some_map": map[string]interface{}{
-							"key": "value1",
-						},
-					},
-				},
-			},
-			ignoreProgressiveModifiedFields: true,
-			expectedError:                   false,
-			expectedResult:                  false,
-		},
-		{
-			name: "ScalesDiffer",
+			name: "ScalesDifferNotUpgrading",
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
 						"scale": map[string]interface{}{
-							"min": one,
-							"max": two,
+							"min": int64(1),
+							"max": int64(2),
 						},
 						"some_map": map[string]interface{}{
 							"key": "value1",
@@ -1070,18 +1040,22 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			ignoreProgressiveModifiedFields: true,
-			expectedError:                   false,
-			expectedResult:                  false,
+			existingIsUpgrading: false,
+			expectedError:       false,
+			expectedResult:      true, // scales differ, not upgrading so we compare directly
 		},
 		{
-			name: "ScaleSetToZero",
+			name: "UpgradingOriginalScaleMatchesRollout",
+			// this is our Upgrading child
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "test-mv",
+					},
 					"spec": map[string]interface{}{
 						"scale": map[string]interface{}{
-							"min": one,
-							"max": two,
+							"min": int64(5), // current scale (modified by progressive)
+							"max": int64(5),
 						},
 						"some_map": map[string]interface{}{
 							"key": "value1",
@@ -1089,12 +1063,13 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
+			// this is basically our Rollout definition
 			to: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
 						"scale": map[string]interface{}{
-							"min": zero,
-							"max": zero,
+							"min": int64(1), // rollout definition
+							"max": int64(2),
 						},
 						"some_map": map[string]interface{}{
 							"key": "value1",
@@ -1102,18 +1077,37 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			ignoreProgressiveModifiedFields: true,
-			expectedError:                   false,
-			expectedResult:                  true,
+			existingIsUpgrading:     true,
+			originalScaleDefinition: `{"min":1,"max":2}`, // original matches rollout
+			expectedError:           false,
+			expectedResult:          false, // no difference because original matches rollout
 		},
 		{
-			name: "DontIgnoreProgressiveModifiedFields",
+			name: "UpgradingOriginalScaleDiffersFromRollout",
+			// this is our Upgrading child
 			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "test-mv",
+					},
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(5), // current scale (modified by progressive)
+							"max": int64(5),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			// this is basically our Rollout definition
+			to: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
 						"scale": map[string]interface{}{
-							"min": one,
-							"max": two,
+							"min": int64(3), // new rollout definition
+							"max": int64(4),
 						},
 						"some_map": map[string]interface{}{
 							"key": "value1",
@@ -1121,6 +1115,31 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
+			existingIsUpgrading:     true,
+			originalScaleDefinition: `{"min":1,"max":2}`, // original differs from new rollout
+			expectedError:           false,
+			expectedResult:          true, // difference because original scale != new rollout scale
+		},
+		{
+			name: "UpgradingOriginalScaleNullRolloutHasNoScale",
+			// this is our Upgrading child
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "test-mv",
+					},
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(5), // current scale (modified by progressive)
+							"max": int64(5),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			// this is basically our Rollout definition
 			to: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
@@ -1130,17 +1149,54 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			ignoreProgressiveModifiedFields: false,
-			expectedError:                   false,
-			expectedResult:                  true,
+			existingIsUpgrading:     true,
+			originalScaleDefinition: "null", // original had no scale
+			expectedError:           false,
+			expectedResult:          false, // no difference because original (null) matches rollout (no scale)
+		},
+		{
+			name: "UpgradingOriginalScaleNullRolloutHasScale",
+			// this is our Upgrading child
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "test-mv",
+					},
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(5), // current scale (modified by progressive)
+							"max": int64(5),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			// this is basically our Rollout definition
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(1),
+							"max": int64(2),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			existingIsUpgrading:     true,
+			originalScaleDefinition: "null", // original had no scale, but rollout now has scale
+			expectedError:           false,
+			expectedResult:          true, // difference because original (null) != rollout (has scale)
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reconciler := &MonoVertexRolloutReconciler{}
-
-			// Create the RolloutObject with the defined spec and metadata
 
 			// Extract spec from unstructured object and convert to RawExtension
 			specData, found, err := unstructured.NestedMap(tt.to.Object, "spec")
@@ -1169,7 +1225,16 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			}
-			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout, tt.ignoreProgressiveModifiedFields)
+
+			// If existingIsUpgrading, set up the UpgradingMonoVertexStatus
+			if tt.existingIsUpgrading {
+				mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &apiv1.UpgradingMonoVertexStatus{
+					OriginalScaleDefinition: tt.originalScaleDefinition,
+				}
+				mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Name = tt.from.GetName()
+			}
+
+			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout, tt.existingIsUpgrading)
 
 			if tt.expectedError {
 				assert.Error(t, err)
