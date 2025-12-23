@@ -61,7 +61,7 @@ var (
 		},
 	}
 
-	validUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
+	invalidUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:invalid"
 
 	pipelineSpecSourceRPU      = int64(5)
 	pipelineSpecSourceDuration = metav1.Duration{
@@ -198,11 +198,11 @@ var _ = Describe("Skip Progressive E2E", Serial, func() {
 	})
 })
 
-func updateMonoVertexRolloutImage(initialMonoVertexSpec numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec {
+func generateFailedSpec(initialMonoVertexSpec numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec {
 	By("Updating the MonoVertex Topology to cause a Progressive change")
 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 	updatedMonoVertexSpec.Source.UDTransformer = &numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
-	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = validUDTransformerImage
+	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
 	return updatedMonoVertexSpec
 }
 
@@ -212,9 +212,20 @@ func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec)
 	err := VerifyPromotedMonoVertexRunning(Namespace, monoVertexRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	updatedMonoVertexSpec := updateMonoVertexRolloutImage(initialMonoVertexSpec)
-	updatedMonoVertexSpec = updateFunc(updatedMonoVertexSpec)
+	// update the MonoVertex Rollout with a failed spec
+	updatedMonoVertexSpec := generateFailedSpec(initialMonoVertexSpec)
 	rawSpec, err := json.Marshal(updatedMonoVertexSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
+		return mvr, nil
+	})
+	// give it time to create a new MonoVertex
+	time.Sleep(60 * time.Second)
+
+	// now make sure that we can effectively create a new MonoVertex and cause it to be promoted
+	updatedMonoVertexSpec = updateFunc(updatedMonoVertexSpec)
+	rawSpec, err = json.Marshal(updatedMonoVertexSpec)
 	Expect(err).ShouldNot(HaveOccurred())
 	UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
@@ -224,7 +235,7 @@ func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec)
 		return status.ProgressiveStatus.UpgradingMonoVertexStatus != nil &&
 			status.ProgressiveStatus.UpgradingMonoVertexStatus.ForcedSuccess &&
 			status.ProgressiveStatus.UpgradingMonoVertexStatus.ForcedSuccessReason == string(progressive.SkipProgressiveAssessmentReasonNoDataIngestion) &&
-			status.ProgressiveStatus.UpgradingMonoVertexStatus.Name == GetInstanceName(monoVertexRolloutName, 1)
+			status.ProgressiveStatus.UpgradingMonoVertexStatus.Name == GetInstanceName(monoVertexRolloutName, 2)
 	})
 	DeleteMonoVertexRollout(monoVertexRolloutName)
 }
