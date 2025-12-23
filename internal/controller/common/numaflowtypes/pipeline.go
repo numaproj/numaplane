@@ -583,10 +583,7 @@ func GenerateFullScaleDefinitionsFromPipelineMap(pipelineMap map[string]interfac
 			return nil, fmt.Errorf("vertex at index %d is not a map", i)
 		}
 
-		scale, found, err := unstructured.NestedMap(vertexAsMap, "scale")
-		if err != nil {
-			return nil, fmt.Errorf("error getting scale from vertex at index %d: %w", i, err)
-		}
+		scale, found, _ := unstructured.NestedMap(vertexAsMap, "scale")
 
 		if !found || scale == nil {
 			scaleDefinitions[i] = "null"

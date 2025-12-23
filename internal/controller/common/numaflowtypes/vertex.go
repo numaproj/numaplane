@@ -62,7 +62,7 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*apiv1.Sca
 // If the JSON string is "null", it returns an empty ScaleDefinition.
 func JsonStringToScaleDef(jsonString string) (*apiv1.ScaleDefinition, error) {
 	if jsonString == "null" {
-		return &apiv1.ScaleDefinition{}, nil
+		return nil, nil
 	}
 
 	scaleAsMap := map[string]any{}
