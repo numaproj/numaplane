@@ -254,7 +254,6 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 		// If we are comparing to an existing "promoted" pipeline, we will just ignore scale altogether
 		removeScaleFieldsFunc := func(pipelineDef map[string]interface{}) error {
 			// for each Vertex, remove the scale min and max:
-			// However, there is one exception: if the vertex is a source vertex and the user has set max=0, we cannot ignore that
 
 			vertices, _, _ := unstructured.NestedSlice(pipelineDef, "spec", "vertices")
 
@@ -519,6 +518,9 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	}
 
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scaleDefinitions
+
+	// set the full OriginalScaleDefinition in the UpgradingPipelineStatus as well
+	// (this will enable us to compare the Upgrading child to the Rollout definition to see if there are new updates)
 	originalScaleDefinitions, err := numaflowtypes.GenerateFullScaleDefinitionsFromPipelineMap(upgradingPipelineDef.Object)
 	if err != nil {
 		return false, err
@@ -550,7 +552,7 @@ func createScaledDownUpgradingPipelineDef(
 		return err
 	}
 
-	// if the new Pipeline has all Source Vertices scaled to zero, we leave that one as is: it's the user's intention that this not be processing any data
+	// if the new Pipeline has all Source Vertices scaled to zero, we don't rescale it: it's the user's intention that this not be processing any data
 	allSourcesScaledToZero, err := numaflowtypes.AllSourceVerticesScaledToZero(ctx, upgradingPipelineDef.Object["spec"].(map[string]interface{}))
 	if err != nil {
 		return fmt.Errorf("failed to check pipeline source vertices scaled to zero: %v", err)

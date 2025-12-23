@@ -3,7 +3,6 @@ package monovertexrollout
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -172,10 +171,12 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 		upgradingMonoVertexStatus := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus
 		if upgradingMonoVertexStatus == nil {
-			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus is nil")
+			return false, fmt.Errorf("can't CheckForDifferences for MonoVertexRollout %s/%s: upgradingMonoVertexStatus is nil",
+				monoVertexRollout.Namespace, monoVertexRollout.Name)
 		}
 		if upgradingMonoVertexStatus.Name != monoVertexDef.GetName() {
-			return false, fmt.Errorf("can't CheckForDifferences: upgradingMonoVertexStatus.Name %s != existing monovertex name %s", upgradingMonoVertexStatus.Name, monoVertexDef.GetName())
+			return false, fmt.Errorf("can't CheckForDifferences for MonoVertexRollout %s/%s: upgradingMonoVertexStatus.Name %s != existing monovertex name %s",
+				monoVertexRollout.Namespace, monoVertexRollout.Name, upgradingMonoVertexStatus.Name, monoVertexDef.GetName())
 		}
 
 		originalScaleDefinition := upgradingMonoVertexStatus.OriginalScaleDefinition
@@ -187,7 +188,8 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 			} else {
 				jsonBytes, err := json.Marshal(to["scale"])
 				if err != nil {
-					return false, fmt.Errorf("can't CheckForDifferences: error marshaling scale from monovertex: %w", err)
+					return false, fmt.Errorf("can't CheckForDifferences for MonoVertexRollout %s/%s: error marshaling scale from monovertex: %w",
+						monoVertexRollout.Namespace, monoVertexRollout.Name, err)
 				}
 				originalScaleDefinition = string(jsonBytes)
 			}
@@ -201,7 +203,8 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		} else {
 			var scaleMap map[string]interface{}
 			if err := json.Unmarshal([]byte(originalScaleDefinition), &scaleMap); err != nil {
-				return false, fmt.Errorf("can't CheckForDifferences: error unmarshaling OriginalScaleDefinition: %w", err)
+				return false, fmt.Errorf("can't CheckForDifferences for MonoVertexRollout %s/%s: error unmarshaling OriginalScaleDefinition: %w",
+					monoVertexRollout.Namespace, monoVertexRollout.Name, err)
 			}
 			from["scale"] = scaleMap
 		}
@@ -225,24 +228,15 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 
 			return nil
 		}
-
-		// Check if the MonoVertexRollout is set to 0 replicas
-		// If it is, we cannot ignore that
-		maxInterface, maxFound, _ := unstructured.NestedFieldNoCopy(to, "scale", "max")
-		maxValue, maxValid := util.ToInt64(maxInterface)
-		hasMaxZero := maxFound && maxValid && maxValue == 0
-
-		// if it's not set to 0, then go ahead and remove the scale fields from the comparison
-		if !hasMaxZero {
-			err := removeScaleFieldsFunc(from)
-			if err != nil {
-				return false, err
-			}
-			err = removeScaleFieldsFunc(to)
-			if err != nil {
-				return false, err
-			}
+		err := removeScaleFieldsFunc(from)
+		if err != nil {
+			return false, err
 		}
+		err = removeScaleFieldsFunc(to)
+		if err != nil {
+			return false, err
+		}
+
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
@@ -307,11 +301,13 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	numaLogger.Debug("started pre-upgrade processing of promoted monovertex")
 	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
 	if !ok {
-		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted monovertex pre-upgrade", rolloutObject)
+		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject in namespace %s: %+v; can't process promoted monovertex pre-upgrade",
+			promotedMonoVertexDef.GetNamespace(), rolloutObject)
 	}
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
-		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
+		return true, fmt.Errorf("unable to perform pre-upgrade operations for MonoVertexRollout %s/%s because the rollout does not have promotedChildStatus set",
+			monoVertexRollout.Namespace, monoVertexRollout.Name)
 	}
 
 	requeue, err := computePromotedMonoVertexScaleValues(ctx, monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus, promotedMonoVertexDef, c)
@@ -338,17 +334,20 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 
 	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
 	if !ok {
-		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted monovertex post-upgrade", rolloutObject)
+		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject in namespace %s: %+v; can't process promoted monovertex post-upgrade",
+			promotedMonoVertexDef.GetNamespace(), rolloutObject)
 	}
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
-		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
+		return true, fmt.Errorf("unable to perform post-upgrade operations for MonoVertexRollout %s/%s because the rollout does not have promotedChildStatus set",
+			monoVertexRollout.Namespace, monoVertexRollout.Name)
 	}
 
 	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
 	for _, scaleValue := range monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues {
 		if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &scaleValue.ScaleTo, Max: &scaleValue.ScaleTo, Disabled: false}, c); err != nil {
-			return true, fmt.Errorf("error scaling the existing promoted monovertex to the desired scale values: %w", err)
+			return true, fmt.Errorf("error scaling the existing promoted monovertex %s/%s to the desired scale values: %w",
+				promotedMonoVertexDef.GetNamespace(), promotedMonoVertexDef.GetName(), err)
 		}
 
 		numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef, "scaleTo", scaleValue.ScaleTo).Debug("patched the promoted monovertex with the new scale configuration")
@@ -441,7 +440,8 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	numaLogger.Debug("started pre-upgrade processing of upgrading monovertex")
 	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
 	if !ok {
-		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex pre-upgrade", rolloutObject)
+		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject in namespace %s: %+v; can't process upgrading monovertex pre-upgrade",
+			upgradingMonoVertexDef.GetNamespace(), rolloutObject)
 	}
 
 	err := scaleDownUpgradingMonoVertex(ctx, monoVertexRollout, upgradingMonoVertexDef)
@@ -466,33 +466,39 @@ func scaleDownUpgradingMonoVertex(
 	// Update the scale values of the Upgrading Child, but first save the original scale values
 	originalScaleMinMaxString, err := progressive.ExtractScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
-		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex as string: %w", err)
+		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex %s/%s as string: %w",
+			upgradingMonoVertexDef.GetNamespace(), upgradingMonoVertexDef.GetName(), err)
 	}
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax = originalScaleMinMaxString
 	originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
-		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
+		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex %s/%s: %w",
+			upgradingMonoVertexDef.GetNamespace(), upgradingMonoVertexDef.GetName(), err)
 	}
 
+	// set the full OriginalScaleDefinition in the UpgradingMonoVertexStatus as well
+	// (this will enable us to compare the Upgrading child to the Rollout definition to see if there are new updates)
 	scaleMap := upgradingMonoVertexDef.Object["spec"].(map[string]interface{})["scale"]
 	if scaleMap == nil {
 		monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleDefinition = "null"
 	} else {
 		jsonBytes, err := json.Marshal(scaleMap)
 		if err != nil {
-			return fmt.Errorf("can't scale down upgrading monovertex: error marshaling scale from monovertex: %w", err)
+			return fmt.Errorf("can't scale down upgrading monovertex %s/%s: error marshaling scale from monovertex: %w",
+				upgradingMonoVertexDef.GetNamespace(), upgradingMonoVertexDef.GetName(), err)
 		}
 		monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleDefinition = string(jsonBytes)
 	}
 
-	// if the new MonoVertex is scaled to zero, we leave that one as is: it's the user's intention that this not be processing any data
+	// if the new MonoVertex is scaled to zero, we don't rescale it: it's the user's intention that this not be processing any data
 	if originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max == 0 {
 		numaLogger.Debug("upgrading monovertex is scaled to zero, so no need to scale down")
 		return nil
 	}
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
-		return errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
+		return fmt.Errorf("unable to perform pre-upgrade operations for MonoVertexRollout %s/%s because the rollout does not have promotedChildStatus set",
+			monoVertexRollout.Namespace, monoVertexRollout.Name)
 	}
 
 	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
@@ -513,17 +519,20 @@ func scaleDownUpgradingMonoVertex(
 
 		err := unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "min")
 		if err != nil {
-			return err
+			return fmt.Errorf("error setting scale.min for upgrading monovertex %s/%s: %w",
+				upgradingMonoVertexDef.GetNamespace(), upgradingMonoVertexDef.GetName(), err)
 		}
 
 		err = unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "max")
 		if err != nil {
-			return err
+			return fmt.Errorf("error setting scale.max for upgrading monovertex %s/%s: %w",
+				upgradingMonoVertexDef.GetNamespace(), upgradingMonoVertexDef.GetName(), err)
 		}
 
 		err = unstructured.SetNestedField(upgradingMonoVertexDef.Object, false, "spec", "scale", "disabled")
 		if err != nil {
-			return err
+			return fmt.Errorf("error setting scale.disabled for upgrading monovertex %s/%s: %w",
+				upgradingMonoVertexDef.GetNamespace(), upgradingMonoVertexDef.GetName(), err)
 		}
 	}
 	return nil
@@ -584,11 +593,13 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 
 	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
 	if !ok {
-		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted monovertex post-upgrade", rolloutObject)
+		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject in namespace %s: %+v; can't process promoted monovertex post-failure",
+			promotedMonoVertexDef.GetNamespace(), rolloutObject)
 	}
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
-		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
+		return true, fmt.Errorf("unable to perform post-failure operations for MonoVertexRollout %s/%s because the rollout does not have promotedChildStatus set",
+			monoVertexRollout.Namespace, monoVertexRollout.Name)
 	}
 
 	err := scalePromotedMonoVertexToOriginalValues(ctx, monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus, promotedMonoVertexDef, c)
@@ -596,7 +607,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 		return true, err
 	}
 
-	numaLogger.Debug("completed post-upgrade processing of promoted monovertex")
+	numaLogger.Debug("completed post-failure processing of promoted monovertex")
 
 	return false, nil
 }
@@ -644,7 +655,8 @@ func computePromotedMonoVertexScaleValues(
 
 	originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(promotedMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
-		return true, fmt.Errorf("cannot extract the scale min and max values from the promoted monovertex: %w", err)
+		return true, fmt.Errorf("cannot extract the scale min and max values from the promoted monovertex %s/%s: %w",
+			promotedMonoVertexDef.GetNamespace(), promotedMonoVertexDef.GetName(), err)
 	}
 
 	scaleTo := progressive.CalculateScaleMinMaxValues(int(currentPodsCount))
@@ -707,13 +719,15 @@ func scalePromotedMonoVertexToOriginalValues(
 	}
 
 	if promotedMVStatus.ScaleValues == nil {
-		return errors.New("unable to restore scale values for the promoted monovertex because the rollout does not have promotedChildStatus scaleValues set")
+		return fmt.Errorf("unable to restore scale values for the promoted monovertex %s/%s because the rollout does not have promotedChildStatus scaleValues set",
+			promotedMonoVertexDef.GetNamespace(), promotedMonoVertexDef.GetName())
 	}
 
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, promotedMVStatus.ScaleValues[promotedMonoVertexDef.GetName()].OriginalScaleMinMax)
 
 	if err := kubernetes.PatchResource(ctx, c, promotedMonoVertexDef, patchJson, k8stypes.MergePatchType); err != nil {
-		return fmt.Errorf("error scaling the existing promoted monovertex to original values: %w", err)
+		return fmt.Errorf("error scaling the existing promoted monovertex %s/%s to original values: %w",
+			promotedMonoVertexDef.GetNamespace(), promotedMonoVertexDef.GetName(), err)
 	}
 
 	numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef).Debug("patched the promoted monovertex with the original scale configuration")
