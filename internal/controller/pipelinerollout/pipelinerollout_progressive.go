@@ -301,7 +301,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
 	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
-		specsEqual, labelsFound, annotationsFound, pipelineCopy.Object["spec"], requiredSpecCopy, requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
+		specsEqual, labelsFound, annotationsFound, pipelineCopy.Object["spec"], requiredSpecCopy["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
 
 	return !specsEqual || !labelsFound || !annotationsFound, nil
 }
