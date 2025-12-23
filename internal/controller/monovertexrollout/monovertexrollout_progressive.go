@@ -181,10 +181,10 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		// Temporary code for backward compatibility: if OriginalScaleDefinition wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says initially
 		// TODO: remove later
 		if originalScaleDefinition == "" {
-			if from["scale"] == nil {
+			if to["scale"] == nil {
 				originalScaleDefinition = "null"
 			} else {
-				jsonBytes, err := json.Marshal(from["scale"])
+				jsonBytes, err := json.Marshal(to["scale"])
 				if err != nil {
 					return false, fmt.Errorf("can't CheckForDifferences: error marshaling scale from monovertex: %w", err)
 				}

@@ -236,7 +236,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 		// Temporary code for backward compatibility: if OriginalScaleDefinitions wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says
 		// TODO: remove later
 		if len(upgradingPipelineStatus.OriginalScaleDefinitions) == 0 {
-			originalScaleDefinitions, err := numaflowtypes.GenerateFullScaleDefinitionsFromPipelineMap(pipelineCopy.Object)
+			originalScaleDefinitions, err := numaflowtypes.GenerateFullScaleDefinitionsFromPipelineMap(requiredSpec)
 			if err != nil {
 				return false, err
 			}
