@@ -223,7 +223,8 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 
 	// If we are comparing to an existing "upgrading" pipeline, we need to re-form its definition from prior to when we
 	// rescaled it for Progressive, in order to effectively compare it to the new desired spec
-	if existingChildUpgradeState == common.LabelValueUpgradeTrial {
+	switch existingChildUpgradeState {
+	case common.LabelValueUpgradeTrial:
 		pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
 		if upgradingPipelineStatus == nil {
@@ -240,6 +241,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 			if err != nil {
 				return false, err
 			}
+			numaLogger.Debugf("OriginalScaleDefinitions not found in existing PipelineRollout status, setting OriginalScaleDefinitions to %v", originalScaleDefinitions)
 			upgradingPipelineStatus.OriginalScaleDefinitions = originalScaleDefinitions
 		}
 
@@ -247,7 +249,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 		if err != nil {
 			return false, err
 		}
-	} else if existingChildUpgradeState == common.LabelValueUpgradePromoted {
+	case common.LabelValueUpgradePromoted:
 
 		// If we are comparing to an existing "promoted" pipeline, we will just ignore scale altogether
 		removeScaleFieldsFunc := func(pipelineDef map[string]interface{}) error {

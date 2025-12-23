@@ -167,7 +167,8 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 
 	// If we are comparing to an existing "upgrading" monovertex, we need to re-form its definition from prior to when we
 	// rescaled it for Progressive, in order to effectively compare it to the new desired spec
-	if existingChildUpgradeState == common.LabelValueUpgradeTrial {
+	switch existingChildUpgradeState {
+	case common.LabelValueUpgradeTrial:
 		monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 		upgradingMonoVertexStatus := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus
 		if upgradingMonoVertexStatus == nil {
@@ -205,7 +206,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 			from["scale"] = scaleMap
 		}
 
-	} else if existingChildUpgradeState == common.LabelValueUpgradePromoted {
+	case common.LabelValueUpgradePromoted:
 
 		// If we are comparing to an existing "promoted" monovertex, we will just ignore scale altogether
 
