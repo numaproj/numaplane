@@ -61,11 +61,7 @@ var (
 		},
 	}
 
-<<<<<<< HEAD
 	invalidUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:invalid"
-=======
-	validUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
->>>>>>> origin/main
 
 	pipelineSpecSourceRPU      = int64(5)
 	pipelineSpecSourceDuration = metav1.Duration{
