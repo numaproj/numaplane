@@ -190,11 +190,12 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 				}
 				originalScaleDefinition = string(jsonBytes)
 			}
+			numaLogger.Debugf("OriginalScaleDefinition not found in existing MonoVertexRollout status, setting OriginalScaleDefinition to %s", originalScaleDefinition)
 			upgradingMonoVertexStatus.OriginalScaleDefinition = originalScaleDefinition
 		}
 
 		// replace the entire scale definition in the Rollout-defined spec with upgradingMonoVertexStatus.OriginalScaleDefinition
-		if originalScaleDefinition == "" || originalScaleDefinition == "null" {
+		if originalScaleDefinition == "null" {
 			delete(from, "scale")
 		} else {
 			var scaleMap map[string]interface{}

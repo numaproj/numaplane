@@ -623,7 +623,7 @@ func ApplyFullScaleDefinitionsToPipelineMap(pipelineMap map[string]interface{}, 
 		}
 
 		scaleDef := scaleDefinitions[i]
-		if scaleDef == "" || scaleDef == "null" {
+		if scaleDef == "null" {
 			unstructured.RemoveNestedField(vertexAsMap, "scale")
 		} else {
 			var scaleMap map[string]interface{}
