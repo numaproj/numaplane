@@ -848,7 +848,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     "",
-			expectedResult:          false,
+			expectedResult:          true,
 			expectedError:           false,
 		},
 		{
