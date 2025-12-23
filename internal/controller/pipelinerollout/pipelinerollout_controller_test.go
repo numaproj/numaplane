@@ -407,51 +407,7 @@ var specNoScale = `
 }
 `
 
-var specWithEmptyScale = `
-{
-	  "interStepBufferServiceName": "default",
-	  "vertices": [
-		{
-		  "name": "in",
-	  	  "scale": {},
-		  "source": {
-			"generator": {
-			  "rpu": 5,
-			  "duration": "1s"
-			}
-		  }
-		},
-		{
-		  "name": "cat",
-		  "udf": {
-			"container": {
-				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
-				"imagePullPolicy": "Always,"
-			}
-		  }
-		},
-		{
-		  "name": "out",
-		  "sink": {
-			"log": {}
-		  }
-		}
-	  ],
-	  "edges": [
-		{
-		  "from": "in",
-		  "to": "cat"
-		},
-		{
-		  "from": "cat",
-		  "to": "out"
-		}
-	  ]
-	
-}
-`
-
-var specWithNonEmptyScale = `
+var specWithNonEmptyNonZeroScale = `
 {
 	  "interStepBufferServiceName": "default",
 	  "vertices": [
@@ -498,6 +454,61 @@ var specWithNonEmptyScale = `
 }
 `
 
+var specWithZeroScale = `
+{
+	  "interStepBufferServiceName": "default",
+	  "vertices": [
+		{
+		  "name": "in",
+	      "scale": {
+		    "min": 0,
+	        "max": 0
+	      },
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+	      "scale": {
+		    "min": 0,
+	        "max": 0
+	      },
+		  "udf": {
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+	      "scale": {
+		    "min": 0,
+	        "max": 0
+	      },
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
 func Test_CheckForDifferences(t *testing.T) {
 
 	_, _, client, _, err := commontest.PrepareK8SEnvironment()
@@ -512,47 +523,93 @@ func Test_CheckForDifferences(t *testing.T) {
 		recorder)
 
 	testCases := []struct {
-		name                  string
-		spec1                 string
-		spec2                 string
-		labels1               map[string]string
-		labels2               map[string]string
-		annotations1          map[string]string
-		annotations2          map[string]string
-		expectedNeedsUpdating bool
-		expectedError         bool
+		name                      string
+		from                      string // existing pipeline spec
+		to                        string // rollout definition spec
+		labels1                   map[string]string
+		labels2                   map[string]string
+		annotations1              map[string]string
+		annotations2              map[string]string
+		existingChildUpgradeState common.UpgradeState
+		originalScaleDefinitions  []string // only used when existingChildUpgradeState=trial
+		expectedNeedsUpdating     bool
+		expectedError             bool
 	}{
 		{
-			name:                  "Equal - just scale different",
-			spec1:                 specNoScale,
-			spec2:                 specWithEmptyScale,
-			expectedNeedsUpdating: false,
-			expectedError:         false,
+			name:                      "Equal specs",
+			from:                      specNoScale,
+			to:                        specNoScale,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedNeedsUpdating:     false,
+			expectedError:             false,
 		},
 		{
-			name:                  "Equal - just scale min/max different",
-			spec1:                 specWithEmptyScale,
-			spec2:                 specWithNonEmptyScale,
-			expectedNeedsUpdating: false,
-			expectedError:         false,
+			name:                      "Scales differ - comparison to a promoted child",
+			from:                      specNoScale,
+			to:                        specWithNonEmptyNonZeroScale,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedNeedsUpdating:     false, // scale fields are excluded from comparison for promoted children
+			expectedError:             false,
 		},
 		{
-			name:                  "Required Labels not Present",
-			spec1:                 specNoScale,
-			spec2:                 specNoScale,
-			labels1:               map[string]string{"app": "test1"},
-			labels2:               map[string]string{"app": "test2"},
-			expectedNeedsUpdating: true,
-			expectedError:         false,
+			name:                      "Required Labels not Present",
+			from:                      specNoScale,
+			to:                        specNoScale,
+			labels1:                   map[string]string{"app": "test1"},
+			labels2:                   map[string]string{"app": "test2"},
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedNeedsUpdating:     true,
+			expectedError:             false,
 		},
 		{
-			name:                  "Required Annotations Present",
-			spec1:                 specNoScale,
-			spec2:                 specNoScale,
-			annotations1:          map[string]string{"key1": "test1"},
-			annotations2:          nil,
-			expectedNeedsUpdating: false,
-			expectedError:         false,
+			name:                      "Required Annotations Present",
+			from:                      specNoScale,
+			to:                        specNoScale,
+			annotations1:              map[string]string{"key1": "test1"},
+			annotations2:              nil,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedNeedsUpdating:     false,
+			expectedError:             false,
+		},
+		{
+			name:                      "Comparison to Upgrading child - original scale matches rollout",
+			from:                      specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
+			to:                        specNoScale,                  // rollout definition (no scale)
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			// original scale definitions (one per vertex: in, cat, out) - all had no scale originally
+			originalScaleDefinitions: []string{"null", "null", "null"},
+			expectedNeedsUpdating:    false, // no difference because original matches rollout
+			expectedError:            false,
+		},
+		{
+			name:                      "Upgrading - original scale differs from rollout",
+			from:                      specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
+			to:                        specWithZeroScale,            // rollout definition (zero scale)
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			// original scale definitions - had non-zero scale
+			originalScaleDefinitions: []string{`{"min":3,"max":5}`, "null", "null"},
+			expectedNeedsUpdating:    true, // difference because original scale != new rollout scale
+			expectedError:            false,
+		},
+		{
+			name:                      "Upgrading - original scale null, rollout has scale",
+			from:                      specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
+			to:                        specWithNonEmptyNonZeroScale, // rollout definition (has scale)
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			// original scale definitions - all had no scale
+			originalScaleDefinitions: []string{"null", "null", "null"},
+			expectedNeedsUpdating:    true, // difference because original (null) != rollout (has scale)
+			expectedError:            false,
+		},
+		{
+			name:                      "Upgrading - original scale matches rollout with scale",
+			from:                      specWithZeroScale,            // current upgrading pipeline (modified by progressive)
+			to:                        specWithNonEmptyNonZeroScale, // rollout definition (has scale)
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			// original scale definitions match the rollout
+			originalScaleDefinitions: []string{`{"min":3,"max":5}`, "null", "null"},
+			expectedNeedsUpdating:    false, // no difference because original matches rollout
+			expectedError:            false,
 		},
 	}
 
@@ -560,9 +617,10 @@ func Test_CheckForDifferences(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			obj1 := &unstructured.Unstructured{Object: make(map[string]interface{})}
 			var yaml1Spec map[string]interface{}
-			err := json.Unmarshal([]byte(tc.spec1), &yaml1Spec)
+			err := json.Unmarshal([]byte(tc.from), &yaml1Spec)
 			assert.NoError(t, err)
 			obj1.Object["spec"] = yaml1Spec
+			obj1.SetName("test-pipeline")
 			if tc.labels1 != nil {
 				obj1.SetLabels(tc.labels1)
 			}
@@ -571,12 +629,11 @@ func Test_CheckForDifferences(t *testing.T) {
 			}
 
 			// Create the RolloutObject with the defined spec and metadata
-
 			pipelineRollout := &apiv1.PipelineRollout{
 				Spec: apiv1.PipelineRolloutSpec{
 					Pipeline: apiv1.Pipeline{
 						Spec: runtime.RawExtension{
-							Raw: []byte(tc.spec2),
+							Raw: []byte(tc.to),
 						},
 						Metadata: apiv1.Metadata{
 							Annotations: tc.annotations2,
@@ -586,7 +643,15 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			}
 
-			needsUpdating, err := r.CheckForDifferencesWithRolloutDef(context.Background(), obj1, pipelineRollout)
+			// If comparing to an upgrading child, set up the UpgradingPipelineStatus
+			if tc.existingChildUpgradeState == common.LabelValueUpgradeTrial {
+				pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &apiv1.UpgradingPipelineStatus{
+					OriginalScaleDefinitions: tc.originalScaleDefinitions,
+				}
+				pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Name = obj1.GetName()
+			}
+
+			needsUpdating, err := r.CheckForDifferencesWithRolloutDef(context.Background(), obj1, pipelineRollout, tc.existingChildUpgradeState)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -794,10 +859,6 @@ func createDefaultTestPipeline(phase numaflowv1.PipelinePhase) *numaflowv1.Pipel
 	return ctlrcommon.CreateTestPipelineOfSpec(runningPipelineSpec, ctlrcommon.DefaultTestPipelineName, phase, numaflowv1.Status{}, false,
 		map[string]string{"numaplane.numaproj.io/isbsvc-name": ctlrcommon.DefaultTestISBSvcRolloutName, "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"},
 		map[string]string{})
-}
-
-func createPipeline(phase numaflowv1.PipelinePhase, status numaflowv1.Status, drainedOnPause bool, labels map[string]string, annotations map[string]string) *numaflowv1.Pipeline {
-	return ctlrcommon.CreateTestPipelineOfSpec(runningPipelineSpec, ctlrcommon.DefaultTestPipelineName, phase, status, drainedOnPause, labels, annotations)
 }
 
 func withInterstepBufferService(origPipelineSpec numaflowv1.PipelineSpec, isbsvc string) numaflowv1.PipelineSpec {
@@ -1095,348 +1156,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	}
 }
 
-// process an existing pipeline in this test, the user preferred strategy is Progressive
-func Test_processExistingPipeline_Progressive(t *testing.T) {
-	numaLogger := logger.New()
-	numaLogger.SetLevel(4)
-	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
-	assert.Nil(t, err)
-	assert.Nil(t, kubernetes.SetClientSets(restConfig))
-
-	getwd, err := os.Getwd()
-	assert.Nil(t, err, "Failed to get working directory")
-	configPath := filepath.Join(getwd, "../../../", "tests", "config")
-	configManager := config.GetConfigManagerInstance()
-	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
-	assert.NoError(t, err)
-
-	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
-		"pipeline": config.USDEResourceConfig{
-			DataLoss: []config.SpecField{{Path: "spec.vertices", IncludeSubfields: true}},
-		},
-	})
-	ctx := context.Background()
-
-	// other tests may call this, but it fails if called more than once
-	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
-	}
-
-	recorder := record.NewFakeRecorder(64)
-
-	r := NewPipelineRolloutReconciler(
-		client,
-		scheme.Scheme,
-		ctlrcommon.TestCustomMetrics,
-		recorder)
-
-	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
-
-	defaultPromotedPipelineDef := createPipeline(
-		numaflowv1.PipelinePhaseRunning,
-		numaflowv1.Status{},
-		false,
-		map[string]string{
-			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-			common.LabelKeyProgressiveResultState:         string(common.LabelValueResultStateSucceeded),
-		},
-		map[string]string{
-			common.AnnotationKeyRequiresDrain: "true",
-		})
-
-	defaultUpgradingPipelineDef := ctlrcommon.CreateTestPipelineOfSpec(
-		runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
-		numaflowv1.PipelinePhaseRunning,
-		numaflowv1.Status{
-			Conditions: []metav1.Condition{
-				{
-					Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
-					Status: metav1.ConditionTrue,
-				},
-			},
-		},
-		false,
-		map[string]string{
-			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeTrial),
-			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-		},
-		map[string]string{
-			common.AnnotationKeyRequiresDrain: "true",
-		})
-
-	defaultFailedUpgradingPipelineDef := defaultUpgradingPipelineDef.DeepCopy()
-	defaultFailedUpgradingPipelineDef.Status.Conditions = []metav1.Condition{
-		{
-			Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
-			Status: metav1.ConditionFalse,
-		},
-	}
-	defaultPromotedChildStatus := &apiv1.PromotedPipelineStatus{
-		PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-			PromotedChildStatus: apiv1.PromotedChildStatus{
-				Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
-			},
-			ScaleValues: map[string]apiv1.ScaleValues{
-				"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-				"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-				"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-			},
-		},
-	}
-
-	successfulUpgradingChildStatus := &apiv1.UpgradingPipelineStatus{
-		UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-			UpgradingChildStatus: apiv1.UpgradingChildStatus{
-				Name:                     ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-				BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-				BasicAssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-				AssessmentResult:         apiv1.AssessmentResultSuccess,
-				InitializationComplete:   true,
-			},
-		},
-		OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
-			{VertexName: "in", ScaleDefinition: nil},
-			{VertexName: "cat", ScaleDefinition: nil},
-			{VertexName: "cat-2", ScaleDefinition: nil},
-			{VertexName: "out", ScaleDefinition: nil},
-		},
-	}
-	failedUpgradingChildStatus := successfulUpgradingChildStatus.DeepCopy()
-	failedUpgradingChildStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
-
-	testCases := []struct {
-		name                        string
-		newPipelineSpec             numaflowv1.PipelineSpec
-		existingPromotedPipelineDef *numaflowv1.Pipeline
-		existingUpgradePipelineDef  *numaflowv1.Pipeline
-		initialRolloutPhase         apiv1.Phase
-		initialRolloutNameCount     int
-		initialInProgressStrategy   *apiv1.UpgradeStrategy
-		initialUpgradingChildStatus *apiv1.UpgradingPipelineStatus
-		initialPromotedChildStatus  *apiv1.PromotedPipelineStatus
-
-		expectedInProgressStrategy apiv1.UpgradeStrategy
-		expectedRolloutPhase       apiv1.Phase
-
-		expectedPipelines            map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
-		expectedPipelinesResultState map[string]common.ResultState
-	}{
-		{
-			name:                        "Progressive deployed successfully",
-			newPipelineSpec:             pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: defaultPromotedPipelineDef,
-			existingUpgradePipelineDef:  defaultUpgradingPipelineDef,
-			initialRolloutPhase:         apiv1.PhasePending,
-			initialRolloutNameCount:     2,
-			initialInProgressStrategy:   &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: successfulUpgradingChildStatus,
-			initialPromotedChildStatus:  defaultPromotedChildStatus,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:        apiv1.PhaseDeployed,
-
-			expectedPipelines: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
-			},
-
-			expectedPipelinesResultState: map[string]common.ResultState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueResultStateSucceeded,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateSucceeded,
-			},
-		},
-		{
-			name:                        "Progressive deployment failed",
-			newPipelineSpec:             pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: defaultPromotedPipelineDef,
-			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
-			initialRolloutPhase:         apiv1.PhasePending,
-			initialRolloutNameCount:     2,
-			initialInProgressStrategy:   &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: failedUpgradingChildStatus,
-			initialPromotedChildStatus:  defaultPromotedChildStatus,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:        apiv1.PhasePending,
-
-			expectedPipelines: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeTrial,
-			},
-
-			expectedPipelinesResultState: map[string]common.ResultState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueResultStateSucceeded,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateFailed,
-			},
-		},
-		{
-			name:                        "Progressive deployment failed - going back to original spec",
-			newPipelineSpec:             pipelineSpec, // this matches the original spec
-			existingPromotedPipelineDef: defaultPromotedPipelineDef,
-			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
-			initialRolloutPhase:         apiv1.PhasePending,
-			initialRolloutNameCount:     2,
-			initialInProgressStrategy:   &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: failedUpgradingChildStatus,
-			initialPromotedChildStatus:  defaultPromotedChildStatus,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:        apiv1.PhaseDeployed,
-
-			expectedPipelines: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
-			},
-
-			expectedPipelinesResultState: map[string]common.ResultState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueResultStateSucceeded,
-			},
-		},
-		{
-			// this one is a weird case in which we've just updated our latest Pipeline (what's referred to below as the "existingUpgradePipelineDef") as "promoted" but maybe we had some resource version conflict failure
-			// trying to set the previous "promoted" one to "recyclable" so now there are two "promoted" Pipelines in there
-			name:                        "Clean up after progressive upgrade",
-			newPipelineSpec:             pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: defaultPromotedPipelineDef,
-			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted), // note: this is now "promoted"
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-					common.LabelKeyProgressiveResultState:         string(common.LabelValueResultStateSucceeded),
-				},
-				map[string]string{}),
-			initialRolloutPhase:         apiv1.PhaseDeployed,
-			initialRolloutNameCount:     2,
-			initialInProgressStrategy:   nil, // TODO: why is this nil?
-			initialUpgradingChildStatus: nil,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:        apiv1.PhaseDeployed,
-			expectedPipelines: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
-			},
-			expectedPipelinesResultState: map[string]common.ResultState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueResultStateSucceeded,
-			},
-		},
-		{
-			// this is the case of somebody deleting their "promoted" Pipeline during Progressive Rollout
-			// we make sure that we create a new "promoted" one in its place with the latest and greatest spec, and also delete the "upgrading" one
-			name:                        "Handle user deletion of promoted pipeline during Progressive",
-			newPipelineSpec:             pipelineSpec, // this matches the original spec
-			existingPromotedPipelineDef: nil,          // somebody just deleted their promoted pipeline
-			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
-			initialRolloutPhase:         apiv1.PhasePending,
-			initialRolloutNameCount:     2,
-			initialInProgressStrategy:   &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: failedUpgradingChildStatus,
-			initialPromotedChildStatus:  defaultPromotedChildStatus,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:        apiv1.PhaseDeployed,
-
-			expectedPipelines: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradePromoted,
-			},
-			expectedPipelinesResultState: map[string]common.ResultState{},
-		},
-	}
-
-	for _, tc := range testCases {
-
-		t.Run(tc.name, func(t *testing.T) {
-
-			// first delete resources (Pipeline, InterstepBufferService, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
-			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-
-			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
-			_ = client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
-
-			// Create our PipelineRollout
-			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
-				&apiv1.PipelineRolloutStatus{ProgressiveStatus: apiv1.PipelineProgressiveStatus{UpgradingPipelineStatus: tc.initialUpgradingChildStatus, PromotedPipelineStatus: tc.initialPromotedChildStatus}})
-
-			rollout.Status.Phase = tc.initialRolloutPhase
-			if rollout.Status.NameCount == nil {
-				rollout.Status.NameCount = new(int32)
-			}
-			*rollout.Status.NameCount = int32(tc.initialRolloutNameCount)
-
-			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
-			rollout.Status.Init(rollout.Generation)
-			ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, client, rollout)
-
-			// Set the In-Progress Strategy
-			if tc.initialInProgressStrategy != nil {
-				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
-				r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}, *tc.initialInProgressStrategy)
-			} else {
-				rollout.Status.UpgradeInProgress = apiv1.UpgradeStrategyNoOp
-				r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}, apiv1.UpgradeStrategyNoOp)
-			}
-
-			// create the already-existing Pipeline in Kubernetes
-			if tc.existingPromotedPipelineDef != nil {
-				existingPipelineDef := tc.existingPromotedPipelineDef
-				existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
-				ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, existingPipelineDef)
-			}
-
-			time.Sleep(time.Second * 15) // this is for the "Clean up after progressive upgrade" test case in which there are two "promoted" Pipelines (due to a failure) and we must know which one was created most recently (therefore, we need the CreationTimestamps differentiated enough)
-
-			if tc.existingUpgradePipelineDef != nil {
-				existingUpgradePipelineDef := tc.existingUpgradePipelineDef
-				existingUpgradePipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
-				ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, existingUpgradePipelineDef)
-			}
-
-			// create ISBServiceRollout and isbsvc in Kubernetes
-			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"), nil)
-			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, isbServiceRollout)
-			isbsvc := ctlrcommon.CreateDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, true)
-			ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, isbsvc)
-
-			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
-			assert.NoError(t, err)
-
-			// check results:
-			// Check Phase of Rollout:
-			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
-			// Check In-Progress Strategy
-			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
-
-			resultPipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
-			assert.NoError(t, err)
-			assert.Equal(t, len(tc.expectedPipelines), len(resultPipelineList.Items), resultPipelineList.Items)
-
-			for _, pipeline := range resultPipelineList.Items {
-				expectedPipelineUpgradeState, found := tc.expectedPipelines[pipeline.Name]
-				assert.True(t, found)
-				resultUpgradeState, found := pipeline.Labels[common.LabelKeyUpgradeState]
-				assert.True(t, found)
-				assert.Equal(t, string(expectedPipelineUpgradeState), resultUpgradeState)
-
-				if len(tc.expectedPipelinesResultState) > 0 {
-					expectedPipelineResultState, found := tc.expectedPipelinesResultState[pipeline.Name]
-					if found {
-						resultState, labelFound := pipeline.Labels[common.LabelKeyProgressiveResultState]
-						assert.True(t, labelFound)
-						assert.Equal(t, string(expectedPipelineResultState), resultState)
-					}
-				}
-			}
-		})
-	}
-}
-
 func TestProgressiveUnsupported(t *testing.T) {
 	ctx := context.Background()
 
@@ -1645,6 +1364,7 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		upgradingChildName        string
 		upgradingChildLabels      map[string]string
 		upgradingChildAnnotations map[string]string
+		upgradingPipelineStatus   *apiv1.UpgradingPipelineStatus
 		expectedDiffFromUpgrading bool
 		expectedDiffFromPromoted  bool
 	}{
@@ -1882,6 +1602,11 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 			}
 
 			// Create PipelineRollout with template values
+			upgradingStatus := tc.upgradingPipelineStatus
+			if upgradingStatus == nil {
+				upgradingStatus = &apiv1.UpgradingPipelineStatus{}
+			}
+			upgradingStatus.Name = tc.upgradingChildName
 			pipelineRollout := ctlrcommon.CreateTestPipelineRollout(
 				tc.rolloutSpec,
 				map[string]string{}, // rollout annotations
@@ -1890,7 +1615,7 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				tc.rolloutLabels,
 				&apiv1.PipelineRolloutStatus{
 					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
-						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{},
+						UpgradingPipelineStatus: upgradingStatus,
 						PromotedPipelineStatus:  &apiv1.PromotedPipelineStatus{},
 					},
 				},
@@ -2167,7 +1892,7 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 		verifyTemplateEval          func(t *testing.T, riders []riders.Rider) // Custom verification function
 		existingVPADefinition       *map[string]interface{}                   // If nil, no existing VPA riders; if set, create existing VPA riders from this definition
 		existingConfigMapDefinition *map[string]interface{}                   // If nil, no existing ConfigMap riders; if set, create existing ConfigMap riders from this definition
-		existingIsUpgrading         bool                                      // If true, existing child is Upgrading; if false, existing child is Promoted
+		existingChildUpgradeState   common.UpgradeState                       // Upgrade state of the existing child (e.g., "promoted", "in-progress")
 		expectedDifferencesFound    bool                                      // Expected result from CheckRidersForDifferences
 	}{
 		{
@@ -2197,9 +1922,9 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 				}
 			},
 			existingVPADefinition:       &defaultVPARiderDef,
-			existingConfigMapDefinition: nil,   // No existing ConfigMaps
-			existingIsUpgrading:         true,  // Existing child is Upgrading
-			expectedDifferencesFound:    false, // No differences expected since existing riders match rollout
+			existingConfigMapDefinition: nil,                           // No existing ConfigMaps
+			existingChildUpgradeState:   common.LabelValueUpgradeTrial, // Existing child is Upgrading
+			expectedDifferencesFound:    false,                         // No differences expected since existing riders match rollout
 		},
 		{
 			name:                        "Compare VPA per-vertex rider to Promoted Pipeline riders - no differences",
@@ -2228,9 +1953,9 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 				}
 			},
 			existingVPADefinition:       &defaultVPARiderDef,
-			existingConfigMapDefinition: nil,   // No existing ConfigMaps
-			existingIsUpgrading:         false, // Existing child is Promoted
-			expectedDifferencesFound:    false, // No differences expected since existing riders match rollout
+			existingConfigMapDefinition: nil,                              // No existing ConfigMaps
+			existingChildUpgradeState:   common.LabelValueUpgradePromoted, // Existing child is Promoted
+			expectedDifferencesFound:    false,                            // No differences expected since existing riders match rollout
 		},
 		{
 			name:                        "Compare VPA per-vertex rider to Upgrading Pipeline riders - the Vertex names have changed",
@@ -2259,9 +1984,9 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 				}
 			},
 			existingVPADefinition:       &defaultVPARiderDef,
-			existingConfigMapDefinition: nil,  // No existing ConfigMaps
-			existingIsUpgrading:         true, // Existing child is Upgrading
-			expectedDifferencesFound:    true, // Differences expected - existing has "transform" rider, rollout wants "cat" rider
+			existingConfigMapDefinition: nil,                           // No existing ConfigMaps
+			existingChildUpgradeState:   common.LabelValueUpgradeTrial, // Existing child is Upgrading
+			expectedDifferencesFound:    true,                          // Differences expected - existing has "transform" rider, rollout wants "cat" rider
 		},
 		{
 			name: "Compare ConfigMap per-Pipeline Rider to Upgrading Pipeline rider: spec has changed",
@@ -2306,8 +2031,8 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 					"namespace":     "{{.pipeline-namespace}}", // Same as rollout
 				},
 			},
-			existingIsUpgrading:      true, // Existing child is Upgrading
-			expectedDifferencesFound: true, // Differences expected since existing ConfigMap has different data
+			existingChildUpgradeState: common.LabelValueUpgradeTrial, // Existing child is Upgrading
+			expectedDifferencesFound:  true,                          // Differences expected since existing ConfigMap has different data
 		},
 	}
 
@@ -2482,7 +2207,7 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 
 			// Update the PipelineRollout status to include the rider list
 			// Set riders in the appropriate status based on whether existing is Upgrading or Promoted
-			if tc.existingIsUpgrading {
+			if tc.existingChildUpgradeState == common.LabelValueUpgradeTrial {
 				pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Riders = riderStatusList
 			} else {
 				// For promoted child, riders are stored at the top-level Status
@@ -2495,9 +2220,9 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 				ctx,
 				reconciler,
 				pipelineRollout,
-				existingPipelineDef,    // existing child definition
-				tc.existingIsUpgrading, // whether existing child is Upgrading (vs Promoted)
-				newPipelineDef,         // new upgrading child definition
+				existingPipelineDef,          // existing child definition
+				tc.existingChildUpgradeState, // upgrade state of existing child
+				newPipelineDef,               // new upgrading child definition
 			)
 			assert.NoError(t, err, "CheckRidersForDifferences should not return an error")
 			assert.Equal(t, tc.expectedDifferencesFound, differencesFound,

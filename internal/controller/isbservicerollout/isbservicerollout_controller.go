@@ -903,7 +903,7 @@ func (r *ISBServiceRolloutReconciler) ErrorHandler(ctx context.Context, isbServi
 	numaLogger := logger.FromContext(ctx)
 	// Retrieve caller info using runtime.Caller
 	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
-	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
+	numaLogger.WithValues("namespace", isbServiceRollout.Namespace, "name", isbServiceRollout.Name).Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.customMetrics.ISBServicesROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }

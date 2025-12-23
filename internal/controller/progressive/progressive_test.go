@@ -54,11 +54,11 @@ func (fpc fakeProgressiveController) GetExistingRiders(ctx context.Context, roll
 	return unstructured.UnstructuredList{}, nil
 }
 
-func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, childDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
+func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, childDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}, existingChildUpgradeState common.UpgradeState) (bool, error) {
 	return false, nil
 }
 
-func (fpc fakeProgressiveController) CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+func (fpc fakeProgressiveController) CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingChildUpgradeState common.UpgradeState) (bool, error) {
 	return false, nil
 }
 

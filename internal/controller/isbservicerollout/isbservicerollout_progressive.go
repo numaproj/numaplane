@@ -120,7 +120,13 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 }
 
 // CheckForDifferences checks to see if the isbsvc definition matches the spec and the required metadata
-func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, isbsvcDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
+func (r *ISBServiceRolloutReconciler) CheckForDifferences(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	isbsvcDef *unstructured.Unstructured,
+	requiredSpec map[string]interface{},
+	requiredMetadata map[string]interface{},
+	existingChildUpgradeState common.UpgradeState) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	specsEqual := util.CompareStructNumTypeAgnostic(isbsvcDef.Object["spec"], requiredSpec["spec"])
@@ -140,7 +146,11 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, i
 // CheckForDifferencesWithRolloutDef tests if there's a meaningful difference between an existing child and the child
 // that would be produced by the Rollout definition.
 // This implements a function of the progressiveController interface.
-func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingISBSvc *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(
+	ctx context.Context,
+	existingISBSvc *unstructured.Unstructured,
+	rolloutObject ctlrcommon.RolloutObject,
+	existingChildUpgradeState common.UpgradeState) (bool, error) {
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
 	rolloutBasedISBSvcDef, err := r.makeISBServiceDefinition(isbsvcRollout, existingISBSvc.GetName(), isbsvcRollout.Spec.InterStepBufferService.Metadata)
@@ -149,7 +159,7 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 	}
 
 	rolloutDefinedMetadata, _ := rolloutBasedISBSvcDef.Object["metadata"].(map[string]interface{})
-	return r.CheckForDifferences(ctx, existingISBSvc, rolloutBasedISBSvcDef.Object, rolloutDefinedMetadata)
+	return r.CheckForDifferences(ctx, rolloutObject, existingISBSvc, rolloutBasedISBSvcDef.Object, rolloutDefinedMetadata, existingChildUpgradeState)
 }
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(

@@ -50,10 +50,10 @@ type progressiveController interface {
 	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// CheckForDifferences determines if the rollout-defined child definition is different from the existing child's definition and also whether the required metadata is present
-	CheckForDifferences(ctx context.Context, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error)
+	CheckForDifferences(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}, existingChildUpgradeState common.UpgradeState) (bool, error)
 
 	// CheckForDifferencesWithRolloutDef determines if the rollout-defined child definition is different from the existing child's definition
-	CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error)
+	CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingChildUpgradeState common.UpgradeState) (bool, error)
 
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
 	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured, schedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error)
@@ -489,12 +489,12 @@ func IsUpgradeReplacementRequired(
 		return false, false, err
 	}
 
-	differentFromExistingUpgrading, err := checkForDifferences(ctx, controller, rolloutObject, existingUpgradingChildDef, true, newUpgradingChildDef)
+	differentFromExistingUpgrading, err := checkForDifferences(ctx, controller, rolloutObject, existingUpgradingChildDef, common.LabelValueUpgradeTrial, newUpgradingChildDef)
 	if err != nil {
 		return false, false, err
 	}
 
-	differentFromPromoted, err := checkForDifferences(ctx, controller, rolloutObject, existingPromotedChildDef, false, newUpgradingChildDefUsingPromotedName)
+	differentFromPromoted, err := checkForDifferences(ctx, controller, rolloutObject, existingPromotedChildDef, common.LabelValueUpgradePromoted, newUpgradingChildDefUsingPromotedName)
 	if err != nil {
 		return false, false, err
 	}
@@ -594,8 +594,8 @@ func checkForDifferences(
 	// - the new desired child definition (spec + Riders)
 	// - the desired metadata from the Rollout definition
 	existingChildDef *unstructured.Unstructured,
-	// is the existing child "Upgrading" (vs "Promoted")?
-	existingIsUpgrading bool,
+	// upgrade state of the existing child
+	existingChildUpgradeState common.UpgradeState,
 	// this is the new child we'll need to compare the existing child with (spec + Riders)
 	// this function assumes that any templates have already been evaluated at this point
 	newChildDef *unstructured.Unstructured) (bool, error) {
@@ -608,7 +608,7 @@ func checkForDifferences(
 		return false, err
 	}
 	// now compare the spec from the existing child with the new child, plus verify the desired metadata is present
-	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newChildDef.Object, templatedMetadata)
+	childNeedsUpdating, err := controller.CheckForDifferences(ctx, rolloutObject, existingChildDef, newChildDef.Object, templatedMetadata, existingChildUpgradeState)
 	if err != nil {
 		return false, err
 	}
@@ -617,7 +617,7 @@ func checkForDifferences(
 	} else {
 		// if child doesn't need updating, let's see if any Riders do
 		// (additions, modifications, or deletions)
-		needsUpdating, err = CheckRidersForDifferences(ctx, controller, rolloutObject, existingChildDef, existingIsUpgrading, newChildDef)
+		needsUpdating, err = CheckRidersForDifferences(ctx, controller, rolloutObject, existingChildDef, existingChildUpgradeState, newChildDef)
 		if err != nil {
 			return false, err
 		}
@@ -633,8 +633,8 @@ func CheckRidersForDifferences(
 	rolloutObject ctlrcommon.RolloutObject,
 	// existing child whose Riders we'll check
 	existingChildDef *unstructured.Unstructured,
-	// is the existing child "Upgrading" (vs "Promoted")?
-	existingIsUpgrading bool,
+	// upgrade state of the existing child
+	existingChildUpgradeState common.UpgradeState,
 	// newUpgradingChildDef can either already have had any templates evaluated or if not, the evaluation will happen in this function
 	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
 
@@ -646,6 +646,8 @@ func CheckRidersForDifferences(
 	}
 
 	// Which Riders have already been deployed?
+	// Use "trial" state to get upgrading riders, otherwise get promoted riders
+	existingIsUpgrading := existingChildUpgradeState == common.LabelValueUpgradeTrial
 	existingRiders, err := controller.GetExistingRiders(ctx, rolloutObject, existingIsUpgrading)
 	if err != nil {
 		return false, err

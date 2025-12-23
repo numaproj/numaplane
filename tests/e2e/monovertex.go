@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
@@ -182,7 +183,16 @@ func GetPromotedMonoVertexSpecAndStatus(namespace string, monoVertexRolloutName 
 func UpdateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error)) {
 
 	By("updating MonoVertexRollout")
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+
+	// Use a custom (longer) backoff schedule than the default (10ms with 5 steps) to avoid getting into resource
+	// conflict errors that can cause e2e tests to fail
+	backoff := wait.Backoff{
+		Steps:    10,
+		Duration: 100 * time.Millisecond,
+		Factor:   2.0,
+		Jitter:   0.1,
+	}
+	err := retry.RetryOnConflict(backoff, func() error {
 		rollout, err := monoVertexRolloutClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return err
@@ -201,7 +211,16 @@ func UpdateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (
 func UpdateMonoVertexInK8S(name string, f func(*unstructured.Unstructured) (*unstructured.Unstructured, error)) {
 	By("updating MonoVertex")
 
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	// Use a custom (longer) backoff schedule than the default (10ms with 5 steps) to avoid getting into resource
+	// conflict errors that can cause e2e tests to fail
+	backoff := wait.Backoff{
+		Steps:    10,
+		Duration: 100 * time.Millisecond,
+		Factor:   2.0,
+		Jitter:   0.1,
+	}
+
+	err := retry.RetryOnConflict(backoff, func() error {
 		monovertex, err := dynamicClient.Resource(GetGVRForMonoVertex()).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return err
