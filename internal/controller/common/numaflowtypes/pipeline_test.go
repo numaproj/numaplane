@@ -381,6 +381,100 @@ func Test_GetVertexFromPipelineSpecMap(t *testing.T) {
 	}
 }
 
+func Test_CheckForVertex(t *testing.T) {
+	testCases := []struct {
+		name           string
+		pipelineSpec   map[string]interface{}
+		check          func(map[string]interface{}) bool
+		expectedResult bool
+		expectError    bool
+	}{
+		{
+			name: "vertex satisfies check",
+			pipelineSpec: map[string]interface{}{
+				"vertices": []interface{}{
+					map[string]interface{}{
+						"name": "in",
+						"source": map[string]interface{}{
+							"generator": map[string]interface{}{},
+						},
+					},
+					map[string]interface{}{
+						"name": "out",
+						"sink": map[string]interface{}{
+							"log": map[string]interface{}{},
+						},
+					},
+				},
+			},
+			check: func(vertex map[string]interface{}) bool {
+				_, hasSource := vertex["source"]
+				return hasSource
+			},
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name: "no vertex satisfies check",
+			pipelineSpec: map[string]interface{}{
+				"vertices": []interface{}{
+					map[string]interface{}{
+						"name": "in",
+						"source": map[string]interface{}{
+							"generator": map[string]interface{}{},
+						},
+					},
+					map[string]interface{}{
+						"name": "out",
+						"sink": map[string]interface{}{
+							"log": map[string]interface{}{},
+						},
+					},
+				},
+			},
+			check: func(vertex map[string]interface{}) bool {
+				_, hasUDF := vertex["udf"]
+				return hasUDF
+			},
+			expectedResult: false,
+			expectError:    false,
+		},
+		{
+			name:         "no vertices in spec",
+			pipelineSpec: map[string]interface{}{},
+			check: func(vertex map[string]interface{}) bool {
+				return true
+			},
+			expectedResult: false,
+			expectError:    true,
+		},
+		{
+			name: "empty vertices array",
+			pipelineSpec: map[string]interface{}{
+				"vertices": []interface{}{},
+			},
+			check: func(vertex map[string]interface{}) bool {
+				return true
+			},
+			expectedResult: false,
+			expectError:    false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := CheckForVertex(tc.pipelineSpec, tc.check)
+
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedResult, result)
+			}
+		})
+	}
+}
+
 func Test_ScalePipelineDefSourceVerticesToZero(t *testing.T) {
 	tests := []struct {
 		name                      string

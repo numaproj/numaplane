@@ -186,75 +186,7 @@ var (
 		},
 	}
 
-	analysisRunName       = "monovertex-monovertexrollout-test-1"
-	successfulAnalysisRun = argorolloutsv1.AnalysisRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      analysisRunName,
-			Namespace: ctlrcommon.DefaultTestNamespace,
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "AnalysisRun",
-			APIVersion: "argoproj.io/v1alpha1",
-		},
-		Spec: argorolloutsv1.AnalysisRunSpec{
-			Metrics: []argorolloutsv1.Metric{
-				{
-					Name: "return-true",
-					Provider: argorolloutsv1.MetricProvider{
-						Prometheus: &argorolloutsv1.PrometheusMetric{
-							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
-							Query:   "vector(1) == vector(2)",
-						},
-					},
-					SuccessCondition: "true",
-				},
-			},
-			Args: []argorolloutsv1.Argument{
-				{Name: "upgrading-monovertex-name", Value: &analysisRunName},
-				{Name: "monovertex-namespace", Value: &ctlrcommon.DefaultTestNamespace},
-			},
-		},
-		Status: argorolloutsv1.AnalysisRunStatus{
-			Phase:       argorolloutsv1.AnalysisPhaseSuccessful,
-			StartedAt:   &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
-			CompletedAt: &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
-		},
-	}
-
-	failedAnalysisRunName = "monovertex-monovertexrollout-test-2"
-	failedAnalysisRun     = argorolloutsv1.AnalysisRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      failedAnalysisRunName,
-			Namespace: ctlrcommon.DefaultTestNamespace,
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "AnalysisRun",
-			APIVersion: "argoproj.io/v1alpha1",
-		},
-		Spec: argorolloutsv1.AnalysisRunSpec{
-			Metrics: []argorolloutsv1.Metric{
-				{
-					Name: "return-true",
-					Provider: argorolloutsv1.MetricProvider{
-						Prometheus: &argorolloutsv1.PrometheusMetric{
-							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
-							Query:   "vector(1) == vector(2)",
-						},
-					},
-					SuccessCondition: "true",
-				},
-			},
-			Args: []argorolloutsv1.Argument{
-				{Name: "upgrading-monovertex-name", Value: &failedAnalysisRunName},
-				{Name: "monovertex-namespace", Value: &ctlrcommon.DefaultTestNamespace},
-			},
-		},
-		Status: argorolloutsv1.AnalysisRunStatus{
-			Phase:       argorolloutsv1.AnalysisPhaseFailed,
-			StartedAt:   &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
-			CompletedAt: &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
-		},
-	}
+	analysisRunName = "monovertex-monovertexrollout-test-1"
 )
 
 func fakeMonoVertexSpec(t *testing.T) numaflowv1.MonoVertexSpec {

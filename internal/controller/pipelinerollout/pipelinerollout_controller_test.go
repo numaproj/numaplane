@@ -861,10 +861,6 @@ func createDefaultTestPipeline(phase numaflowv1.PipelinePhase) *numaflowv1.Pipel
 		map[string]string{})
 }
 
-func createPipeline(phase numaflowv1.PipelinePhase, status numaflowv1.Status, drainedOnPause bool, labels map[string]string, annotations map[string]string) *numaflowv1.Pipeline {
-	return ctlrcommon.CreateTestPipelineOfSpec(runningPipelineSpec, ctlrcommon.DefaultTestPipelineName, phase, status, drainedOnPause, labels, annotations)
-}
-
 func withInterstepBufferService(origPipelineSpec numaflowv1.PipelineSpec, isbsvc string) numaflowv1.PipelineSpec {
 	newPipelineSpec := origPipelineSpec.DeepCopy()
 	newPipelineSpec.InterStepBufferServiceName = isbsvc

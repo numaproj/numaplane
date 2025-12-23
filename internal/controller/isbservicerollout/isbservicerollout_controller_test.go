@@ -375,16 +375,6 @@ func deriveISBSvcStatefulSetName(isbsvcName string) string {
 	return fmt.Sprintf("isbsvc-%s-js", isbsvcName)
 }
 
-func createPipelineForISBSvc(
-	name string,
-	isbsvcName string,
-	phase numaflowv1.PipelinePhase,
-	labels map[string]string,
-) *numaflowv1.Pipeline {
-	spec := numaflowv1.PipelineSpec{InterStepBufferServiceName: isbsvcName}
-	return ctlrcommon.CreateTestPipelineOfSpec(spec, name, phase, numaflowv1.Status{}, false, labels, map[string]string{})
-}
-
 // Technically, IsUpgradeReplacementRequired() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the ISBServiceRollout controller.
 func Test_ISBSvcRollout_IsUpgradeReplacementRequired(t *testing.T) {
 	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
