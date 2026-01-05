@@ -2,7 +2,6 @@ package pipelinerollout
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -203,7 +202,14 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 }
 
 // CheckForDifferences checks to see if the pipeline definition matches the spec and the required metadata
-func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pipelineDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
+func (r *PipelineRolloutReconciler) CheckForDifferences(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	pipelineDef *unstructured.Unstructured,
+	requiredSpec map[string]interface{},
+	requiredMetadata map[string]interface{},
+	existingChildUpgradeState common.UpgradeState) (bool, error) {
+
 	numaLogger := logger.FromContext(ctx)
 	pipelineCopy := pipelineDef.DeepCopy()
 
@@ -212,13 +218,79 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 		return false, fmt.Errorf("failed to deep copy requiredSpec: %w", err)
 	}
 
-	err := numaflowtypes.PipelineWithoutScaleFields(pipelineCopy.Object)
-	if err != nil {
-		return false, err
-	}
-	err = numaflowtypes.PipelineWithoutScaleFields(requiredSpecCopy)
-	if err != nil {
-		return false, err
+	// During a Progressive Upgrade, we need to be aware of the fact that our promoted and upgrading pipelines have been scaled down,
+	// so we need to be careful about how we compare to the target definition
+
+	// If we are comparing to an existing "upgrading" pipeline, we need to re-form its definition from prior to when we
+	// rescaled it for Progressive, in order to effectively compare it to the new desired spec
+	switch existingChildUpgradeState {
+	case common.LabelValueUpgradeTrial:
+		pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
+		if upgradingPipelineStatus == nil {
+			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus is nil")
+		}
+		if upgradingPipelineStatus.Name != pipelineDef.GetName() {
+			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus.Name %s != existing pipeline name %s", upgradingPipelineStatus.Name, pipelineDef.GetName())
+		}
+
+		// Temporary code for backward compatibility: if OriginalScaleDefinitions wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says
+		// TODO: remove later
+		if len(upgradingPipelineStatus.OriginalScaleDefinitions) == 0 {
+			originalScaleDefinitions, err := numaflowtypes.GenerateFullScaleDefinitionsFromPipelineMap(requiredSpec)
+			if err != nil {
+				return false, err
+			}
+			numaLogger.Debugf("OriginalScaleDefinitions not found in existing PipelineRollout status, setting OriginalScaleDefinitions to %v", originalScaleDefinitions)
+			upgradingPipelineStatus.OriginalScaleDefinitions = originalScaleDefinitions
+		}
+
+		err := numaflowtypes.ApplyFullScaleDefinitionsToPipelineMap(pipelineCopy.Object, upgradingPipelineStatus.OriginalScaleDefinitions)
+		if err != nil {
+			return false, err
+		}
+	case common.LabelValueUpgradePromoted:
+
+		// If we are comparing to an existing "promoted" pipeline, we will just ignore scale altogether
+		removeScaleFieldsFunc := func(pipelineDef map[string]interface{}) error {
+			// for each Vertex, remove the scale min and max:
+
+			vertices, _, _ := unstructured.NestedSlice(pipelineDef, "spec", "vertices")
+
+			modifiedVertices := make([]interface{}, 0)
+			for _, vertex := range vertices {
+				if vertexAsMap, ok := vertex.(map[string]any); ok {
+
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "disabled")
+
+					// if "scale" is there and empty, remove it
+					scaleMap, found := vertexAsMap["scale"].(map[string]interface{})
+					if found && len(scaleMap) == 0 {
+						unstructured.RemoveNestedField(vertexAsMap, "scale")
+					}
+
+					modifiedVertices = append(modifiedVertices, vertexAsMap)
+				}
+			}
+
+			err := unstructured.SetNestedSlice(pipelineDef, modifiedVertices, "spec", "vertices")
+			if err != nil {
+				return err
+			}
+			return nil
+
+		}
+
+		err := removeScaleFieldsFunc(pipelineCopy.Object)
+		if err != nil {
+			return false, err
+		}
+		err = removeScaleFieldsFunc(requiredSpecCopy)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
@@ -230,7 +302,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
 	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
-		specsEqual, labelsFound, annotationsFound, pipelineCopy.Object["spec"], requiredSpecCopy, requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
+		specsEqual, labelsFound, annotationsFound, pipelineCopy.Object["spec"], requiredSpecCopy["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
 
 	return !specsEqual || !labelsFound || !annotationsFound, nil
 }
@@ -239,7 +311,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 // that would be produced by the Rollout definition.
 // This implements a function of the progressiveController interface
 // In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
-func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingChildUpgradeState common.UpgradeState) (bool, error) {
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 
@@ -255,7 +327,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 		return false, err
 	}
 	rolloutDefinedMetadata, _ := rolloutBasedPipelineDef.Object["metadata"].(map[string]interface{})
-	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata)
+	return r.CheckForDifferences(ctx, pipelineRollout, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata, existingChildUpgradeState)
 }
 
 /*
@@ -447,6 +519,14 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scaleDefinitions
 
+	// set the full OriginalScaleDefinition in the UpgradingPipelineStatus as well
+	// (this will enable us to compare the Upgrading child to the Rollout definition to see if there are new updates)
+	originalScaleDefinitions, err := numaflowtypes.GenerateFullScaleDefinitionsFromPipelineMap(upgradingPipelineDef.Object)
+	if err != nil {
+		return false, err
+	}
+	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleDefinitions = originalScaleDefinitions
+
 	err = createScaledDownUpgradingPipelineDef(ctx, pipelineRollout, upgradingPipelineDef)
 	if err != nil {
 		return true, err
@@ -472,48 +552,61 @@ func createScaledDownUpgradingPipelineDef(
 		return err
 	}
 
-	// map each vertex name to new min/max, which is based on the number of Pods that were removed from the corresponding
-	// Vertex on the "promomoted" Pipeline, assuming it exists there
-	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertexDefinitions))
-	for index, vertex := range vertexDefinitions {
-		vertexAsMap := vertex.(map[string]interface{})
-		vertexName := vertexAsMap["name"].(string)
-		originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
-		if err != nil {
-			return fmt.Errorf("cannot extract the scale min and max values from the upgrading pipeline vertex %s: %w", vertexName, err)
-		}
-		scaleValue, vertexFound := pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[vertexName]
-		var upgradingVertexScaleTo int64
-		if !vertexFound {
-			// this must be a new vertex: we still need to set min=max so we will effectively be able to perform resource health check for readyReplicas without
-			// autoscaling interfering with the assessment
-			// simplest thing is to set min=max=1
-			upgradingVertexScaleTo = 1
-			numaLogger.WithValues("vertex", vertexName).Debugf("vertex not found previously; scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
-		} else {
-			// nominal case: found the same vertex from the "promoted" pipeline: set min and max to the number of Pods that were removed from the "promoted" one
-			// if for some reason there were no Pods running in the promoted Pipeline's vertex at the time (i.e. maybe some failure) and the Max was not set to 0 explicitly,
-			// then we don't want to set our Pods to 0 so set to 1 at least
-			upgradingVertexScaleTo = scaleValue.Initial - scaleValue.ScaleTo
-			maxZero := originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max == 0
-			if upgradingVertexScaleTo <= 0 && !maxZero {
-				upgradingVertexScaleTo = 1
-			}
-			numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
-		}
-
-		vertexScaleDefinitions[index] = apiv1.VertexScaleDefinition{
-			VertexName: vertexName,
-			ScaleDefinition: &apiv1.ScaleDefinition{
-				Min: &upgradingVertexScaleTo,
-				Max: &upgradingVertexScaleTo,
-			},
-		}
-
+	// if the new Pipeline has all Source Vertices scaled to zero, we don't rescale it: it's the user's intention that this not be processing any data
+	allSourcesScaledToZero, err := numaflowtypes.AllSourceVerticesScaledToZero(ctx, upgradingPipelineDef.Object["spec"].(map[string]interface{}))
+	if err != nil {
+		return fmt.Errorf("failed to check pipeline source vertices scaled to zero: %v", err)
 	}
 
-	// apply the scale values for each vertex to the new min/max
-	return numaflowtypes.ApplyScaleValuesToPipelineDefinition(ctx, upgradingPipelineDef, vertexScaleDefinitions)
+	if allSourcesScaledToZero {
+		numaLogger.Debug("upgrading pipeline has all Source Vertices scaled to zero, so no need to scale down")
+		return nil
+	} else {
+
+		// map each vertex name to new min/max, which is based on the number of Pods that were removed from the corresponding
+		// Vertex on the "promomoted" Pipeline, assuming it exists there
+		vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertexDefinitions))
+		for index, vertex := range vertexDefinitions {
+			vertexAsMap := vertex.(map[string]interface{})
+			vertexName := vertexAsMap["name"].(string)
+			originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+			if err != nil {
+				return fmt.Errorf("cannot extract the scale min and max values from the upgrading pipeline vertex %s: %w", vertexName, err)
+			}
+			scaleValue, vertexFound := pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[vertexName]
+			var upgradingVertexScaleTo int64
+			if !vertexFound {
+				// this must be a new vertex: we still need to set min=max so we will effectively be able to perform resource health check for readyReplicas without
+				// autoscaling interfering with the assessment
+				// simplest thing is to set min=max=1
+				upgradingVertexScaleTo = 1
+				numaLogger.WithValues("vertex", vertexName).Debugf("vertex not found previously; scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
+			} else {
+				// nominal case: found the same vertex from the "promoted" pipeline: set min and max to the number of Pods that were removed from the "promoted" one
+				// if for some reason there were no Pods running in the promoted Pipeline's vertex at the time (i.e. maybe some failure) and the Max was not set to 0 explicitly,
+				// then we don't want to set our Pods to 0 so set to 1 at least
+				upgradingVertexScaleTo = scaleValue.Initial - scaleValue.ScaleTo
+				maxZero := originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max == 0
+				if upgradingVertexScaleTo <= 0 && !maxZero {
+					upgradingVertexScaleTo = 1
+				}
+				numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
+			}
+
+			vertexScaleDefinitions[index] = apiv1.VertexScaleDefinition{
+				VertexName: vertexName,
+				ScaleDefinition: &apiv1.ScaleDefinition{
+					Min: &upgradingVertexScaleTo,
+					Max: &upgradingVertexScaleTo,
+				},
+			}
+
+		}
+
+		// apply the scale values for each vertex to the new min/max
+		return numaflowtypes.ApplyScaleValuesToPipelineDefinition(ctx, upgradingPipelineDef, vertexScaleDefinitions)
+	}
+
 }
 
 /*
@@ -703,43 +796,14 @@ func scalePromotedPipelineToOriginalScale(
 				return fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
-			if vertexScaleValues.OriginalScaleMinMax == "null" {
-				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
-					VertexName: vertexName,
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: nil,
-						Max: nil,
-					},
-				}
-			} else {
-				scaleAsMap := map[string]any{}
-				err = json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
-				if err != nil {
-					return fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
-				}
+			scaleDef, err := numaflowtypes.JsonStringToScaleDef(vertexScaleValues.OriginalScaleMinMax)
+			if err != nil {
+				return err
+			}
 
-				var min, max *int64
-				if scaleAsMap["min"] != nil {
-					minInt := int64(scaleAsMap["min"].(float64))
-					min = &minInt
-				}
-				if scaleAsMap["max"] != nil {
-					maxInt := int64(scaleAsMap["max"].(float64))
-					max = &maxInt
-				}
-				disabled := false
-				if scaleAsMap["disabled"] != nil && scaleAsMap["disabled"].(bool) {
-					disabled = true
-				}
-
-				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
-					VertexName: vertexName,
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min:      min,
-						Max:      max,
-						Disabled: disabled,
-					},
-				}
+			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
+				VertexName:      vertexName,
+				ScaleDefinition: scaleDef,
 			}
 		}
 	}

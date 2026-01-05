@@ -765,7 +765,7 @@ func (r *NumaflowControllerReconciler) updateNumaflowControllerStatusToFailed(ct
 func (r *NumaflowControllerReconciler) ErrorHandler(ctx context.Context, numaflowController *apiv1.NumaflowController, err error, reason, msg string) {
 	numaLogger := logger.FromContext(ctx)
 	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
-	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
+	numaLogger.WithValues("namespace", numaflowController.Namespace, "name", numaflowController.Name).Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.customMetrics.NumaflowControllerSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(numaflowController, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
