@@ -816,6 +816,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		forcePromoteStrategy    bool
 		requiresDrainAnnotation string
 		recyclableStartTime     string
+		deletionAnnotation      string
 		expectedResult          bool
 		expectedError           bool
 	}{
@@ -875,6 +876,15 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			expectedResult:          false,
 			expectedError:           true,
 		},
+		{
+			name:                    "has deletion annotation",
+			forcePromoteStrategy:    false,
+			requiresDrainAnnotation: "false",
+			recyclableStartTime:     "",
+			deletionAnnotation:      "true",
+			expectedResult:          true,
+			expectedError:           false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -918,6 +928,9 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			}
 			if tc.recyclableStartTime != "" {
 				annotations[common.AnnotationKeyRecyclableStartTime] = tc.recyclableStartTime
+			}
+			if tc.deletionAnnotation != "" {
+				annotations[common.AnnotationKeyMarkedForDeletion] = tc.deletionAnnotation
 			}
 			if len(annotations) > 0 {
 				pipeline.SetAnnotations(annotations)

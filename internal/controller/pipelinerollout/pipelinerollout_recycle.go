@@ -713,6 +713,13 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 	pipeline *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	// if recyclable pipeline has deletion annotation then just delete it
+	if pipeline.GetAnnotations() != nil && pipeline.GetAnnotations()[common.AnnotationKeyMarkedForDeletion] == "true" {
+		numaLogger.Debug("Pipeline is recyclable and marked for deletion, will be deleted now")
+		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
+		return true, nil
+	}
+
 	if pipelineRollout.Spec.Strategy != nil && pipelineRollout.Spec.Strategy.Progressive.ForcePromote {
 		// this is a case in which user likely doesn't care about data loss (and also we have no idea if the "promoted" pipeline is any good), so we can just delete the pipeline without draining
 		numaLogger.Debug("PipelineRollout strategy implies no concern for data loss so Pipeline will be deleted without draining")
