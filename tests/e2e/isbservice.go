@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
 
@@ -187,7 +188,17 @@ func VerifyPromotedISBSvcReady(namespace string, isbServiceRolloutName string, n
 
 func UpdateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error)) {
 	By("updating ISBServiceRollout")
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+
+	// Use a custom (longer) backoff schedule than the default (10ms with 5 steps) to avoid getting into resource
+	// conflict errors that can cause e2e tests to fail
+	backoff := wait.Backoff{
+		Steps:    10,
+		Duration: 100 * time.Millisecond,
+		Factor:   2.0,
+		Jitter:   0.1,
+	}
+
+	err := retry.RetryOnConflict(backoff, func() error {
 		rollout, err := isbServiceRolloutClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return err
@@ -209,7 +220,16 @@ func UpdateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (
 func UpdateISBServiceInK8S(name string, f func(*unstructured.Unstructured) (*unstructured.Unstructured, error)) {
 	By("updating ISBService")
 
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	// Use a custom (longer) backoff schedule than the default (10ms with 5 steps) to avoid getting into resource
+	// conflict errors that can cause e2e tests to fail
+	backoff := wait.Backoff{
+		Steps:    10,
+		Duration: 100 * time.Millisecond,
+		Factor:   2.0,
+		Jitter:   0.1,
+	}
+
+	err := retry.RetryOnConflict(backoff, func() error {
 		isbservice, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return err

@@ -594,7 +594,7 @@ func (r *NumaflowControllerRolloutReconciler) ErrorHandler(ctx context.Context, 
 	numaLogger := logger.FromContext(ctx)
 	r.customMetrics.NumaflowControllerRolloutSyncErrors.WithLabelValues().Inc()
 	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
-	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
+	numaLogger.WithValues("namespace", nfcRollout.Namespace, "name", nfcRollout.Name).Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.recorder.Eventf(nfcRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 

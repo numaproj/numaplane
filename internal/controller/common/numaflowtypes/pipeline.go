@@ -18,6 +18,7 @@ package numaflowtypes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -138,49 +139,47 @@ func CheckPipelineDrained(ctx context.Context, pipeline *unstructured.Unstructur
 	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
 }
 
-// CanPipelineIngestData checks if the pipeline is set to desiredPhase=Running(or unset) plus if a source vertex has scale.max>0
-func CanPipelineIngestData(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
-	vertexScaleDefinitions, err := GetScaleValuesFromPipelineDefinition(ctx, pipeline)
-	if err != nil {
-		return false, fmt.Errorf("failed to check pipeline set to run: %v", err)
+// AllSourceVerticesScaledToZero determines if all Source Vertices in the Pipeline definition have max=0
+func AllSourceVerticesScaledToZero(ctx context.Context, pipelineSpec map[string]interface{}) (bool, error) {
+	vertices, found, _ := unstructured.NestedSlice(pipelineSpec, "vertices")
+	if !found {
+		return false, fmt.Errorf("no vertices found in pipeline spec?: %+v", pipelineSpec)
 	}
 
-	// if any Source Vertex has max>0, it can consume data
-	currentVertexSpecs, err := GetPipelineVertexDefinitions(pipeline)
-	if err != nil {
-		return false, fmt.Errorf("failed to check pipeline set to run: %v", err)
-	}
-
-	sourceIsScalable := false
-	for _, currentVertexSpec := range currentVertexSpecs {
-
-		if vertexAsMap, ok := currentVertexSpec.(map[string]any); ok {
-
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]interface{}); ok {
 			_, isSource, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "source")
 			if isSource {
-
-				// Get the vertex's name
-				vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
-				if err != nil {
-					return false, err
+				maxInterface, maxFound, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "scale", "max")
+				// If max is not found, it defaults to 1 (not scaled to zero)
+				if !maxFound {
+					return false, nil
 				}
-				if !found {
-					return false, errors.New("a vertex must have a name")
-				}
-
-				for _, scaleDef := range vertexScaleDefinitions {
-					if scaleDef.VertexName == vertexName {
-						if scaleDef.Max() > 0 {
-							sourceIsScalable = true
-						}
-					}
+				maxValue, maxValid := util.ToInt64(maxInterface)
+				// If max is found and is not 0, it's not scaled to zero
+				if maxValid && maxValue != 0 {
+					return false, nil
 				}
 			}
 		}
 	}
+	return true, nil
+}
+
+// CanPipelineIngestData checks if the pipeline is set to desiredPhase=Running(or unset) or if a source vertex has scale.max>0
+func CanPipelineIngestData(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
+	pipelineSpec, found := pipeline.Object["spec"].(map[string]interface{})
+	if !found {
+		return false, fmt.Errorf("failed to get spec from pipeline %s", pipeline.GetName())
+	}
+
+	allSourcesScaledToZero, err := AllSourceVerticesScaledToZero(ctx, pipelineSpec)
+	if err != nil {
+		return false, fmt.Errorf("failed to check pipeline source vertices scaled to zero: %v", err)
+	}
 
 	desiredPhase, err := GetPipelineDesiredPhase(pipeline)
-	return desiredPhase == string(numaflowv1.PipelinePhaseRunning) && sourceIsScalable, err
+	return desiredPhase == string(numaflowv1.PipelinePhaseRunning) && !allSourcesScaledToZero, err
 }
 
 // CheckPipelineLiveObservedGeneration verifies that the observedGeneration is not less than the generation, meaning it's been reconciled by Numaflow since being updated
@@ -284,36 +283,6 @@ func PipelineWithoutDesiredPhase(pipeline *unstructured.Unstructured) {
 	}
 }
 
-// extract fields from the Pipeline within "scale" that are manipulated by the platform
-func PipelineWithoutScaleFields(pipeline map[string]interface{}) error {
-	// for each Vertex, remove the scale min and max:
-	vertices, _, _ := unstructured.NestedSlice(pipeline, "spec", "vertices")
-
-	modifiedVertices := make([]interface{}, 0)
-	for _, vertex := range vertices {
-		if vertexAsMap, ok := vertex.(map[string]any); ok {
-
-			unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
-			unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
-			unstructured.RemoveNestedField(vertexAsMap, "scale", "disabled")
-
-			// if "scale" is there and empty, remove it
-			scaleMap, found := vertexAsMap["scale"].(map[string]interface{})
-			if found && len(scaleMap) == 0 {
-				unstructured.RemoveNestedField(vertexAsMap, "scale")
-			}
-
-			modifiedVertices = append(modifiedVertices, vertexAsMap)
-		}
-	}
-
-	err := unstructured.SetNestedSlice(pipeline, modifiedVertices, "spec", "vertices")
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func GetVertexFromPipelineSpecMap(
 	pipelineSpec map[string]interface{},
 	vertexName string,
@@ -351,6 +320,23 @@ func GetPipelineVertexDefinitions(pipeline *unstructured.Unstructured) ([]interf
 	}
 
 	return vertexDefinitions, nil
+}
+
+// CheckForVertex iterates over vertices in a pipeline spec and returns true if any vertex satisfies the check function
+func CheckForVertex(pipelineSpec map[string]interface{}, check func(map[string]interface{}) bool) (bool, error) {
+	vertices, found, _ := unstructured.NestedSlice(pipelineSpec, "vertices")
+	if !found {
+		return false, fmt.Errorf("no vertices found in pipeline spec?: %+v", pipelineSpec)
+	}
+
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]interface{}); ok {
+			if check(vertexAsMap) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // find all the Pipeline Vertices in K8S using the Pipeline's definition: return a map of vertex name to resource found
@@ -577,6 +563,76 @@ func GetScaleValuesFromPipelineDefinition(ctx context.Context, pipelineDef *unst
 		}
 	}
 	return scaleDefinitions, nil
+}
+
+// GenerateFullScaleDefinitionsFromPipelineMap extracts the full scale definitions from the pipeline map.
+// It returns an array of JSON strings representing the full scale definition for each vertex.
+// The array order matches the order of vertices in the pipeline spec.
+// If a vertex has no scale defined, "null" is returned for that vertex.
+func GenerateFullScaleDefinitionsFromPipelineMap(pipelineMap map[string]interface{}) ([]string, error) {
+	vertices, _, err := unstructured.NestedSlice(pipelineMap, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error getting spec.vertices: %w", err)
+	}
+
+	scaleDefinitions := make([]string, len(vertices))
+
+	for i, vertex := range vertices {
+		vertexAsMap, ok := vertex.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("vertex at index %d is not a map", i)
+		}
+
+		scale, found, _ := unstructured.NestedMap(vertexAsMap, "scale")
+
+		if !found || scale == nil {
+			scaleDefinitions[i] = "null"
+		} else {
+			jsonBytes, err := json.Marshal(scale)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal scale definition at index %d: %w", i, err)
+			}
+			scaleDefinitions[i] = string(jsonBytes)
+		}
+	}
+
+	return scaleDefinitions, nil
+}
+
+// ApplyFullScaleDefinitionsToPipelineMap applies the full scale definitions to the pipeline map.
+// It takes an array of JSON strings representing the full scale definition for each vertex.
+// The array order must match the order of vertices in the pipeline spec.
+// If the JSON string is empty or "null", the scale field is removed from the vertex.
+func ApplyFullScaleDefinitionsToPipelineMap(pipelineMap map[string]interface{}, scaleDefinitions []string) error {
+	vertices, _, err := unstructured.NestedSlice(pipelineMap, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error getting spec.vertices: %w", err)
+	}
+
+	if len(vertices) != len(scaleDefinitions) {
+		return fmt.Errorf("mismatch between number of vertices (%d) and scale definitions (%d)", len(vertices), len(scaleDefinitions))
+	}
+
+	for i, vertex := range vertices {
+		vertexAsMap, ok := vertex.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("vertex at index %d is not a map", i)
+		}
+
+		scaleDef := scaleDefinitions[i]
+		if scaleDef == "null" {
+			unstructured.RemoveNestedField(vertexAsMap, "scale")
+		} else {
+			var scaleMap map[string]interface{}
+			if err := json.Unmarshal([]byte(scaleDef), &scaleMap); err != nil {
+				return fmt.Errorf("failed to unmarshal scale definition at index %d: %w", i, err)
+			}
+			vertexAsMap["scale"] = scaleMap
+		}
+		vertices[i] = vertexAsMap
+	}
+
+	return unstructured.SetNestedSlice(pipelineMap, vertices, "spec", "vertices")
 }
 
 func ApplyScaleValuesToPipelineDefinition(

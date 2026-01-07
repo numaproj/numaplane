@@ -1261,7 +1261,7 @@ func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Con
 func (r *PipelineRolloutReconciler) ErrorHandler(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
 	numaLogger := logger.FromContext(ctx)
 	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
-	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
+	numaLogger.WithValues("namespace", pipelineRollout.Namespace, "name", pipelineRollout.Name).Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
