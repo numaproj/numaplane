@@ -186,75 +186,7 @@ var (
 		},
 	}
 
-	analysisRunName       = "monovertex-monovertexrollout-test-1"
-	successfulAnalysisRun = argorolloutsv1.AnalysisRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      analysisRunName,
-			Namespace: ctlrcommon.DefaultTestNamespace,
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "AnalysisRun",
-			APIVersion: "argoproj.io/v1alpha1",
-		},
-		Spec: argorolloutsv1.AnalysisRunSpec{
-			Metrics: []argorolloutsv1.Metric{
-				{
-					Name: "return-true",
-					Provider: argorolloutsv1.MetricProvider{
-						Prometheus: &argorolloutsv1.PrometheusMetric{
-							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
-							Query:   "vector(1) == vector(2)",
-						},
-					},
-					SuccessCondition: "true",
-				},
-			},
-			Args: []argorolloutsv1.Argument{
-				{Name: "upgrading-monovertex-name", Value: &analysisRunName},
-				{Name: "monovertex-namespace", Value: &ctlrcommon.DefaultTestNamespace},
-			},
-		},
-		Status: argorolloutsv1.AnalysisRunStatus{
-			Phase:       argorolloutsv1.AnalysisPhaseSuccessful,
-			StartedAt:   &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
-			CompletedAt: &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
-		},
-	}
-
-	failedAnalysisRunName = "monovertex-monovertexrollout-test-2"
-	failedAnalysisRun     = argorolloutsv1.AnalysisRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      failedAnalysisRunName,
-			Namespace: ctlrcommon.DefaultTestNamespace,
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "AnalysisRun",
-			APIVersion: "argoproj.io/v1alpha1",
-		},
-		Spec: argorolloutsv1.AnalysisRunSpec{
-			Metrics: []argorolloutsv1.Metric{
-				{
-					Name: "return-true",
-					Provider: argorolloutsv1.MetricProvider{
-						Prometheus: &argorolloutsv1.PrometheusMetric{
-							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
-							Query:   "vector(1) == vector(2)",
-						},
-					},
-					SuccessCondition: "true",
-				},
-			},
-			Args: []argorolloutsv1.Argument{
-				{Name: "upgrading-monovertex-name", Value: &failedAnalysisRunName},
-				{Name: "monovertex-namespace", Value: &ctlrcommon.DefaultTestNamespace},
-			},
-		},
-		Status: argorolloutsv1.AnalysisRunStatus{
-			Phase:       argorolloutsv1.AnalysisPhaseFailed,
-			StartedAt:   &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
-			CompletedAt: &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
-		},
-	}
+	analysisRunName = "monovertex-monovertexrollout-test-1"
 )
 
 func fakeMonoVertexSpec(t *testing.T) numaflowv1.MonoVertexSpec {
@@ -521,424 +453,21 @@ func Test_processExistingMonoVertex_AnalysisRunGeneration(t *testing.T) {
 	}
 }
 
-// process an existing monoVertex in this test, the user preferred strategy is Progressive
-func Test_processExistingMonoVertex_Progressive(t *testing.T) {
-	numaLogger := logger.New()
-	numaLogger.SetLevel(4)
-	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
-	assert.Nil(t, err)
-	assert.Nil(t, kubernetes.SetClientSets(restConfig))
-
-	getwd, err := os.Getwd()
-	assert.Nil(t, err, "Failed to get working directory")
-	configPath := filepath.Join(getwd, "../../../", "tests", "config")
-	configManager := config.GetConfigManagerInstance()
-	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
-	assert.NoError(t, err)
-
-	ctx := context.Background()
-
-	// other tests may call this, but it fails if called more than once
-	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
-	}
-
-	recorder := record.NewFakeRecorder(64)
-
-	err = client.Create(ctx, &successfulAnalysisRun)
-	assert.NoError(t, err)
-
-	err = client.Create(ctx, &failedAnalysisRun)
-	assert.NoError(t, err)
-
-	r := NewMonoVertexRolloutReconciler(
-		client,
-		scheme.Scheme,
-		ctlrcommon.TestCustomMetrics,
-		recorder)
-
-	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
-
-	successfulUpgradingChildStatus := *unassessedUpgradingChildStatus.DeepCopy()
-	successfulUpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultSuccess
-	failedUpgradingChildStatus := *unassessedUpgradingChildStatus.DeepCopy()
-	failedUpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
-
-	testCases := []struct {
-		name                           string
-		newControllerInstanceID        string
-		existingOriginalMonoVertexDef  *numaflowv1.MonoVertex
-		existingUpgradingMonoVertexDef *numaflowv1.MonoVertex
-		initialRolloutPhase            apiv1.Phase
-		initialRolloutNameCount        int
-		initialInProgressStrategy      *apiv1.UpgradeStrategy
-		initialUpgradingChildStatus    *apiv1.UpgradingMonoVertexStatus
-		initialPromotedChildStatus     *apiv1.PromotedMonoVertexStatus
-		analysisRun                    bool
-
-		expectedInProgressStrategy   apiv1.UpgradeStrategy
-		expectedRolloutPhase         apiv1.Phase
-		expectedProgressiveCondition metav1.ConditionStatus
-
-		expectedMonoVertices            map[string]common.UpgradeState // after reconcile(), these are the only monoVertexs we expect to exist along with their expected UpgradeState
-		expectedMonoVerticesResultState map[string]common.ResultState
-	}{
-		{
-			name:                           "Instance annotation difference results in Progressive",
-			newControllerInstanceID:        "1",
-			existingOriginalMonoVertexDef:  &defaultOriginalMonoVertexDef,
-			existingUpgradingMonoVertexDef: nil,
-			initialRolloutPhase:            apiv1.PhaseDeployed,
-			initialRolloutNameCount:        1,
-			initialInProgressStrategy:      nil,
-			initialUpgradingChildStatus:    nil,
-			initialPromotedChildStatus:     defaultPromotedChildStatus,
-			analysisRun:                    false,
-			expectedInProgressStrategy:     apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:           apiv1.PhasePending,
-			expectedProgressiveCondition:   metav1.ConditionUnknown,
-			expectedMonoVertices: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeTrial,
-			},
-			expectedMonoVerticesResultState: map[string]common.ResultState{},
-		},
-		{
-			name:                           "Progressive deployed successfully",
-			newControllerInstanceID:        "1",
-			existingOriginalMonoVertexDef:  &defaultOriginalMonoVertexDef,
-			existingUpgradingMonoVertexDef: defaultUpgradingMonoVertexDef,
-			initialRolloutPhase:            apiv1.PhasePending,
-			initialRolloutNameCount:        2,
-			initialInProgressStrategy:      &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: successfulUpgradingChildStatus,
-				},
-			},
-			initialPromotedChildStatus:   defaultPromotedChildStatus,
-			analysisRun:                  false,
-			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:         apiv1.PhaseDeployed,
-			expectedProgressiveCondition: metav1.ConditionTrue,
-			// original MonoVertex deleted, new one promoted
-			expectedMonoVertices: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
-			},
-			expectedMonoVerticesResultState: map[string]common.ResultState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateSucceeded,
-			},
-		},
-		{
-			name:                          "Progressive deployment failed",
-			newControllerInstanceID:       "1",
-			existingOriginalMonoVertexDef: &defaultOriginalMonoVertexDef,
-			existingUpgradingMonoVertexDef: ctlrcommon.CreateTestMonoVertexOfSpec(
-				monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-1",
-				numaflowv1.MonoVertexPhaseFailed,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{},
-				},
-				map[string]string{
-					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeTrial),
-					common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
-				},
-				map[string]string{
-					common.AnnotationKeyNumaflowInstanceID: "1",
-				}),
-			initialRolloutPhase:       apiv1.PhasePending,
-			initialRolloutNameCount:   2,
-			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: failedUpgradingChildStatus,
-				},
-			},
-			initialPromotedChildStatus:   defaultPromotedChildStatus,
-			analysisRun:                  false,
-			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:         apiv1.PhasePending,
-			expectedProgressiveCondition: metav1.ConditionFalse,
-			expectedMonoVertices: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeTrial,
-			},
-			expectedMonoVerticesResultState: map[string]common.ResultState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateFailed,
-			},
-		},
-		{
-			name:                           "AnalysisRun successful",
-			newControllerInstanceID:        "1",
-			existingOriginalMonoVertexDef:  &defaultOriginalMonoVertexDef,
-			existingUpgradingMonoVertexDef: defaultUpgradingMonoVertexDef,
-			initialRolloutPhase:            apiv1.PhasePending,
-			initialRolloutNameCount:        2,
-			initialInProgressStrategy:      &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: unassessedUpgradingChildStatus,
-					Analysis: apiv1.AnalysisStatus{
-						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
-						StartTime:       &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
-						EndTime:         &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
-						Phase:           argorolloutsv1.AnalysisPhaseSuccessful,
-					},
-				},
-			},
-			initialPromotedChildStatus:   defaultPromotedChildStatus,
-			analysisRun:                  true,
-			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:         apiv1.PhaseDeployed,
-			expectedProgressiveCondition: metav1.ConditionTrue,
-			// original MonoVertex deleted, new one promoted
-			expectedMonoVertices: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
-			},
-			expectedMonoVerticesResultState: map[string]common.ResultState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateSucceeded,
-			},
-		},
-		{
-			name:                    "AnalysisRun failed",
-			newControllerInstanceID: "2",
-			existingOriginalMonoVertexDef: ctlrcommon.CreateTestMonoVertexOfSpec(
-				monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-1",
-				numaflowv1.MonoVertexPhaseRunning,
-				numaflowv1.Status{},
-				map[string]string{
-					common.LabelKeyUpgradeState:           string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:          ctlrcommon.DefaultTestMonoVertexRolloutName,
-					common.LabelKeyProgressiveResultState: string(common.LabelValueResultStateSucceeded),
-				},
-				map[string]string{
-					common.AnnotationKeyNumaflowInstanceID: "1",
-				}),
-			existingUpgradingMonoVertexDef: ctlrcommon.CreateTestMonoVertexOfSpec(
-				monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-2",
-				numaflowv1.MonoVertexPhaseRunning,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
-							Status:             metav1.ConditionTrue,
-							Reason:             "healthy",
-							LastTransitionTime: metav1.NewTime(time.Now()),
-						},
-					},
-				},
-				map[string]string{
-					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeTrial),
-					common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
-				},
-				map[string]string{
-					common.AnnotationKeyNumaflowInstanceID: "2",
-				}),
-			initialRolloutPhase:       apiv1.PhasePending,
-			initialRolloutNameCount:   2,
-			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                     ctlrcommon.DefaultTestMonoVertexRolloutName + "-2",
-						BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						BasicAssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:         apiv1.AssessmentResultFailure,
-						InitializationComplete:   true,
-					},
-					Analysis: apiv1.AnalysisStatus{
-						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-2",
-						StartTime:       &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
-						EndTime:         &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
-						Phase:           argorolloutsv1.AnalysisPhaseFailed,
-					},
-				},
-			},
-			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
-					},
-					ScaleValues: map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
-				},
-			},
-			analysisRun:                  true,
-			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:         apiv1.PhasePending,
-			expectedProgressiveCondition: metav1.ConditionFalse,
-			expectedMonoVertices: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueUpgradeTrial,
-			},
-			expectedMonoVerticesResultState: map[string]common.ResultState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueResultStateSucceeded,
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueResultStateFailed,
-			},
-		},
-		{
-			name:                           "Handle user deletion of promoted monovertex during Progressive",
-			newControllerInstanceID:        "1",
-			existingOriginalMonoVertexDef:  nil,
-			existingUpgradingMonoVertexDef: defaultUpgradingMonoVertexDef,
-			initialRolloutPhase:            apiv1.PhasePending,
-			initialRolloutNameCount:        2,
-			initialInProgressStrategy:      &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: unassessedUpgradingChildStatus,
-				},
-			},
-			initialPromotedChildStatus:   defaultPromotedChildStatus,
-			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:         apiv1.PhaseDeployed,
-			expectedProgressiveCondition: metav1.ConditionTrue,
-			// original MonoVertex deleted, new one promoted
-			expectedMonoVertices: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueUpgradePromoted,
-			},
-			expectedMonoVerticesResultState: map[string]common.ResultState{},
-		},
-	}
-
-	for _, tc := range testCases {
-
-		t.Run(tc.name, func(t *testing.T) {
-
-			// first delete MonoVertex and MonoVertexRollout in case they already exist, in Kubernetes
-			_ = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-
-			monoVertexList, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
-			assert.NoError(t, err)
-			assert.Len(t, monoVertexList.Items, 0)
-
-			rollout := ctlrcommon.CreateTestMVRollout(monoVertexSpec, map[string]string{}, map[string]string{},
-				map[string]string{common.AnnotationKeyNumaflowInstanceID: tc.newControllerInstanceID}, map[string]string{},
-				&apiv1.MonoVertexRolloutStatus{ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
-					UpgradingMonoVertexStatus: tc.initialUpgradingChildStatus,
-					PromotedMonoVertexStatus:  tc.initialPromotedChildStatus,
-				}})
-			_ = client.Delete(ctx, rollout)
-
-			rollout.Status.Phase = tc.initialRolloutPhase
-			if rollout.Status.NameCount == nil {
-				rollout.Status.NameCount = new(int32)
-			}
-			*rollout.Status.NameCount = int32(tc.initialRolloutNameCount)
-
-			if tc.initialInProgressStrategy != nil {
-				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
-				r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestMonoVertexRolloutName}, *tc.initialInProgressStrategy)
-			} else {
-				rollout.Status.UpgradeInProgress = apiv1.UpgradeStrategyNoOp
-				r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestMonoVertexRolloutName}, apiv1.UpgradeStrategyNoOp)
-			}
-
-			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
-			rollout.Status.Init(rollout.Generation)
-
-			// AnalysisRun related case
-			if tc.analysisRun {
-				rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
-					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
-						Analysis: apiv1.Analysis{
-							Templates: []argorolloutsv1.AnalysisTemplateRef{
-								{TemplateName: "test", ClusterScope: false},
-							},
-						},
-					},
-				}
-			}
-
-			rolloutCopy := *rollout
-			err = client.Create(ctx, rollout)
-			assert.NoError(t, err)
-			// update Status subresource
-			rollout.Status = rolloutCopy.Status
-			err = client.Status().Update(ctx, rollout)
-			assert.NoError(t, err)
-
-			// create the already-existing MonoVertex in Kubernetes
-			// this updates everything but the Status subresource
-
-			existingMonoVertexDef := tc.existingOriginalMonoVertexDef
-			if existingMonoVertexDef != nil {
-				existingMonoVertexDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)}
-				monoVertex, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, existingMonoVertexDef, metav1.CreateOptions{})
-				assert.NoError(t, err)
-				// update Status subresource
-				monoVertex.Status = tc.existingOriginalMonoVertexDef.Status
-				_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).UpdateStatus(ctx, monoVertex, metav1.UpdateOptions{})
-				assert.NoError(t, err)
-			}
-
-			if tc.existingUpgradingMonoVertexDef != nil {
-				existingUpgradeMonoVertexDef := tc.existingUpgradingMonoVertexDef
-				existingUpgradeMonoVertexDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)}
-				monoVertex, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, existingUpgradeMonoVertexDef, metav1.CreateOptions{})
-				assert.NoError(t, err)
-
-				// update Status subresource
-				monoVertex.Status = tc.existingUpgradingMonoVertexDef.Status
-				_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).UpdateStatus(ctx, monoVertex, metav1.UpdateOptions{})
-				assert.NoError(t, err)
-			}
-
-			_, err = r.reconcile(context.Background(), rollout, time.Now())
-			assert.NoError(t, err)
-
-			// check results:
-			// Check Phase of Rollout:
-			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
-			// Check In-Progress Strategy
-			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
-			// Check ProgressiveUpgradeSucceeded Condition
-			for _, cond := range rollout.Status.Conditions {
-				if cond.Type == "ProgressiveUpgradeSucceeded" {
-					assert.Equal(t, cond.Status, tc.expectedProgressiveCondition)
-				}
-			}
-
-			resultMonoVertexList, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
-			assert.NoError(t, err)
-			assert.Equal(t, len(tc.expectedMonoVertices), len(resultMonoVertexList.Items), resultMonoVertexList.Items)
-
-			for _, monoVertex := range resultMonoVertexList.Items {
-				expectedMonoVertexUpgradeState, found := tc.expectedMonoVertices[monoVertex.Name]
-				assert.True(t, found)
-				resultUpgradeState, found := monoVertex.Labels[common.LabelKeyUpgradeState]
-				assert.True(t, found)
-				assert.Equal(t, string(expectedMonoVertexUpgradeState), resultUpgradeState)
-
-				if len(tc.expectedMonoVerticesResultState) > 0 {
-					expectedMonoVertexResultState, found := tc.expectedMonoVerticesResultState[monoVertex.Name]
-					if found {
-						resultState, labelFound := monoVertex.Labels[common.LabelKeyProgressiveResultState]
-						assert.True(t, labelFound)
-						assert.Equal(t, string(expectedMonoVertexResultState), resultState)
-					}
-				}
-			}
-		})
-	}
-}
-
 func Test_CheckForDifferences(t *testing.T) {
 	ctx := context.Background()
 	numaLogger := logger.FromContext(ctx)
 
-	one := int64(1)
-	two := int64(2)
-
 	tests := []struct {
-		name           string
-		from           *unstructured.Unstructured
-		to             *unstructured.Unstructured
-		expectedError  bool
-		expectedResult bool
+		name                      string
+		from                      *unstructured.Unstructured
+		to                        *unstructured.Unstructured
+		existingChildUpgradeState common.UpgradeState
+		originalScaleDefinition   string // only used when existingChildUpgradeState=trial
+		expectedError             bool
+		expectedResult            bool
 	}{
 		{
 			name: "ObjectsEqual",
-
 			from: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -961,8 +490,9 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			expectedError:  false,
-			expectedResult: false,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            false,
 		},
 		{
 			name: "RequiredLabelsNotPresent",
@@ -976,8 +506,9 @@ func Test_CheckForDifferences(t *testing.T) {
 				obj.SetLabels(map[string]string{"key": "value2"})
 				return obj
 			}(),
-			expectedError:  false,
-			expectedResult: true,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            true,
 		},
 		{
 			name: "RequiredAnnotationsNotPresent",
@@ -990,8 +521,9 @@ func Test_CheckForDifferences(t *testing.T) {
 				obj.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"})
 				return obj
 			}(),
-			expectedError:  false,
-			expectedResult: true,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            true,
 		},
 		{
 			name: "SpecsDiffer",
@@ -1011,15 +543,19 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			},
-			expectedError:  false,
-			expectedResult: true,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            true,
 		},
 		{
-			name: "OnlyReplicasDiffer",
+			name: "Scales Differ - Promoted child",
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
-						"replicas": one,
+						"scale": map[string]interface{}{
+							"min": int64(1),
+							"max": int64(2),
+						},
 						"some_map": map[string]interface{}{
 							"key": "value1",
 						},
@@ -1029,23 +565,169 @@ func Test_CheckForDifferences(t *testing.T) {
 			to: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
-						"replicas": two,
 						"some_map": map[string]interface{}{
 							"key": "value1",
 						},
 					},
 				},
 			},
-			expectedError:  false,
-			expectedResult: false,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedError:             false,
+			expectedResult:            false, // scale fields are excluded from comparison for promoted children
+		},
+		{
+			name: "Scales Match between Upgrading child and Rollout definition",
+			// this is our Upgrading child
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "test-mv",
+					},
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(5), // current scale (modified by progressive)
+							"max": int64(5),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			// this is basically our Rollout definition
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(1), // rollout definition
+							"max": int64(2),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			originalScaleDefinition:   `{"min":1,"max":2}`, // original matches rollout
+			expectedError:             false,
+			expectedResult:            false, // no difference because original matches rollout
+		},
+		{
+			name: "Scales Differ between Upgrading child and Rollout definition",
+			// this is our Upgrading child
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "test-mv",
+					},
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(5), // current scale (modified by progressive)
+							"max": int64(5),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			// this is basically our Rollout definition
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(3), // new rollout definition
+							"max": int64(4),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			originalScaleDefinition:   `{"min":1,"max":2}`, // original differs from new rollout
+			expectedError:             false,
+			expectedResult:            true, // difference because original scale != new rollout scale
+		},
+		{
+			name: "Scales Match between Upgrading child and Rollout definition - neither defined with scale",
+			// this is our Upgrading child
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "test-mv",
+					},
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(5), // current scale (modified by progressive)
+							"max": int64(5),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			// this is basically our Rollout definition
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			originalScaleDefinition:   "null", // original had no scale
+			expectedError:             false,
+			expectedResult:            false, // no difference because original (null) matches rollout (no scale)
+		},
+		{
+			name: "Scales Differ between Upgrading child and Rollout definition - Upgrading child was not defined with scale",
+			// this is our Upgrading child
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "test-mv",
+					},
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(5), // current scale (modified by progressive)
+							"max": int64(5),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			// this is basically our Rollout definition
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"scale": map[string]interface{}{
+							"min": int64(1),
+							"max": int64(2),
+						},
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			existingChildUpgradeState: common.LabelValueUpgradeTrial,
+			originalScaleDefinition:   "null", // original had no scale, but rollout now has scale
+			expectedError:             false,
+			expectedResult:            true, // difference because original (null) != rollout (has scale)
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reconciler := &MonoVertexRolloutReconciler{}
-
-			// Create the RolloutObject with the defined spec and metadata
 
 			// Extract spec from unstructured object and convert to RawExtension
 			specData, found, err := unstructured.NestedMap(tt.to.Object, "spec")
@@ -1074,7 +756,16 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			}
-			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout)
+
+			// If comparing to an upgrading child, set up the UpgradingMonoVertexStatus
+			if tt.existingChildUpgradeState == common.LabelValueUpgradeTrial {
+				mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &apiv1.UpgradingMonoVertexStatus{
+					OriginalScaleDefinition: tt.originalScaleDefinition,
+				}
+				mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Name = tt.from.GetName()
+			}
+
+			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout, tt.existingChildUpgradeState)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -1641,6 +1332,7 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		upgradingChildName        string
 		upgradingChildLabels      map[string]string
 		upgradingChildAnnotations map[string]string
+		upgradingMonoVertexStatus *apiv1.UpgradingMonoVertexStatus
 		expectedDiffFromUpgrading bool
 		expectedDiffFromPromoted  bool
 	}{
@@ -1783,6 +1475,11 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create MonoVertexRollout with template values
+			upgradingStatus := tc.upgradingMonoVertexStatus
+			if upgradingStatus == nil {
+				upgradingStatus = &apiv1.UpgradingMonoVertexStatus{}
+			}
+			upgradingStatus.Name = tc.upgradingChildName
 			mvRollout := ctlrcommon.CreateTestMVRollout(
 				tc.rolloutSpec,
 				map[string]string{}, // rollout annotations
@@ -1791,7 +1488,7 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				tc.rolloutLabels,
 				&apiv1.MonoVertexRolloutStatus{
 					ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
-						UpgradingMonoVertexStatus: &apiv1.UpgradingMonoVertexStatus{},
+						UpgradingMonoVertexStatus: upgradingStatus,
 						PromotedMonoVertexStatus:  &apiv1.PromotedMonoVertexStatus{},
 					},
 				},

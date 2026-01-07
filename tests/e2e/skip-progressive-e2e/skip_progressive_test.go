@@ -61,7 +61,7 @@ var (
 		},
 	}
 
-	validUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
+	invalidUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:invalid"
 
 	pipelineSpecSourceRPU      = int64(5)
 	pipelineSpecSourceDuration = metav1.Duration{
@@ -198,11 +198,11 @@ var _ = Describe("Skip Progressive E2E", Serial, func() {
 	})
 })
 
-func updateMonoVertexRolloutImage(initialMonoVertexSpec numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec {
+func generateFailedMonoVertexSpec(initialMonoVertexSpec numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec {
 	By("Updating the MonoVertex Topology to cause a Progressive change")
 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 	updatedMonoVertexSpec.Source.UDTransformer = &numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
-	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = validUDTransformerImage
+	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
 	return updatedMonoVertexSpec
 }
 
@@ -212,9 +212,22 @@ func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec)
 	err := VerifyPromotedMonoVertexRunning(Namespace, monoVertexRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	updatedMonoVertexSpec := updateMonoVertexRolloutImage(initialMonoVertexSpec)
-	updatedMonoVertexSpec = updateFunc(updatedMonoVertexSpec)
+	// update the MonoVertex Rollout with a failed spec
+	By("Updating the MonoVertexRollout with a failed spec")
+	updatedMonoVertexSpec := generateFailedMonoVertexSpec(initialMonoVertexSpec)
 	rawSpec, err := json.Marshal(updatedMonoVertexSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
+		return mvr, nil
+	})
+	// give it time to create a new MonoVertex
+	time.Sleep(60 * time.Second)
+
+	// now make sure that we can effectively create a new MonoVertex and cause it to be promoted
+	By("Forcing promotion of the new MonoVertex")
+	updatedMonoVertexSpec = updateFunc(updatedMonoVertexSpec)
+	rawSpec, err = json.Marshal(updatedMonoVertexSpec)
 	Expect(err).ShouldNot(HaveOccurred())
 	UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
@@ -224,12 +237,12 @@ func verifyMonoVertexAnalysisSkipped(updateFunc func(*numaflowv1.MonoVertexSpec)
 		return status.ProgressiveStatus.UpgradingMonoVertexStatus != nil &&
 			status.ProgressiveStatus.UpgradingMonoVertexStatus.ForcedSuccess &&
 			status.ProgressiveStatus.UpgradingMonoVertexStatus.ForcedSuccessReason == string(progressive.SkipProgressiveAssessmentReasonNoDataIngestion) &&
-			status.ProgressiveStatus.UpgradingMonoVertexStatus.Name == GetInstanceName(monoVertexRolloutName, 1)
+			status.ProgressiveStatus.UpgradingMonoVertexStatus.Name == GetInstanceName(monoVertexRolloutName, 2)
 	})
 	DeleteMonoVertexRollout(monoVertexRolloutName)
 }
 
-func updatePipelineRolloutImage(initialPipelineSpec numaflowv1.PipelineSpec) *numaflowv1.PipelineSpec {
+func generateFailedPipelineSpec(initialPipelineSpec numaflowv1.PipelineSpec) *numaflowv1.PipelineSpec {
 	By("Updating the Pipeline Topology to cause a Progressive change")
 	updatedPipelineSpec := initialPipelineSpec.DeepCopy()
 	// Change the UDF image to trigger a progressive upgrade
@@ -240,9 +253,21 @@ func updatePipelineRolloutImage(initialPipelineSpec numaflowv1.PipelineSpec) *nu
 func verifyPipelineAnalysisSkipped(updateFunc func(*numaflowv1.PipelineSpec) *numaflowv1.PipelineSpec) {
 	CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, apiv1.PipelineStrategy{}, apiv1.Metadata{})
 
-	updatedPipelineSpec := updatePipelineRolloutImage(initialPipelineSpec)
-	updatedPipelineSpec = updateFunc(updatedPipelineSpec)
+	updatedPipelineSpec := generateFailedPipelineSpec(initialPipelineSpec)
+	By("Updating the PipelineRollout with a failed spec")
 	rawSpec, err := json.Marshal(updatedPipelineSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pr apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+		pr.Spec.Pipeline.Spec.Raw = rawSpec
+		return pr, nil
+	})
+	// give it time to create a new Pipeline
+	time.Sleep(60 * time.Second)
+
+	// now make sure that we can effectively create a new Pipeline and cause it to be promoted
+	By("Forcing promotion of the new Pipeline")
+	updatedPipelineSpec = updateFunc(updatedPipelineSpec)
+	rawSpec, err = json.Marshal(updatedPipelineSpec)
 	Expect(err).ShouldNot(HaveOccurred())
 	UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pr apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 		pr.Spec.Pipeline.Spec.Raw = rawSpec
@@ -252,7 +277,7 @@ func verifyPipelineAnalysisSkipped(updateFunc func(*numaflowv1.PipelineSpec) *nu
 		return status.ProgressiveStatus.UpgradingPipelineStatus != nil &&
 			status.ProgressiveStatus.UpgradingPipelineStatus.ForcedSuccess &&
 			status.ProgressiveStatus.UpgradingPipelineStatus.ForcedSuccessReason == string(progressive.SkipProgressiveAssessmentReasonNoDataIngestion) &&
-			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, 1)
+			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, 2)
 	})
 	DeletePipelineRollout(pipelineRolloutName)
 }

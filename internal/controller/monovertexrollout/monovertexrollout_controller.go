@@ -671,7 +671,7 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatusToFailed(ctx 
 func (r *MonoVertexRolloutReconciler) ErrorHandler(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, err error, reason, msg string) {
 	numaLogger := logger.FromContext(ctx)
 	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
-	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
+	numaLogger.WithValues("namespace", monoVertexRollout.Namespace, "name", monoVertexRollout.Name).Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.customMetrics.MonoVertexROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }

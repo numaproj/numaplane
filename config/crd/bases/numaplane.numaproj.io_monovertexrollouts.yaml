@@ -404,6 +404,12 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      originalScaleDefinition:
+                        description: |-
+                          OriginalScaleDefinition stores the original scale definition for the monovertex as JSON string
+                          The difference between this and OriginalScaleMinMax is that this represents the full definition for scale
+                          If scale is not defined, it will be represented as "null"
+                        type: string
                       originalScaleMinMax:
                         description: |-
                           OriginalScaleMinMax stores the original scale min and max values as JSON string

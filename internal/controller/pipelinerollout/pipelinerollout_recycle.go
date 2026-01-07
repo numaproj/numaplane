@@ -326,7 +326,7 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 
 	// Compare the rollout definition to the "promoted" pipeline
 	// In order to compare, we need to update the rollout definition to use the identical isbsvc name as the "promoted" pipeline so we can ignore that
-	different, err := r.CheckForDifferencesWithRolloutDef(ctx, currentPromotedPipeline, pipelineRollout)
+	different, err := r.CheckForDifferencesWithRolloutDef(ctx, currentPromotedPipeline, pipelineRollout, common.LabelValueUpgradePromoted)
 	if err != nil {
 		return nil, err
 	}
@@ -712,6 +712,13 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 	pipelineRollout *apiv1.PipelineRollout,
 	pipeline *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
+
+	// if recyclable pipeline has deletion annotation then just delete it
+	if pipeline.GetAnnotations() != nil && pipeline.GetAnnotations()[common.AnnotationKeyMarkedForDeletion] == "true" {
+		numaLogger.Debug("Pipeline is recyclable and marked for deletion, will be deleted now")
+		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
+		return true, nil
+	}
 
 	if pipelineRollout.Spec.Strategy != nil && pipelineRollout.Spec.Strategy.Progressive.ForcePromote {
 		// this is a case in which user likely doesn't care about data loss (and also we have no idea if the "promoted" pipeline is any good), so we can just delete the pipeline without draining
