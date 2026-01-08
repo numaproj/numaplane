@@ -849,7 +849,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     "",
-			expectedResult:          false,
+			expectedResult:          true,
 			expectedError:           false,
 		},
 		{
@@ -1047,6 +1047,12 @@ func createPipelineForRecycleTest(pipelineRolloutName, pipelineName string, desi
 
 	if requiresDrain {
 		pipeline.Annotations[common.AnnotationKeyRequiresDrain] = "true"
+	}
+
+	// Set the recyclable start time annotation for recyclable pipelines to a recent time (30 minutes ago)
+	// This ensures the pipeline won't be deleted due to expiration during the test
+	if upgradeState == "recyclable" {
+		pipeline.Annotations[common.AnnotationKeyRecyclableStartTime] = time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
 	}
 
 	if desiredPhase != nil {

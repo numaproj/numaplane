@@ -774,6 +774,12 @@ func (r *PipelineRolloutReconciler) isRecycledPipelineExpired(
 
 			return true, nil
 		}
+	} else {
+		// for backward compatibility:
+		// if the annotation is not set, then it means this Pipeline was marked recyclable prior to the existence of the annotation,
+		// meaning it's quite old and we should delete it
+		numaLogger.Info("Pipeline was marked recyclable prior to the existence of the annotation, meaning it's old and will be deleted now")
+		return true, nil
 	}
 
 	return false, nil
