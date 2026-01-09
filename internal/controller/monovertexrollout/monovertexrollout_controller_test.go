@@ -471,6 +471,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			from: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{
 					Object: map[string]interface{}{
+						"replicas": 1,
 						"spec": map[string]interface{}{
 							"some_map": map[string]interface{}{
 								"key": "value1",
