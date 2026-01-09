@@ -161,6 +161,21 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		return false, err
 	}
 
+	// first remove the "replicas" field from the spec since that's a field which Numaflow Controller adds and we don't want to compare it
+	removeReplicasFieldFunc := func(spec map[string]interface{}) error {
+		excludedPaths := []string{"replicas"}
+		util.RemovePaths(spec, excludedPaths, ".")
+		return nil
+	}
+	err := removeReplicasFieldFunc(from)
+	if err != nil {
+		return false, err
+	}
+	err = removeReplicasFieldFunc(to)
+	if err != nil {
+		return false, err
+	}
+
 	// During a Progressive Upgrade, we need to be aware of the fact that our promoted and upgrading monovertices have been scaled down,
 	// so we need to be careful about how we compare to the target definition
 
@@ -215,7 +230,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 
 		removeScaleFieldsFunc := func(spec map[string]interface{}) error {
 
-			excludedPaths := []string{"replicas", "scale.min", "scale.max", "scale.disabled"}
+			excludedPaths := []string{"scale.min", "scale.max", "scale.disabled"}
 
 			util.RemovePaths(spec, excludedPaths, ".")
 
