@@ -644,6 +644,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 						assessmentResult, pipelineRollout.GetUpgradingChildStatus().ForcedSuccess)
 				}
 			}
+			// we need to requeue one time to ensure that the newly promoted Pipeline scales back to its rollout-defined scale
+			requeueDelay = common.DefaultRequeueDelay
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}
