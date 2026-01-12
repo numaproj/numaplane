@@ -388,6 +388,9 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 						assessmentResult, monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess)
 				}
 			}
+			// we need to requeue one time to ensure that the newly promoted MonoVertex scales back to its rollout-defined scale
+			requeueDelay = common.DefaultRequeueDelay
+
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}
