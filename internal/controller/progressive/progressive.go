@@ -25,6 +25,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -872,11 +873,26 @@ func startPostUpgradeProcess(
 	if err != nil {
 		return false, err
 	}
+	// We need to exclude any HPA Rider from the Upgrading child
+	// During Progressive Upgrade, we don't use HPA because it interferes with the fixed scaling we need
+	hpaGVK := schema.GroupVersionKind{
+		Group:   "autoscaling",
+		Version: "v2",
+		Kind:    "HorizontalPodAutoscalerList",
+	}
+	ridersMinusHPA := make([]riders.Rider, 0)
+	for _, rider := range newRiders {
+		if rider.Definition.GroupVersionKind() != hpaGVK {
+			ridersMinusHPA = append(ridersMinusHPA, rider)
+		}
+	}
+
 	riderAdditions := unstructured.UnstructuredList{}
-	riderAdditions.Items = make([]unstructured.Unstructured, len(newRiders))
-	for index, rider := range newRiders {
+	riderAdditions.Items = make([]unstructured.Unstructured, len(ridersMinusHPA))
+	for index, rider := range ridersMinusHPA {
 		riderAdditions.Items[index] = rider.Definition
 	}
+
 	if err = riders.UpdateRidersInK8S(ctx, newUpgradingChild, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, c); err != nil {
 		return false, err
 	}
@@ -899,8 +915,8 @@ func startPostUpgradeProcess(
 	// set Upgrading Child Status
 	_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 		status.InitializationComplete = true
-		status.Riders = make([]apiv1.RiderStatus, len(newRiders))
-		for i, rider := range newRiders {
+		status.Riders = make([]apiv1.RiderStatus, len(ridersMinusHPA))
+		for i, rider := range ridersMinusHPA {
 			status.Riders[i] = apiv1.RiderStatus{
 				GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
 				Name:             rider.Definition.GetName(),
