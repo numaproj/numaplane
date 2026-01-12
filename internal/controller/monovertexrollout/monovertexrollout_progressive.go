@@ -8,6 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -360,7 +361,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 
 	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
 	for _, scaleValue := range monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues {
-		if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &scaleValue.ScaleTo, Max: &scaleValue.ScaleTo, Disabled: false}, c); err != nil {
+		if err := setMonoVertexToFixedScale(ctx, promotedMonoVertexDef, scaleValue.ScaleTo, c); err != nil {
 			return true, fmt.Errorf("error scaling the existing promoted monovertex %s/%s to the desired scale values: %w",
 				promotedMonoVertexDef.GetNamespace(), promotedMonoVertexDef.GetName(), err)
 		}
@@ -751,6 +752,43 @@ func scalePromotedMonoVertexToOriginalValues(
 	promotedMVStatus.ScaleValues = nil
 
 	return nil
+}
+
+// setMonoVertexToFixedScale sets a monovertex to a scale where min==max and there is no HPA
+// this is necessary during Progressive Upgrade
+// HPA must be removed in order for the fixed scaling to work
+func setMonoVertexToFixedScale(
+	ctx context.Context,
+	monovertex *unstructured.Unstructured,
+	numReplicas int64,
+	c client.Client) error {
+	numaLogger := logger.FromContext(ctx)
+
+	scaleDefinition := &apiv1.ScaleDefinition{
+		Min:      &numReplicas,
+		Max:      &numReplicas,
+		Disabled: false,
+	}
+
+	// if there's an HPA child of this MonoVertex, delete it
+	// Otherwise, it will interfere with numaflow's scaling
+	hpaGVK := schema.GroupVersionKind{
+		Group:   "autoscaling",
+		Version: "v2",
+		Kind:    "HorizontalPodAutoscalerList",
+	}
+	hpaList, err := kubernetes.ListResourcesOwnedBy(ctx, c, hpaGVK, monovertex.GetNamespace(), monovertex)
+	if err != nil {
+		return fmt.Errorf("failed to list HPAs owned by monovertex %s/%s: %w", monovertex.GetNamespace(), monovertex.GetName(), err)
+	}
+	for _, hpa := range hpaList.Items { // realistically, there should only be zero or one
+		numaLogger.Infof("Deleting HPA %s/%s owned by monovertex %s", hpa.GetNamespace(), hpa.GetName(), monovertex.GetName())
+		if err := kubernetes.DeleteResource(ctx, c, &hpa); err != nil {
+			return fmt.Errorf("failed to delete HPA %s/%s: %w", hpa.GetNamespace(), hpa.GetName(), err)
+		}
+	}
+
+	return scaleMonoVertex(ctx, monovertex, scaleDefinition, c)
 }
 
 /*
