@@ -25,7 +25,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -645,6 +644,8 @@ func CheckRidersForDifferences(
 	if err != nil {
 		return false, err
 	}
+	// We need to exclude HPA from the check - during Progressive Upgrade, we don't use HPA
+	newRiders = riders.RidersExceptHPA(newRiders)
 
 	// Which Riders have already been deployed?
 	// Use "trial" state to get upgrading riders, otherwise get promoted riders
@@ -653,6 +654,7 @@ func CheckRidersForDifferences(
 	if err != nil {
 		return false, err
 	}
+	existingRiders = removeHPAFromUnstructuredList(existingRiders)
 
 	// Now compare the desired Riders with the existing Riders to see if any need updating
 	needUpdating, _, _, _, _, err := usde.RidersNeedUpdating(ctx, existingChildDef.GetNamespace(), existingChildDef.GetKind(), existingChildDef.GetName(),
@@ -661,6 +663,18 @@ func CheckRidersForDifferences(
 		return false, err
 	}
 	return needUpdating, nil
+}
+
+// removeHPAFromUnstructuredList filters out any HorizontalPodAutoscaler items from the list
+func removeHPAFromUnstructuredList(list unstructured.UnstructuredList) unstructured.UnstructuredList {
+	result := unstructured.UnstructuredList{}
+	result.SetGroupVersionKind(list.GroupVersionKind())
+	for _, item := range list.Items {
+		if !kubernetes.IsHPA(item.GroupVersionKind()) {
+			result.Items = append(result.Items, item)
+		}
+	}
+	return result
 }
 
 // PerformResourceHealthCheckForPipelineType makes an assessment of the upgrading child (either Pipeline or MonoVertex) to determine
@@ -875,21 +889,11 @@ func startPostUpgradeProcess(
 	}
 	// We need to exclude any HPA Rider from the Upgrading child
 	// During Progressive Upgrade, we don't use HPA because it interferes with the fixed scaling we need
-	hpaGVK := schema.GroupVersionKind{
-		Group:   "autoscaling",
-		Version: "v2",
-		Kind:    "HorizontalPodAutoscalerList",
-	}
-	ridersMinusHPA := make([]riders.Rider, 0)
-	for _, rider := range newRiders {
-		if rider.Definition.GroupVersionKind() != hpaGVK {
-			ridersMinusHPA = append(ridersMinusHPA, rider)
-		}
-	}
+	newRiders = riders.RidersExceptHPA(newRiders)
 
 	riderAdditions := unstructured.UnstructuredList{}
-	riderAdditions.Items = make([]unstructured.Unstructured, len(ridersMinusHPA))
-	for index, rider := range ridersMinusHPA {
+	riderAdditions.Items = make([]unstructured.Unstructured, len(newRiders))
+	for index, rider := range newRiders {
 		riderAdditions.Items[index] = rider.Definition
 	}
 
@@ -915,8 +919,8 @@ func startPostUpgradeProcess(
 	// set Upgrading Child Status
 	_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 		status.InitializationComplete = true
-		status.Riders = make([]apiv1.RiderStatus, len(ridersMinusHPA))
-		for i, rider := range ridersMinusHPA {
+		status.Riders = make([]apiv1.RiderStatus, len(newRiders))
+		for i, rider := range newRiders {
 			status.Riders[i] = apiv1.RiderStatus{
 				GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
 				Name:             rider.Definition.GetName(),

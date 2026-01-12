@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -69,4 +70,9 @@ func ListPodsMetadataOnly(ctx context.Context, c k8sClient.Client, namespace, la
 	}
 
 	return podsMeta, nil
+}
+
+// isHPA checks if a GVK represents a HorizontalPodAutoscaler
+func IsHPA(gvk schema.GroupVersionKind) bool {
+	return gvk.Group == "autoscaling" && gvk.Kind == "HorizontalPodAutoscaler"
 }
