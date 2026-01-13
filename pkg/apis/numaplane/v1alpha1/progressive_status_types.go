@@ -114,12 +114,15 @@ type PromotedChildStatus struct {
 type PromotedPipelineTypeStatus struct {
 	PromotedChildStatus `json:",inline"`
 
-	// ScaleValues is a map where the keys are the promoted child vertices names
+	// ScaleValues is a map where the keys are the promoted child vertices' names
 	// and the values are the scale values of the vertices
 	ScaleValues map[string]ScaleValues `json:"scaleValues,omitempty"`
 	// ScaleValuesRestoredToOriginal indicates if ALL the promoted child vertices have been set back to the original min and max scale values.
 	// This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
 	ScaleValuesRestoredToOriginal bool `json:"scaleValuesRestoredToOriginal,omitempty"`
+
+	// OriginalHPADefinition is set if there was an HPA Rider originally for the promoted child
+	OriginalHPADefinition *runtime.RawExtension `json:"definition,omitempty"`
 }
 
 // IsAssessmentEndTimeSet checks if the AssessmentEndTime field is not nil.

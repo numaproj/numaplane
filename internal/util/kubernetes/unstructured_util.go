@@ -396,6 +396,38 @@ func RawExtensionToUnstructured(rawExtension runtime.RawExtension) (*unstructure
 	return unstruc, nil
 }
 
+// UnstructuredToRawExtension converts an unstructured object to a RawExtension,
+// removing status and runtime metadata fields that shouldn't be stored/reapplied.
+// This is useful for storing a resource definition that will be re-created later.
+func UnstructuredToRawExtension(obj *unstructured.Unstructured) (*runtime.RawExtension, error) {
+	// Deep copy to avoid modifying the original
+	cleaned := obj.DeepCopy()
+
+	// Remove status - it's runtime-generated and shouldn't be reapplied
+	delete(cleaned.Object, "status")
+
+	// Remove runtime metadata fields that will be different when re-created
+	if metadata, found, _ := unstructured.NestedMap(cleaned.Object, "metadata"); found {
+		delete(metadata, "resourceVersion")
+		delete(metadata, "uid")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "generation")
+		delete(metadata, "ownerReferences")
+		delete(metadata, "managedFields")
+		if err := unstructured.SetNestedMap(cleaned.Object, metadata, "metadata"); err != nil {
+			return nil, fmt.Errorf("failed to set cleaned metadata: %w", err)
+		}
+	}
+
+	// Marshal to JSON
+	jsonBytes, err := json.Marshal(cleaned.Object)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal unstructured to JSON: %w", err)
+	}
+
+	return &runtime.RawExtension{Raw: jsonBytes}, nil
+}
+
 // GetLoggableResource returns a map containing only the essential parts of a Kubernetes object
 // for logging purposes, excluding noisy metadata like managedFields
 func GetLoggableResource(obj *unstructured.Unstructured) map[string]interface{} {

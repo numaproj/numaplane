@@ -337,6 +337,11 @@ spec:
                     description: PromotedPipelineStatus stores information regarding
                       the current "promoted" pipeline
                     properties:
+                      definition:
+                        description: OriginalHPADefinition is set if there was an
+                          HPA Rider originally for the promoted child
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
                       name:
                         description: Name of the promoted child
                         type: string
@@ -367,7 +372,7 @@ spec:
                           - scaleTo
                           type: object
                         description: |-
-                          ScaleValues is a map where the keys are the promoted child vertices names
+                          ScaleValues is a map where the keys are the promoted child vertices' names
                           and the values are the scale values of the vertices
                         type: object
                       scaleValuesRestoredToOriginal:

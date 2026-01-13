@@ -104,6 +104,17 @@ type RiderStatus struct {
 	Name             string                  `json:"name"`
 }
 
+// GetRiderStatusOfKind filters the rider status list to only include those matching the given GVK
+/*func GetRiderStatusOfKind(riderStatuses []RiderStatus, gvk metav1.GroupVersionKind) []RiderStatus {
+	result := []RiderStatus{}
+	for _, rs := range riderStatuses {
+		if rs.GroupVersionKind == gvk {
+			result = append(result, rs)
+		}
+	}
+	return result
+}*/
+
 func (status *Status) SetPhase(phase Phase, msg string) {
 	if phase == PhaseFailed {
 		status.LastFailureTime = metav1.NewTime(time.Now())

@@ -25,33 +25,33 @@ spec:
             kind: MonoVertex
             name: '{{.monovertex-name}}'
           # todo: add more fields here...
-    # - definition:
-    #     apiVersion: autoscaling/v2
-    #     kind: HorizontalPodAutoscaler
-    #     metadata: 
-    #       name: hpa
-    #     spec:
-    #       minReplicas: 1
-    #       maxReplicas: 10
-    #       metrics:
-    #       - object:
-    #           metric:
-    #             name: namespace_app_monovertex_container_cpu_utilization
-    #             selector:
-    #               matchLabels:
-    #                 container: udsource
-    #           target:
-    #             type: Value
-    #             value: 80
-    #           describedObject:
-    #             apiVersion: apps/v1
-    #             kind: Deployment 
-    #             name: '{{.monovertex-name}}'
-    #         type: Object
-    #       scaleTargetRef:
-    #         apiVersion: numaflow.numaproj.io/v1alpha1
-    #         kind: MonoVertex
-    #         name: '{{.monovertex-name}}'
+    - definition:
+        apiVersion: autoscaling/v2
+        kind: HorizontalPodAutoscaler
+        metadata: 
+          name: hpa
+        spec:
+          minReplicas: 1
+          maxReplicas: 10
+          metrics:
+          - object:
+              metric:
+                name: namespace_app_monovertex_container_cpu_utilization
+                selector:
+                  matchLabels:
+                    container: udsource
+              target:
+                type: Value
+                value: 80
+              describedObject:
+                apiVersion: apps/v1
+                kind: Deployment 
+                name: '{{.monovertex-name}}'
+            type: Object
+          scaleTargetRef:
+            apiVersion: numaflow.numaproj.io/v1alpha1
+            kind: MonoVertex
+            name: '{{.monovertex-name}}'
 
   monoVertex:
     metadata:
@@ -63,6 +63,7 @@ spec:
         min: 2
         max: 3
         lookbackSeconds: 60
+        disabled: true
       source:
         udsource:
           container:
