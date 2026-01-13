@@ -27,7 +27,14 @@ import (
 )
 
 func GetPromotedMonoVertex(namespace, monoVertexRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(GetGVRForMonoVertex(), namespace, monoVertexRolloutName)
+	ulist, err := GetChildrenOfUpgradeStrategy(GetGVRForMonoVertex(), namespace, monoVertexRolloutName, common.LabelValueUpgradePromoted)
+	if err != nil {
+		return nil, err
+	}
+	if len(ulist.Items) == 0 {
+		return nil, fmt.Errorf("no promoted MonoVertex found")
+	}
+	return &ulist.Items[0], nil
 }
 
 func GetUpgradingMonoVertices(namespace, monoVertexRolloutName string) (*unstructured.UnstructuredList, error) {

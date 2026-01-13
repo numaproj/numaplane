@@ -28,7 +28,14 @@ import (
 )
 
 func GetPromotedPipeline(namespace, pipelineRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(GetGVRForPipeline(), namespace, pipelineRolloutName)
+	ulist, err := GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), namespace, pipelineRolloutName, common.LabelValueUpgradePromoted)
+	if err != nil {
+		return nil, err
+	}
+	if len(ulist.Items) == 0 {
+		return nil, fmt.Errorf("no promoted Pipeline found")
+	}
+	return &ulist.Items[0], nil
 }
 func GetUpgradingPipelines(namespace, pipelineRolloutName string) (*unstructured.UnstructuredList, error) {
 	return GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), namespace, pipelineRolloutName, common.LabelValueUpgradeTrial)

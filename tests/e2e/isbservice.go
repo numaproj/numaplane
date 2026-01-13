@@ -37,7 +37,14 @@ func GetGVRForISBService() schema.GroupVersionResource {
 }
 
 func GetPromotedISBService(namespace, isbServiceRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(GetGVRForISBService(), namespace, isbServiceRolloutName)
+	ulist, err := GetChildrenOfUpgradeStrategy(GetGVRForISBService(), namespace, isbServiceRolloutName, common.LabelValueUpgradePromoted)
+	if err != nil {
+		return nil, err
+	}
+	if len(ulist.Items) == 0 {
+		return nil, fmt.Errorf("no promoted ISBService found")
+	}
+	return &ulist.Items[0], nil
 }
 
 func GetUpgradingISBServices(namespace, isbServiceRolloutName string) (*unstructured.UnstructuredList, error) {
