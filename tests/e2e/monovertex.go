@@ -94,6 +94,16 @@ func VerifyPromotedMonoVertexMetadata(namespace string, monoVertexRolloutName st
 	}).Should(BeTrue())
 }
 
+func VerifyMonoVertexSpec(namespace, monoVertexName string, f func(numaflowv1.MonoVertexSpec) bool) {
+	CheckEventually("verifying MonoVertex Spec", func() bool {
+		unstruct, err := GetMonoVertex(namespace, monoVertexName)
+		if err != nil {
+			return false
+		}
+		return f(unstruct.Spec)
+	}).Should(BeTrue())
+}
+
 // GetMonoVertexMetadata from Unstructured type
 func GetMonoVertexMetadata(u *unstructured.Unstructured) (apiv1.Metadata, error) {
 	labels := u.GetLabels()

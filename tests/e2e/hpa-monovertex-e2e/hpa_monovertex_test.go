@@ -160,4 +160,15 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 		VerifyResourceExists(hpaGVR, hpaName)
 		VerifyResourceFieldMatchesRegex(hpaGVR, hpaName, "spec.scaleTargetRef.name", monoVertexName)
 	})
+
+	It("Should perform a Progressive Upgrade which fails", func() {
+		// Update the MonoVertexRollout to use an invalid UDTransformer image
+		UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage, initialMonoVertexSpec, udTransformer)
+
+		// Verify there is no HPA running for either monovertex and scale is fixed/disabled=false during assessment
+		VerifyPromotedMonoVertex()
+
+		// Verify the Progressive Upgrade fails
+		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
+	})
 })
