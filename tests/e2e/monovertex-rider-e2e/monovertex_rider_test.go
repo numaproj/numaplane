@@ -265,6 +265,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 		VerifyResourceDoesntExist(hpaGVR, originalHPA)
 	})
 
+	// TODO: change this to VPA or something else
 	It("Should update the HPA Rider in place", func() {
 
 		// Update HPA to change maxReplicas
