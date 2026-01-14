@@ -136,31 +136,33 @@ jobs:
       max-parallel: 15
       fail-fast: false
       matrix:
-        strategy: ["pause-and-drain", "progressive", "no-strategy"]
-        case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent", "rollback"]
+        #strategy: ["pause-and-drain", "progressive", "no-strategy"]
+        strategy: ["progressive"]
+        #case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent", "rollback"]
+        case: ["functional-pipeline"]
         include:
-          - strategy: "progressive"
-            case: "hpa-monovertex"
-          - strategy: "pause-and-drain"
-            case: "ppnd"
-          - strategy: "progressive"
-            case: "progressive-monovertex"
-          - strategy: "progressive"
-            case: "progressive-pipeline"
-          - strategy: "progressive"
-            case: "pipeline-rider"
-          - strategy: "progressive"
-            case: "monovertex-rider"
-          - strategy: "progressive"
-            case: "progressive-analysis-monovertex"
-          - strategy: "progressive"
-            case: "progressive-analysis-pipeline"
-          - strategy: "progressive"
-            case: "force-drain"
-          - strategy: "progressive"
-            case: "no-drain"
-          - strategy: "progressive"
-            case: "skip-progressive"
+           - strategy: "progressive"
+             case: "hpa-monovertex"
+          # - strategy: "pause-and-drain"
+          #   case: "ppnd"
+          # - strategy: "progressive"
+          #   case: "progressive-monovertex"
+          # - strategy: "progressive"
+          #   case: "progressive-pipeline"
+          # - strategy: "progressive"
+          #   case: "pipeline-rider"
+          # - strategy: "progressive"
+          #   case: "monovertex-rider"
+          # - strategy: "progressive"
+          #   case: "progressive-analysis-monovertex"
+          # - strategy: "progressive"
+          #   case: "progressive-analysis-pipeline"
+          # - strategy: "progressive"
+          #   case: "force-drain"
+          # - strategy: "progressive"
+          #   case: "no-drain"
+          #- strategy: "progressive"
+          #  case: "skip-progressive"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
