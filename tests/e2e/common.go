@@ -530,7 +530,7 @@ func VerifyResourceDoesntExist(gvr schema.GroupVersionResource, name string) {
 }
 
 // VerifyResourceFieldMatchesRegex verifies that a field in a resource eventually matches a regular expression.
-// The fieldPath parameter is a dot-separated path to the field (e.g., "status.phase" or "metadata.name").
+// The fieldsInPath parameter is a variadic list of field names representing the path to the field.
 // The field at the specified path is expected to be a string.
 //
 // Example usage:
@@ -539,21 +539,19 @@ func VerifyResourceDoesntExist(gvr schema.GroupVersionResource, name string) {
 //	VerifyResourceFieldMatchesRegex(
 //	    schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"},
 //	    "my-pipeline",
-//	    "status.phase",
 //	    "^(Running|Paused)$",
+//	    "status", "phase",
 //	)
-func VerifyResourceFieldMatchesRegex(gvr schema.GroupVersionResource, name string, fieldPath string, regexPattern string) {
+func VerifyResourceFieldMatchesRegex(gvr schema.GroupVersionResource, name string, regexPattern string, fieldsInPath ...string) {
+	fieldPath := strings.Join(fieldsInPath, ".")
 	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s has field %q matching regex %q", gvr, name, fieldPath, regexPattern), func() bool {
 		resource, err := GetResource(gvr, Namespace, name)
 		if resource == nil || err != nil {
 			return false
 		}
 
-		// Split the field path by dots to create a path slice
-		pathSlice := strings.Split(fieldPath, ".")
-
 		// Get the field value as a string
-		fieldValue, found, err := unstructured.NestedString(resource.Object, pathSlice...)
+		fieldValue, found, err := unstructured.NestedString(resource.Object, fieldsInPath...)
 		if err != nil || !found {
 			return false
 		}

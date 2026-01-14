@@ -154,7 +154,7 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 		monoVertexName := fmt.Sprintf("%s-0", monoVertexRolloutName)
 		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
 		VerifyResourceExists(hpaGVR, hpaName)
-		VerifyResourceFieldMatchesRegex(hpaGVR, hpaName, "spec.scaleTargetRef.name", monoVertexName)
+		VerifyResourceFieldMatchesRegex(hpaGVR, hpaName, monoVertexName, "spec", "scaleTargetRef", "name")
 	})
 
 	It("Should perform a Progressive Upgrade which fails", func() {
@@ -180,7 +180,7 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 		// After failure, the promoted MonoVertex should have an HPA once again (and its scale should be disabled)
 		promotedHPAName := fmt.Sprintf("hpa-%s", promotedMonoVertexName)
 		VerifyResourceExists(hpaGVR, promotedHPAName)
-		VerifyResourceFieldMatchesRegex(hpaGVR, promotedHPAName, "spec.scaleTargetRef.name", promotedMonoVertexName)
+		VerifyResourceFieldMatchesRegex(hpaGVR, promotedHPAName, promotedMonoVertexName, "spec", "scaleTargetRef", "name")
 		VerifyMonoVertexSpec(Namespace, promotedMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Scale.Disabled == true
 		})
@@ -193,11 +193,6 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 
 		VerifyMonoVertexSpec(Namespace, upgradingMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Scale.Disabled == false && spec.Scale.Min != nil && *spec.Scale.Min == 0 && spec.Scale.Max != nil && *spec.Scale.Max == 0
-		})
-
-		It("Should delete resources", func() {
-			DeleteMonoVertexRollout(monoVertexRolloutName)
-			DeleteNumaflowControllerRollout()
 		})
 	})
 
@@ -225,11 +220,16 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 		promotedMonoVertexName = upgradingMonoVertexName
 		promotedHPAName := fmt.Sprintf("hpa-%s", promotedMonoVertexName)
 		VerifyResourceExists(hpaGVR, promotedHPAName)
-		VerifyResourceFieldMatchesRegex(hpaGVR, promotedHPAName, "spec.scaleTargetRef.name", promotedMonoVertexName)
+		VerifyResourceFieldMatchesRegex(hpaGVR, promotedHPAName, promotedMonoVertexName, "spec", "scaleTargetRef", "name")
 		VerifyMonoVertexSpec(Namespace, promotedMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Scale.Disabled == true
 		})
 
+	})
+
+	It("Should delete resources", func() {
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+		DeleteNumaflowControllerRollout()
 	})
 })
 

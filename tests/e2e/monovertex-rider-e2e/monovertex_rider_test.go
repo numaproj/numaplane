@@ -24,14 +24,13 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/ptr"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
@@ -57,7 +56,7 @@ var (
 	monoVertexSpecWithCMRef    numaflowv1.MonoVertexSpec
 
 	configMapGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
-	hpaGVR       = schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}
+	pdbGVR       = schema.GroupVersionResource{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}
 
 	defaultConfigMap = corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -74,49 +73,24 @@ var (
 	}
 	currentConfigMap = &defaultConfigMap
 
-	defaultHPA = autoscalingv2.HorizontalPodAutoscaler{
+	defaultPDB = policyv1.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "autoscaling/v2",
-			Kind:       "HorizontalPodAutoscaler",
+			APIVersion: "policy/v1",
+			Kind:       "PodDisruptionBudget",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "hpa",
+			Name: "pdb",
 		},
-		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
-			MinReplicas: ptr.To(int32(1)),
-			MaxReplicas: 10,
-			Metrics: []autoscalingv2.MetricSpec{
-				{
-					Type: autoscalingv2.ObjectMetricSourceType,
-					Object: &autoscalingv2.ObjectMetricSource{
-						Metric: autoscalingv2.MetricIdentifier{
-							Name: "namespace_app_monovertex_container_cpu_utilization",
-							Selector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									"container": "udsource",
-								},
-							},
-						},
-						Target: autoscalingv2.MetricTarget{
-							Type:  autoscalingv2.ValueMetricType,
-							Value: ptr.To(resource.MustParse("80")),
-						},
-						DescribedObject: autoscalingv2.CrossVersionObjectReference{
-							APIVersion: "apps/v1",
-							Kind:       "Deployment",
-							Name:       "{{.monovertex-name}}",
-						},
-					},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MinAvailable: &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"numaflow.numaproj.io/monovertex-name": "{{.monovertex-name}}",
 				},
-			},
-			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
-				APIVersion: "numaflow.numaproj.io/v1alpha1",
-				Kind:       "MonoVertex",
-				Name:       "{{.monovertex-name}}",
 			},
 		},
 	}
-	currentHPA = &defaultHPA
+	currentPDB = &defaultPDB
 )
 
 func init() {
@@ -193,33 +167,33 @@ var _ = Describe("Rider E2E", Serial, func() {
 		// ConfigMap is named with the monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
 		VerifyResourceExists(configMapGVR, configMapName)
-		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-namespace", Namespace)
-		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-name", monoVertexName)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, Namespace, "data", "monovertex-namespace")
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, monoVertexName, "data", "monovertex-name")
 		VerifyResourceDoesntExist(numaflowv1.MonoVertexGroupVersionResource, mvOriginalName)
 	})
 
-	It("Should add HPA Rider to MonoVertexRollout", func() {
+	It("Should add PDB Rider to MonoVertexRollout", func() {
 
-		// Add HPA Rider to existing ConfigMap Rider
-		rawHPASpec, err := json.Marshal(defaultHPA)
+		// Add PDB Rider to existing ConfigMap Rider
+		rawPDBSpec, err := json.Marshal(defaultPDB)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// update the MonoVertexRollout to include both riders
 		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 			rollout.Spec.Riders = append(rollout.Spec.Riders, apiv1.Rider{
 				Progressive: false,
-				Definition:  runtime.RawExtension{Raw: rawHPASpec},
+				Definition:  runtime.RawExtension{Raw: rawPDBSpec},
 			})
 
 			return rollout, nil
 		})
 
-		// verify HPA is created for the existing MonoVertex in place
+		// verify PDB is created for the existing MonoVertex in place
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
-		// HPA is named with the monovertex name as the suffix
-		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
-		VerifyResourceExists(hpaGVR, hpaName)
-		VerifyResourceFieldMatchesRegex(hpaGVR, hpaName, "spec.scaleTargetRef.name", monoVertexName)
+		// PDB is named with the monovertex name as the suffix
+		pdbName := fmt.Sprintf("pdb-%s", monoVertexName)
+		VerifyResourceExists(pdbGVR, pdbName)
+		VerifyResourceFieldMatchesRegex(pdbGVR, pdbName, monoVertexName, "spec", "selector", "matchLabels", "numaflow.numaproj.io/monovertex-name")
 	})
 
 	It("Should update the ConfigMap Rider as a Progressive rollout change", func() {
@@ -229,99 +203,105 @@ var _ = Describe("Rider E2E", Serial, func() {
 		rawConfigMapSpec, err := json.Marshal(currentConfigMap)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// Keep HPA unchanged
-		rawHPASpec, err := json.Marshal(currentHPA)
+		// Keep PDB unchanged
+		rawPDBSpec, err := json.Marshal(currentPDB)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 			rollout.Spec.Riders[0].Definition = runtime.RawExtension{Raw: rawConfigMapSpec}
-			rollout.Spec.Riders[1].Definition = runtime.RawExtension{Raw: rawHPASpec}
+			rollout.Spec.Riders[1].Definition = runtime.RawExtension{Raw: rawPDBSpec}
 			return rollout, nil
 		})
 
 		monoVertexIndex++
 
-		// Verify that this caused a Progressive upgrade and generated new ConfigMap and HPA
+		// Verify that this caused a Progressive upgrade and generated new ConfigMap and PDB
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		// ConfigMap is named with the monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
 		VerifyResourceExists(configMapGVR, configMapName)
-		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.my-key-2", "my-value-2")
-		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-namespace", Namespace)
-		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-name", monoVertexName)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "my-value-2", "data", "my-key-2")
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, Namespace, "data", "monovertex-namespace")
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, monoVertexName, "data", "monovertex-name")
 
-		// HPA is named with the monovertex name as the suffix
-		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
-		VerifyResourceExists(hpaGVR, hpaName)
-		VerifyResourceFieldMatchesRegex(hpaGVR, hpaName, "spec.scaleTargetRef.name", monoVertexName)
+		// PDB is named with the monovertex name as the suffix
+		pdbName := fmt.Sprintf("pdb-%s", monoVertexName)
+		VerifyResourceExists(pdbGVR, pdbName)
+		VerifyResourceFieldMatchesRegex(pdbGVR, pdbName, monoVertexName, "spec", "selector", "matchLabels", "numaflow.numaproj.io/monovertex-name")
 
 		// Now verify that with the Progressive upgrade, the original MonoVertex,
-		// ConfigMap, and HPA get cleaned up
+		// ConfigMap, and PDB get cleaned up
 		mvOriginalName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex-1)
 		originalConfigMap := fmt.Sprintf("my-configmap-%s", mvOriginalName)
-		originalHPA := fmt.Sprintf("hpa-%s", mvOriginalName)
+		originalPDB := fmt.Sprintf("pdb-%s", mvOriginalName)
 		VerifyResourceDoesntExist(numaflowv1.MonoVertexGroupVersionResource, mvOriginalName)
 		VerifyResourceDoesntExist(configMapGVR, originalConfigMap)
-		VerifyResourceDoesntExist(hpaGVR, originalHPA)
+		VerifyResourceDoesntExist(pdbGVR, originalPDB)
 	})
 
-	// TODO: change this to VPA or something else
-	It("Should update the HPA Rider in place", func() {
+	It("Should update the PDB Rider in place", func() {
 
-		// Update HPA to change maxReplicas
-		currentHPA = currentHPA.DeepCopy()
-		currentHPA.Spec.MaxReplicas = 15
-		rawHPASpec, err := json.Marshal(currentHPA)
+		// Update PDB to change minAvailable
+		currentPDB = currentPDB.DeepCopy()
+		currentPDB.Spec.MinAvailable = &intstr.IntOrString{Type: intstr.Int, IntVal: 2}
+		rawPDBSpec, err := json.Marshal(currentPDB)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-			rollout.Spec.Riders[1].Definition = runtime.RawExtension{Raw: rawHPASpec}
+			rollout.Spec.Riders[1].Definition = runtime.RawExtension{Raw: rawPDBSpec}
 			return rollout, nil
 		})
 
-		// Verify that this caused an in place update of the HPA
+		// Verify that this caused an in place update of the PDB
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		// ConfigMap is still there and named with the same monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
 		VerifyResourceExists(configMapGVR, configMapName)
-		// HPA is still there and named with the same monovertex name as the suffix
-		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
-		VerifyResourceExists(hpaGVR, hpaName)
+		// PDB is still there and named with the same monovertex name as the suffix
+		pdbName := fmt.Sprintf("pdb-%s", monoVertexName)
+		VerifyResourceExists(pdbGVR, pdbName)
 
-		// Verify that the HPA content was updated to reflect the maxReplicas change from 10 to 15
-		CheckEventually(fmt.Sprintf("verifying HPA %s has maxReplicas=15", hpaName), func() bool {
-			hpaResource, err := GetResource(hpaGVR, Namespace, hpaName)
-			if err != nil || hpaResource == nil {
+		// Verify that the PDB content was updated to reflect the minAvailable change from 1 to 2
+		CheckEventually(fmt.Sprintf("verifying PDB %s has minAvailable=2", pdbName), func() bool {
+			pdbResource, err := GetResource(pdbGVR, Namespace, pdbName)
+			if err != nil || pdbResource == nil {
 				return false
 			}
 
-			// Extract maxReplicas from the HPA spec
-			spec, found, err := unstructured.NestedMap(hpaResource.Object, "spec")
+			// Extract minAvailable from the PDB spec
+			spec, found, err := unstructured.NestedMap(pdbResource.Object, "spec")
 			if err != nil || !found {
 				return false
 			}
 
-			maxReplicas, found, err := unstructured.NestedInt64(spec, "maxReplicas")
+			minAvailable, found, err := unstructured.NestedFieldNoCopy(spec, "minAvailable")
 			if err != nil || !found {
 				return false
 			}
 
-			return maxReplicas == 15
+			// minAvailable can be an int or a string
+			switch v := minAvailable.(type) {
+			case int64:
+				return v == 2
+			case float64:
+				return int(v) == 2
+			}
+			return false
 		}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 	})
 
-	It("Should delete the ConfigMap and HPA Riders", func() {
+	It("Should delete the ConfigMap and PDB Riders", func() {
 		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 			rollout.Spec.Riders = []apiv1.Rider{}
 			return rollout, nil
 		})
 
-		// Confirm the ConfigMap and HPA were deleted (but the monovertex is still present)
+		// Confirm the ConfigMap and PDB were deleted (but the monovertex is still present)
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
-		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
+		pdbName := fmt.Sprintf("pdb-%s", monoVertexName)
 		VerifyResourceDoesntExist(configMapGVR, configMapName)
-		VerifyResourceDoesntExist(hpaGVR, hpaName)
+		VerifyResourceDoesntExist(pdbGVR, pdbName)
 		VerifyResourceExists(numaflowv1.MonoVertexGroupVersionResource, monoVertexName)
 	})
 
