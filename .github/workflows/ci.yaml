@@ -208,7 +208,7 @@ jobs:
 
       - name: Wait for Numaplane to be ready
         run: |
-          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager,app.kubernetes.io/part-of=numaplane -o jsonpath="{.items[0].metadata.name}")
           echo 'Waiting for the numaplane-controller-manager to be ready...'
           kubectl get po -n numaplane-system
           kubectl wait --for=condition=Ready --timeout=5m pod/$POD_NAME -n numaplane-system
@@ -228,7 +228,7 @@ jobs:
         if: always()
         run: |
           echo "=== Final Pod Info ==="
-          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager,app.kubernetes.io/part-of=numaplane -o jsonpath="{.items[0].metadata.name}")
           echo "Pod Name: $POD_NAME"
           echo "Pod UID: $(kubectl get pod -n numaplane-system $POD_NAME -o jsonpath='{.metadata.uid}')"
           echo "Container Image: $(kubectl get pod -n numaplane-system $POD_NAME -o jsonpath='{.spec.containers[*].image}')"
@@ -242,7 +242,7 @@ jobs:
       - name: Stop numaplane process
         if: always()
         run: |
-          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager,app.kubernetes.io/part-of=numaplane -o jsonpath="{.items[0].metadata.name}")
           kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'kill -SIGTERM `cat /numaplane.pid`'
           sleep 10s
           kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'kill -SIGTERM `cat /numaplane.pid`'
@@ -250,7 +250,7 @@ jobs:
       - name: Copy report from Numaplane pod
         run: |
           mkdir -p tests/e2e/output/resources/coverage/
-          POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager,app.kubernetes.io/part-of=numaplane  -o jsonpath="{.items[0].metadata.name}")
           kubectl cp $POD_NAME:/coverage -n numaplane-system tests/e2e/output/resources/coverage/
 
       - name: Archive code coverage
