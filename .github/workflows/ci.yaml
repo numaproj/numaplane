@@ -210,12 +210,31 @@ jobs:
           echo 'Waiting for the numaplane-controller-manager to be ready...'
           kubectl get po -n numaplane-system
           kubectl wait --for=condition=Ready --timeout=5m pod/$POD_NAME -n numaplane-system
+          echo "=== Initial Pod Info ==="
+          echo "Pod Name: $POD_NAME"
+          echo "Pod UID: $(kubectl get pod -n numaplane-system $POD_NAME -o jsonpath='{.metadata.uid}')"
+          echo "Container Image: $(kubectl get pod -n numaplane-system $POD_NAME -o jsonpath='{.spec.containers[*].image}')"
+          echo "Image ID: $(kubectl get pod -n numaplane-system $POD_NAME -o jsonpath='{.status.containerStatuses[*].imageID}')"
 
       - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
         run: |
           KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
+
+      - name: Debug pod info
+        if: always()
+        run: |
+          echo "=== Final Pod Info ==="
+          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          echo "Pod Name: $POD_NAME"
+          echo "Pod UID: $(kubectl get pod -n numaplane-system $POD_NAME -o jsonpath='{.metadata.uid}')"
+          echo "Container Image: $(kubectl get pod -n numaplane-system $POD_NAME -o jsonpath='{.spec.containers[*].image}')"
+          echo "Image ID: $(kubectl get pod -n numaplane-system $POD_NAME -o jsonpath='{.status.containerStatuses[*].imageID}')"
+          echo "Restart Count: $(kubectl get pod -n numaplane-system $POD_NAME -o jsonpath='{.status.containerStatuses[*].restartCount}')"
+          echo ""
+          echo "=== Pod Events ==="
+          kubectl get events -n numaplane-system --field-selector involvedObject.name=$POD_NAME --sort-by='.lastTimestamp'
 
       ## This is a temporary solution to kill the process twice, until we have fix for a stuck process after initial kill.
       - name: Stop numaplane process
