@@ -41,12 +41,7 @@ const (
 )
 
 var (
-	monoVertexScaleMin  = int32(3)
-	monoVertexScaleMax  = int32(5)
 	zeroReplicaSleepSec = uint32(15)
-
-	monoVertexScaleTo               = int64(2)
-	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"disabled\":null,\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
 
 	hpaGVR = schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}
 
@@ -63,7 +58,7 @@ var (
 	invalidUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:invalid-e8y78rwq5h"
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
-		Scale: numaflowv1.Scale{Min: &monoVertexScaleMin, Max: &monoVertexScaleMax, Disabled: true, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+		Scale: numaflowv1.Scale{Disabled: true, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
@@ -173,10 +168,10 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 		time.Sleep(5 * time.Second)
 
 		// Verify there is no HPA running for either monovertex and scale is fixed/disabled=false during assessment
-		promotedHPAName := fmt.Sprintf("hpa-%s", upgradingMonoVertexName)
-		VerifyResourceDoesntExist(hpaGVR, promotedHPAName)
-		upgradingHPAName := fmt.Sprintf("hpa-%s", promotedMonoVertexName)
+		upgradingHPAName := fmt.Sprintf("hpa-%s", upgradingMonoVertexName)
 		VerifyResourceDoesntExist(hpaGVR, upgradingHPAName)
+		promotedHPAName := fmt.Sprintf("hpa-%s", promotedMonoVertexName)
+		VerifyResourceDoesntExist(hpaGVR, promotedHPAName)
 
 		VerifyMonoVertexSpec(Namespace, upgradingMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Scale.Disabled == false && spec.Scale.Min != nil && spec.Scale.Max != nil && *spec.Scale.Min == *spec.Scale.Max
