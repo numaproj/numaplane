@@ -28,7 +28,7 @@ import (
 )
 
 func GetPromotedPipeline(namespace, pipelineRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(GetGVRForPipeline(), namespace, pipelineRolloutName)
+	return getPromotedChildResource(GetGVRForPipeline(), namespace, pipelineRolloutName)
 }
 func GetUpgradingPipelines(namespace, pipelineRolloutName string) (*unstructured.UnstructuredList, error) {
 	return GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), namespace, pipelineRolloutName, common.LabelValueUpgradeTrial)

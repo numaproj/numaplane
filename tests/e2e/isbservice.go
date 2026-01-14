@@ -37,7 +37,7 @@ func GetGVRForISBService() schema.GroupVersionResource {
 }
 
 func GetPromotedISBService(namespace, isbServiceRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(GetGVRForISBService(), namespace, isbServiceRolloutName)
+	return getPromotedChildResource(GetGVRForISBService(), namespace, isbServiceRolloutName)
 }
 
 func GetUpgradingISBServices(namespace, isbServiceRolloutName string) (*unstructured.UnstructuredList, error) {

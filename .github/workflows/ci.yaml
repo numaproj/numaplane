@@ -159,6 +159,8 @@ jobs:
             case: "no-drain"
           - strategy: "progressive"
             case: "skip-progressive"
+          - strategy: "progressive"
+            case: "hpa-monovertex"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
