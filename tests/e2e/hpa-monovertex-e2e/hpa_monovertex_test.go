@@ -167,19 +167,7 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 		VerifyResourceExists(numaflowv1.MonoVertexGroupVersionResource, upgradingMonoVertexName)
 		time.Sleep(5 * time.Second)
 
-		// Verify there is no HPA running for either monovertex and scale is fixed/disabled=false during assessment
-		upgradingHPAName := fmt.Sprintf("hpa-%s", upgradingMonoVertexName)
-		VerifyResourceDoesntExist(hpaGVR, upgradingHPAName)
-		promotedHPAName := fmt.Sprintf("hpa-%s", promotedMonoVertexName)
-		VerifyResourceDoesntExist(hpaGVR, promotedHPAName)
-
-		VerifyMonoVertexSpec(Namespace, upgradingMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Scale.Disabled == false && spec.Scale.Min != nil && spec.Scale.Max != nil && *spec.Scale.Min == *spec.Scale.Max
-		})
-
-		VerifyMonoVertexSpec(Namespace, promotedMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Scale.Disabled == false && spec.Scale.Min != nil && spec.Scale.Max != nil && *spec.Scale.Min == *spec.Scale.Max
-		})
+		verifyMidProgressiveState(promotedMonoVertexName, upgradingMonoVertexName)
 
 		// Verify that we assess the new MonoVertex as "Failed"
 		CheckEventually("verifying the MonoVertexRollout Progressive Status is failed", func() bool {
@@ -190,6 +178,7 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 		}).Should(BeTrue())
 
 		// After failure, the promoted MonoVertex should have an HPA once again (and its scale should be disabled)
+		promotedHPAName := fmt.Sprintf("hpa-%s", promotedMonoVertexName)
 		VerifyResourceExists(hpaGVR, promotedHPAName)
 		VerifyResourceFieldMatchesRegex(hpaGVR, promotedHPAName, "spec.scaleTargetRef.name", promotedMonoVertexName)
 		VerifyMonoVertexSpec(Namespace, promotedMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
@@ -199,10 +188,59 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 		time.Sleep(5 * time.Second)
 
 		// the upgrading MonoVertex should still not have an HPA and should be scaled to 0
+		upgradingHPAName := fmt.Sprintf("hpa-%s", upgradingMonoVertexName)
 		VerifyResourceDoesntExist(hpaGVR, upgradingHPAName)
 
 		VerifyMonoVertexSpec(Namespace, upgradingMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Scale.Disabled == false && spec.Scale.Min != nil && *spec.Scale.Min == 0 && spec.Scale.Max != nil && *spec.Scale.Max == 0
 		})
 	})
+
+	It("Should perform a Progressive Upgrade which succeeds", func() {
+		// Update the MonoVertexRollout to use a valid UDTransformer image
+		UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
+
+		// Verify that an Upgrading MonoVertex is created
+		promotedMonoVertexName := fmt.Sprintf("%s-0", monoVertexRolloutName)
+		upgradingMonoVertexName := fmt.Sprintf("%s-2", monoVertexRolloutName)
+		VerifyResourceExists(numaflowv1.MonoVertexGroupVersionResource, upgradingMonoVertexName)
+		time.Sleep(5 * time.Second)
+
+		verifyMidProgressiveState(promotedMonoVertexName, upgradingMonoVertexName)
+
+		// Verify that we assess the new MonoVertex as "Success"
+		CheckEventually("verifying the MonoVertexRollout Progressive Status is succeeded", func() bool {
+			mvrProgressiveStatus := GetMonoVertexRolloutProgressiveStatus(monoVertexRolloutName)
+
+			return mvrProgressiveStatus.UpgradingMonoVertexStatus.AssessmentResult == apiv1.AssessmentResultSuccess
+
+		}).Should(BeTrue())
+
+		// After success, the promoted MonoVertex should have an HPA once again (and its scale should be disabled)
+		promotedMonoVertexName = upgradingMonoVertexName
+		promotedHPAName := fmt.Sprintf("hpa-%s", promotedMonoVertexName)
+		VerifyResourceExists(hpaGVR, promotedHPAName)
+		VerifyResourceFieldMatchesRegex(hpaGVR, promotedHPAName, "spec.scaleTargetRef.name", promotedMonoVertexName)
+		VerifyMonoVertexSpec(Namespace, promotedMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
+			return spec.Scale.Disabled == true
+		})
+
+	})
 })
+
+func verifyMidProgressiveState(promotedMonoVertexName string, upgradingMonoVertexName string) {
+
+	// Verify there is no HPA running for either monovertex and scale is fixed/disabled=false during assessment
+	upgradingHPAName := fmt.Sprintf("hpa-%s", upgradingMonoVertexName)
+	VerifyResourceDoesntExist(hpaGVR, upgradingHPAName)
+	promotedHPAName := fmt.Sprintf("hpa-%s", promotedMonoVertexName)
+	VerifyResourceDoesntExist(hpaGVR, promotedHPAName)
+
+	VerifyMonoVertexSpec(Namespace, upgradingMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
+		return spec.Scale.Disabled == false && spec.Scale.Min != nil && spec.Scale.Max != nil && *spec.Scale.Min == *spec.Scale.Max
+	})
+
+	VerifyMonoVertexSpec(Namespace, promotedMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
+		return spec.Scale.Disabled == false && spec.Scale.Min != nil && spec.Scale.Max != nil && *spec.Scale.Min == *spec.Scale.Max
+	})
+}
