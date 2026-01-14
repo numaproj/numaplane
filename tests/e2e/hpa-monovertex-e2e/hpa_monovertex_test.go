@@ -194,6 +194,11 @@ var _ = Describe("HPA MonoVertex E2E", Serial, func() {
 		VerifyMonoVertexSpec(Namespace, upgradingMonoVertexName, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Scale.Disabled == false && spec.Scale.Min != nil && *spec.Scale.Min == 0 && spec.Scale.Max != nil && *spec.Scale.Max == 0
 		})
+
+		It("Should delete resources", func() {
+			DeleteMonoVertexRollout(monoVertexRolloutName)
+			DeleteNumaflowControllerRollout()
+		})
 	})
 
 	It("Should perform a Progressive Upgrade which succeeds", func() {

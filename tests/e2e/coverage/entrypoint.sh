@@ -8,8 +8,7 @@ export NUMAPLANE_PID=$!
 echo $NUMAPLANE_PID > /numaplane.pid
 
 # Function to handle signals
-# TODO: PID needs to be changed to NUMAPLANE_PID
-trap "echo 'Stopping PID $PID'; kill $PID; wait $PID; /manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect &" SIGTERM SIGINT
+trap "echo 'Stopping PID $NUMAPLANE_PID'; kill $NUMAPLANE_PID; wait $NUMAPLANE_PID; /manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect &" SIGTERM SIGINT
 
 # Wait indefinitely
 while true
