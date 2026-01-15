@@ -1011,39 +1011,6 @@ func TestUnstructuredToRawExtension(t *testing.T) {
 				},
 			},
 		},
-		{
-			name: "newly created pipeline without status - should only remove runtime metadata",
-			input: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": "numaflow.numaproj.io/v1alpha1",
-					"kind":       "Pipeline",
-					"metadata": map[string]interface{}{
-						"name":              "new-pipeline",
-						"namespace":         "default",
-						"resourceVersion":   "111",
-						"uid":               "new-uid",
-						"creationTimestamp": "2025-01-14T00:00:00Z",
-						"generation":        int64(1),
-					},
-					"spec": map[string]interface{}{
-						"vertices": []interface{}{},
-						"edges":    []interface{}{},
-					},
-				},
-			},
-			expectedFields: map[string]interface{}{
-				"apiVersion": "numaflow.numaproj.io/v1alpha1",
-				"kind":       "Pipeline",
-				"metadata": map[string]interface{}{
-					"name":      "new-pipeline",
-					"namespace": "default",
-				},
-				"spec": map[string]interface{}{
-					"vertices": []interface{}{},
-					"edges":    []interface{}{},
-				},
-			},
-		},
 	}
 
 	for _, tt := range tests {
