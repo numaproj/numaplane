@@ -183,7 +183,7 @@ func ProcessResource(
 	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
 	initializationIncomplete := !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown
 	if initializationIncomplete {
-		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
+		needsRequeue, err := postUpgradingChildCreatedProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
 		if needsRequeue {
 			return false, common.DefaultRequeueDelay, err
 		} else {
@@ -572,7 +572,7 @@ func checkForUpgradeReplacement(
 	// After creating the new Upgrading child, do post-upgrade process (check that AssessmentResult is not set just in case) and return
 	if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
 
-		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, newUpgradingChildDef, controller, c)
+		needsRequeue, err := postUpgradingChildCreatedProcess(ctx, rolloutObject, existingPromotedChildDef, newUpgradingChildDef, controller, c)
 		if needsRequeue {
 			return true, false, err
 		}
@@ -868,7 +868,8 @@ func startUpgradeProcess(
 	return newUpgradingChildDef, false, nil
 }
 
-func startPostUpgradeProcess(
+// postUpgradingChildCreatedProcess is called right after the Upgrading child is created
+func postUpgradingChildCreatedProcess(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
 	existingPromotedChild *unstructured.Unstructured,

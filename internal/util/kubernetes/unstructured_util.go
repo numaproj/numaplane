@@ -412,7 +412,6 @@ func UnstructuredToRawExtension(obj *unstructured.Unstructured) (*runtime.RawExt
 		delete(metadata, "uid")
 		delete(metadata, "creationTimestamp")
 		delete(metadata, "generation")
-		delete(metadata, "ownerReferences")
 		delete(metadata, "managedFields")
 		if err := unstructured.SetNestedMap(cleaned.Object, metadata, "metadata"); err != nil {
 			return nil, fmt.Errorf("failed to set cleaned metadata: %w", err)
