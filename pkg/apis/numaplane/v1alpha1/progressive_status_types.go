@@ -99,7 +99,7 @@ type ScaleValues struct {
 	OriginalScaleMinMax string `json:"originalScaleMinMax"`
 
 	// OriginalHPADefinition is set if there was an HPA Rider originally for the promoted child
-	OriginalHPADefinition *runtime.RawExtension `json:"definition,omitempty"`
+	OriginalHPADefinition *runtime.RawExtension `json:"originalHPADefinition,omitempty"`
 
 	// ScaleTo indicates how many pods to scale down to
 	ScaleTo int64 `json:"scaleTo"`
