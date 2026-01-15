@@ -171,7 +171,7 @@ func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	return false, nil
 }
 
-func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPostUpgrade(
+func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPostUpgradeStart(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	promotedChildDef *unstructured.Unstructured,
@@ -207,7 +207,7 @@ func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	return false, nil
 }
 
-func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostUpgrade(
+func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostUpgradeStart(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	upgradingChildDef *unstructured.Unstructured,

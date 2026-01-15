@@ -371,7 +371,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	return requeue, nil
 }
 
-func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgrade(
+func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgradeStart(
 	ctx context.Context,
 	pipelineRollout progressive.ProgressiveRolloutObject,
 	promotedPipelineDef *unstructured.Unstructured,
@@ -610,7 +610,7 @@ func createScaledDownUpgradingPipelineDef(
 }
 
 /*
-ProcessUpgradingChildPostUpgrade handles the processing of an upgrading pipeline definition after it's been created
+ProcessUpgradingChildPostUpgradeStart handles the processing of an upgrading pipeline definition after it's been created
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -622,7 +622,7 @@ Returns:
   - A boolean indicating whether we should requeue.
   - An error if any issues occur during processing.
 */
-func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgrade(
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgradeStart(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	upgradingPipelineDef *unstructured.Unstructured,

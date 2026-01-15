@@ -97,6 +97,10 @@ type AnalysisStatus struct {
 type ScaleValues struct {
 	// OriginalScaleMinMax stores the original scale min and max values as JSON string
 	OriginalScaleMinMax string `json:"originalScaleMinMax"`
+
+	// OriginalHPADefinition is set if there was an HPA Rider originally for the promoted child
+	OriginalHPADefinition *runtime.RawExtension `json:"definition,omitempty"`
+
 	// ScaleTo indicates how many pods to scale down to
 	ScaleTo int64 `json:"scaleTo"`
 	// Initial indicates how many pods were initially running for the vertex at the beginning of the upgrade process
@@ -120,9 +124,6 @@ type PromotedPipelineTypeStatus struct {
 	// ScaleValuesRestoredToOriginal indicates if ALL the promoted child vertices have been set back to the original min and max scale values.
 	// This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
 	ScaleValuesRestoredToOriginal bool `json:"scaleValuesRestoredToOriginal,omitempty"`
-
-	// OriginalHPADefinition is set if there was an HPA Rider originally for the promoted child
-	OriginalHPADefinition *runtime.RawExtension `json:"definition,omitempty"`
 }
 
 // IsAssessmentEndTimeSet checks if the AssessmentEndTime field is not nil.

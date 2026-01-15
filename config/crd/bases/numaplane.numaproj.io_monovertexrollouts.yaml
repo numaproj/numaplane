@@ -287,11 +287,6 @@ spec:
                     description: PromotedMonoVertexStatus stores information regarding
                       the current "promoted" MonoVertex
                     properties:
-                      definition:
-                        description: OriginalHPADefinition is set if there was an
-                          HPA Rider originally for the promoted child
-                        type: object
-                        x-kubernetes-preserve-unknown-fields: true
                       name:
                         description: Name of the promoted child
                         type: string
@@ -301,6 +296,11 @@ spec:
                             max values, scaleTo value, and actual scale value of a
                             pipeline or monovertex vertex
                           properties:
+                            definition:
+                              description: OriginalHPADefinition is set if there was
+                                an HPA Rider originally for the promoted child
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
                             initial:
                               description: Initial indicates how many pods were initially
                                 running for the vertex at the beginning of the upgrade

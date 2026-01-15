@@ -62,9 +62,9 @@ type progressiveController interface {
 	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessPromotedChildPostUpgrade performs operations on the promoted child after the creation of the Upgrading child in K8S (just the operations which are unique to this Kind)
+	// ProcessPromotedChildPostUpgradeStart performs operations on the promoted child after the creation of the Upgrading child in K8S (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
-	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	ProcessPromotedChildPostUpgradeStart(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
@@ -74,9 +74,9 @@ type progressiveController interface {
 	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessUpgradingChildPostUpgrade performs operations on the upgrading child after its creation in K8S (just the operations which are unique to this Kind)
+	// ProcessUpgradingChildPostUpgradeStart performs operations on the upgrading child after its creation in K8S (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
-	ProcessUpgradingChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	ProcessUpgradingChildPostUpgradeStart(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessUpgradingChildPostFailure performs operations on the upgrading child after the upgrade fails (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
@@ -902,14 +902,14 @@ func postUpgradingChildCreatedProcess(
 		return false, err
 	}
 
-	requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChild, c)
+	requeue, err := controller.ProcessPromotedChildPostUpgradeStart(ctx, rolloutObject, existingPromotedChild, c)
 	if err != nil {
 		return false, err
 	}
 	if requeue {
 		return true, nil
 	}
-	requeue, err = controller.ProcessUpgradingChildPostUpgrade(ctx, rolloutObject, newUpgradingChild, c)
+	requeue, err = controller.ProcessUpgradingChildPostUpgradeStart(ctx, rolloutObject, newUpgradingChild, c)
 	if err != nil {
 		return false, err
 	}
