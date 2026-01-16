@@ -306,6 +306,32 @@ func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersion
 	return unstructuredList, nil
 }
 
+// ListResourcesOwnedBy retrieves the list of resources that are owned by the specified owner.
+// It filters the results to only include resources that have an OwnerReference matching the owner's UID.
+func ListResourcesOwnedBy(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespace string, owner *unstructured.Unstructured, opts ...client.ListOption) (unstructured.UnstructuredList, error) {
+	unstructuredList, err := ListResources(ctx, c, gvk, namespace, opts...)
+	if err != nil {
+		return unstructured.UnstructuredList{}, err
+	}
+
+	// Filter to only include resources owned by the specified owner
+	ownerUID := owner.GetUID()
+	filteredItems := []unstructured.Unstructured{}
+	for _, item := range unstructuredList.Items {
+		for _, ownerRef := range item.GetOwnerReferences() {
+			if ownerRef.UID == ownerUID {
+				filteredItems = append(filteredItems, item)
+				break
+			}
+		}
+	}
+
+	result := unstructured.UnstructuredList{}
+	result.SetGroupVersionKind(gvk)
+	result.Items = filteredItems
+	return result, nil
+}
+
 // DeleteResource deletes the resource from the kubernetes cluster
 func DeleteResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
 	return c.Delete(ctx, obj)
@@ -368,6 +394,37 @@ func RawExtensionToUnstructured(rawExtension runtime.RawExtension) (*unstructure
 	unstruc := &unstructured.Unstructured{}
 	unstruc.Object = asMap
 	return unstruc, nil
+}
+
+// UnstructuredToRawExtension converts an unstructured object to a RawExtension,
+// removing status and runtime metadata fields that shouldn't be stored/reapplied.
+// This is useful for storing a resource definition that will be re-created later.
+func UnstructuredToRawExtension(obj *unstructured.Unstructured) (*runtime.RawExtension, error) {
+	// Deep copy to avoid modifying the original
+	cleaned := obj.DeepCopy()
+
+	// Remove status - it's runtime-generated and shouldn't be reapplied
+	delete(cleaned.Object, "status")
+
+	// Remove runtime metadata fields that will be different when re-created
+	if metadata, found, _ := unstructured.NestedMap(cleaned.Object, "metadata"); found {
+		delete(metadata, "resourceVersion")
+		delete(metadata, "uid")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "generation")
+		delete(metadata, "managedFields")
+		if err := unstructured.SetNestedMap(cleaned.Object, metadata, "metadata"); err != nil {
+			return nil, fmt.Errorf("failed to set cleaned metadata: %w", err)
+		}
+	}
+
+	// Marshal to JSON
+	jsonBytes, err := json.Marshal(cleaned.Object)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal unstructured to JSON: %w", err)
+	}
+
+	return &runtime.RawExtension{Raw: jsonBytes}, nil
 }
 
 // GetLoggableResource returns a map containing only the essential parts of a Kubernetes object

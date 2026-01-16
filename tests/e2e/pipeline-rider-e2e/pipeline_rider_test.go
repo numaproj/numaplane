@@ -190,7 +190,7 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 			// VPA is named with the pipeline name and vertex name as the suffix
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", pipelineName, vertex)
 			VerifyResourceExists(vpaGVR, vpaName)
-			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, "spec.targetRef.name", fmt.Sprintf("%s-%s", pipelineName, vertex))
+			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, fmt.Sprintf("%s-%s", pipelineName, vertex), "spec", "targetRef", "name")
 		}
 	})
 
@@ -214,7 +214,7 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		// ConfigMap is named with the pipeline name as the suffix
 		configMapName := fmt.Sprintf("my-pipeline-configmap-%s", pipelineName)
 		VerifyResourceExists(configMapGVR, configMapName)
-		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.pipeline-name", pipelineName)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, pipelineName, "data", "pipeline-name")
 	})
 
 	It("Should update the VPA Rider in place", func() {
@@ -259,8 +259,8 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 			VerifyResourceExists(vpaGVR, vpaName)
 
 			// Verify that the VPA content was updated to include the updatePolicy
-			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, "spec.updatePolicy.updateMode", "^Initial$")
-			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, "spec.targetRef.name", fmt.Sprintf("%s-%s", pipelineName, vertex))
+			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, "^Initial$", "spec", "updatePolicy", "updateMode")
+			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, fmt.Sprintf("%s-%s", pipelineName, vertex), "spec", "targetRef", "name")
 		}
 	})
 
@@ -278,7 +278,7 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		// verify ConfigMap exists for the new pipeline
 		configMapName := fmt.Sprintf("my-pipeline-configmap-%s", newPipelineName)
 		VerifyResourceExists(configMapGVR, configMapName)
-		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.pipeline-name", newPipelineName)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, newPipelineName, "data", "pipeline-name")
 
 		// make sure we created VPAs for all 3 vertices
 		vertices := []string{"in", "cat", "out"}
@@ -286,7 +286,7 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 			// VPA is named with the pipeline name and vertex name as the suffix
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", newPipelineName, vertex)
 			VerifyResourceExists(vpaGVR, vpaName)
-			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, "spec.targetRef.name", fmt.Sprintf("%s-%s", newPipelineName, vertex))
+			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, fmt.Sprintf("%s-%s", newPipelineName, vertex), "spec", "targetRef", "name")
 		}
 		// make sure the original VPAs are removed once the pipeline is deleted
 		originalPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex-1) // TODO: can we create a variable at the top and update it instead of repeating?
@@ -329,7 +329,7 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		// verify ConfigMap exists for the new pipeline
 		configMapName := fmt.Sprintf("my-pipeline-configmap-%s", newPipelineName)
 		VerifyResourceExists(configMapGVR, configMapName)
-		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.pipeline-key-2", "pipeline-value-2")
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "pipeline-value-2", "data", "pipeline-key-2")
 
 		// make sure the original VPAs are removed once the pipeline is deleted
 		originalPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex-1) // TODO: can we create a variable at the top and update it instead of repeating?

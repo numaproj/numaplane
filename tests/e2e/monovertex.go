@@ -27,7 +27,7 @@ import (
 )
 
 func GetPromotedMonoVertex(namespace, monoVertexRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(GetGVRForMonoVertex(), namespace, monoVertexRolloutName)
+	return getPromotedChildResource(GetGVRForMonoVertex(), namespace, monoVertexRolloutName)
 }
 
 func GetUpgradingMonoVertices(namespace, monoVertexRolloutName string) (*unstructured.UnstructuredList, error) {
@@ -55,6 +55,19 @@ func GetGVRForMonoVertex() schema.GroupVersionResource {
 		Version:  "v1alpha1",
 		Resource: "monovertices",
 	}
+}
+
+// GetMonoVertex retrieves a MonoVertex by namespace and name
+func GetMonoVertex(namespace, monoVertexName string) (*numaflowv1.MonoVertex, error) {
+	unstruc, err := GetResource(GetGVRForMonoVertex(), namespace, monoVertexName)
+	if err != nil {
+		return nil, err
+	}
+	var monoVertex numaflowv1.MonoVertex
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstruc.Object, &monoVertex); err != nil {
+		return nil, err
+	}
+	return &monoVertex, nil
 }
 
 // Get MonoVertexSpec from Unstructured type
@@ -91,6 +104,16 @@ func VerifyPromotedMonoVertexMetadata(namespace string, monoVertexRolloutName st
 		}
 
 		return f(retrievedMonoVertexMetadata)
+	}).Should(BeTrue())
+}
+
+func VerifyMonoVertexSpec(namespace, monoVertexName string, f func(numaflowv1.MonoVertexSpec) bool) {
+	CheckEventually("verifying MonoVertex Spec", func() bool {
+		unstruct, err := GetMonoVertex(namespace, monoVertexName)
+		if err != nil {
+			return false
+		}
+		return f(unstruct.Spec)
 	}).Should(BeTrue())
 }
 

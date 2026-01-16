@@ -725,6 +725,11 @@ spec:
                                 process
                               format: int64
                               type: integer
+                            originalHPADefinition:
+                              description: OriginalHPADefinition is set if there was
+                                an HPA Rider originally for the promoted child
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
                             originalScaleMinMax:
                               description: OriginalScaleMinMax stores the original
                                 scale min and max values as JSON string
@@ -740,7 +745,7 @@ spec:
                           - scaleTo
                           type: object
                         description: |-
-                          ScaleValues is a map where the keys are the promoted child vertices names
+                          ScaleValues is a map where the keys are the promoted child vertices' names
                           and the values are the scale values of the vertices
                         type: object
                       scaleValuesRestoredToOriginal:
@@ -1707,6 +1712,11 @@ spec:
                                 process
                               format: int64
                               type: integer
+                            originalHPADefinition:
+                              description: OriginalHPADefinition is set if there was
+                                an HPA Rider originally for the promoted child
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
                             originalScaleMinMax:
                               description: OriginalScaleMinMax stores the original
                                 scale min and max values as JSON string
@@ -1722,7 +1732,7 @@ spec:
                           - scaleTo
                           type: object
                         description: |-
-                          ScaleValues is a map where the keys are the promoted child vertices names
+                          ScaleValues is a map where the keys are the promoted child vertices' names
                           and the values are the scale values of the vertices
                         type: object
                       scaleValuesRestoredToOriginal:
@@ -2682,7 +2692,7 @@ data:
         - kind: InterstepBufferService
           schedule: "0,0,0,10"
       analysisRunTimeout: 1200
-    permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler"
+    permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler;group=policy,kind=PodDisruptionBudget"
     pipeline:
       forceDrainFailureWaitDuration: 15
       maxRecyclableDurationMinutes: 240 # 4 hours

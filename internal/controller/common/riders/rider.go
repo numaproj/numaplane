@@ -181,3 +181,14 @@ func VerifyRidersPermitted(riders []Rider) bool {
 
 	return true
 }
+
+// RidersExceptHPA filters out any HorizontalPodAutoscaler riders from the list
+func RidersExceptHPA(newRiders []Rider) []Rider {
+	ridersMinusHPA := make([]Rider, 0)
+	for _, rider := range newRiders {
+		if !kubernetes.IsHPA(rider.Definition.GroupVersionKind()) {
+			ridersMinusHPA = append(ridersMinusHPA, rider)
+		}
+	}
+	return ridersMinusHPA
+}

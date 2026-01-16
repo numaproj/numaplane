@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -335,7 +338,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	return requeue, nil
 }
 
-func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
+func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgradeStart(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	promotedMonoVertexDef *unstructured.Unstructured,
@@ -360,7 +363,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 
 	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
 	for _, scaleValue := range monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues {
-		if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &scaleValue.ScaleTo, Max: &scaleValue.ScaleTo, Disabled: false}, c); err != nil {
+		if err := setMonoVertexToFixedScale(ctx, promotedMonoVertexDef, scaleValue.ScaleTo, c); err != nil {
 			return true, fmt.Errorf("error scaling the existing promoted monovertex %s/%s to the desired scale values: %w",
 				promotedMonoVertexDef.GetNamespace(), promotedMonoVertexDef.GetName(), err)
 		}
@@ -554,7 +557,7 @@ func scaleDownUpgradingMonoVertex(
 }
 
 /*
-ProcessUpgradingChildPostUpgrade handles the processing of an upgrading monovertex definition after it's been created
+ProcessUpgradingChildPostUpgradeStart handles the processing of an upgrading monovertex definition after it's been created
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -566,7 +569,7 @@ Returns:
   - A boolean indicating whether we should requeue.
   - An error if any issues occur during processing.
 */
-func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostUpgrade(
+func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostUpgradeStart(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	upgradingMonoVertexDef *unstructured.Unstructured,
@@ -617,7 +620,8 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 			monoVertexRollout.Namespace, monoVertexRollout.Name)
 	}
 
-	err := scalePromotedMonoVertexToOriginalValues(ctx, monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus, promotedMonoVertexDef, c)
+	// after Upgrading MonoVertex has failed, we need to "roll back" the promoted monovertex, which means setting it to its original scale values
+	err := scalePromotedMonoVertexToOriginalRolloutDef(ctx, monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus, promotedMonoVertexDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -675,22 +679,39 @@ func computePromotedMonoVertexScaleValues(
 	}
 
 	scaleTo := progressive.CalculateScaleMinMaxValues(int(currentPodsCount))
-	newMin := scaleTo
-	newMax := scaleTo
 
-	numaLogger.WithValues(
-		"promotedChildName", promotedMonoVertexDef.GetName(),
-		"newMin", newMin,
-		"newMax", newMax,
-		"originalScaleMinMax", originalScaleMinMax,
-	).Debugf("found %d pod(s) for the monovertex, scaling down to %d", currentPodsCount, newMax)
+	// if there's an HPA defined for the promoted child, store it in the OriginalHPADefinition field
+	hpaGVK := schema.GroupVersionKind{
+		Group:   "autoscaling",
+		Version: "v2",
+		Kind:    "HorizontalPodAutoscalerList",
+	}
+	hpaList, err := kubernetes.ListResourcesOwnedBy(ctx, c, hpaGVK, promotedMonoVertexDef.GetNamespace(), promotedMonoVertexDef)
+	if err != nil {
+		return true, fmt.Errorf("failed to list HPAs owned by monovertex %s/%s: %w", promotedMonoVertexDef.GetNamespace(), promotedMonoVertexDef.GetName(), err)
+	}
+
+	var originalHPADefinition *runtime.RawExtension
+	if len(hpaList.Items) > 0 {
+		rawExt, err := kubernetes.UnstructuredToRawExtension(&hpaList.Items[0])
+		if err != nil {
+			return true, fmt.Errorf("failed to convert HPA to RawExtension: %w", err)
+		}
+		originalHPADefinition = rawExt
+	}
 
 	scaleValuesMap := map[string]apiv1.ScaleValues{}
 	scaleValuesMap[promotedMonoVertexDef.GetName()] = apiv1.ScaleValues{
-		OriginalScaleMinMax: originalScaleMinMax,
-		ScaleTo:             scaleTo,
-		Initial:             currentPodsCount,
+		OriginalScaleMinMax:   originalScaleMinMax,
+		OriginalHPADefinition: originalHPADefinition,
+		ScaleTo:               scaleTo,
+		Initial:               currentPodsCount,
 	}
+
+	numaLogger.WithValues(
+		"promotedChildName", promotedMonoVertexDef.GetName(),
+		"scaleValues", scaleValuesMap[promotedMonoVertexDef.GetName()],
+	).Debugf("found %d pod(s) for the monovertex, scaling down to %d", currentPodsCount, scaleTo)
 
 	promotedMVStatus.ScaleValues = scaleValuesMap
 
@@ -704,7 +725,8 @@ func computePromotedMonoVertexScaleValues(
 }
 
 /*
-scalePromotedMonoVertexToOriginalValues scales a monovertex to its original values based on the rollout status.
+scalePromotedMonoVertexToOriginalRolloutDef scales a monovertex to its original values based on the rollout status.
+This includes both the scale values and the original HPA definition if it was defined (for the case that the HPA is used for scaling instead of numaflow).
 This function checks if the monovertex has already been scaled to the original values. If not, it restores the scale values
 from the rollout's promoted monovertex status and updates the Kubernetes resource accordingly.
 
@@ -718,7 +740,7 @@ Returns:
 - bool: true if should requeue, false otherwise. Should requeue in case of error or if the monovertex has not been scaled back to original values.
 - An error if any issues occur during the scaling process.
 */
-func scalePromotedMonoVertexToOriginalValues(
+func scalePromotedMonoVertexToOriginalRolloutDef(
 	ctx context.Context,
 	promotedMVStatus *apiv1.PromotedMonoVertexStatus,
 	promotedMonoVertexDef *unstructured.Unstructured,
@@ -747,10 +769,67 @@ func scalePromotedMonoVertexToOriginalValues(
 
 	numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef).Debug("patched the promoted monovertex with the original scale configuration")
 
+	// if there was an HPA, we removed it during Progressive Uprade: now we need to restore it so the MonoVertex can dynamically scale again
+	originalHPADefinition := promotedMVStatus.ScaleValues[promotedMonoVertexDef.GetName()].OriginalHPADefinition
+	if originalHPADefinition != nil {
+		// Convert the stored HPA definition back to unstructured
+		hpaDef, err := kubernetes.RawExtensionToUnstructured(*originalHPADefinition)
+		if err != nil {
+			return fmt.Errorf("failed to convert OriginalHPADefinition to unstructured: %w", err)
+		}
+
+		// Create the HPA
+		numaLogger.Infof("Re-creating HPA %s/%s for monovertex %s", hpaDef.GetNamespace(), hpaDef.GetName(), promotedMonoVertexDef.GetName())
+		if err := kubernetes.CreateResource(ctx, c, hpaDef); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				numaLogger.Debugf("HPA %s/%s already exists", hpaDef.GetNamespace(), hpaDef.GetName())
+			} else {
+				return fmt.Errorf("failed to create HPA %s/%s: %w", hpaDef.GetNamespace(), hpaDef.GetName(), err)
+			}
+		}
+	}
+
 	promotedMVStatus.ScaleValuesRestoredToOriginal = true
 	promotedMVStatus.ScaleValues = nil
 
 	return nil
+}
+
+// setMonoVertexToFixedScale sets a monovertex to a scale where min==max and there is no HPA
+// this is necessary during Progressive Upgrade
+// HPA must be removed in order for the fixed scaling to work
+func setMonoVertexToFixedScale(
+	ctx context.Context,
+	monovertex *unstructured.Unstructured,
+	numReplicas int64,
+	c client.Client) error {
+	numaLogger := logger.FromContext(ctx)
+
+	scaleDefinition := &apiv1.ScaleDefinition{
+		Min:      &numReplicas,
+		Max:      &numReplicas,
+		Disabled: false,
+	}
+
+	// if there's an HPA child of this MonoVertex, delete it
+	// Otherwise, it will interfere with numaflow's scaling
+	hpaGVK := schema.GroupVersionKind{
+		Group:   "autoscaling",
+		Version: "v2",
+		Kind:    "HorizontalPodAutoscalerList",
+	}
+	hpaList, err := kubernetes.ListResourcesOwnedBy(ctx, c, hpaGVK, monovertex.GetNamespace(), monovertex)
+	if err != nil {
+		return fmt.Errorf("failed to list HPAs owned by monovertex %s/%s: %w", monovertex.GetNamespace(), monovertex.GetName(), err)
+	}
+	for _, hpa := range hpaList.Items { // realistically, there should only be zero or one
+		numaLogger.Infof("Deleting HPA %s/%s owned by monovertex %s", hpa.GetNamespace(), hpa.GetName(), monovertex.GetName())
+		if err := kubernetes.DeleteResource(ctx, c, &hpa); err != nil {
+			return fmt.Errorf("failed to delete HPA %s/%s: %w", hpa.GetNamespace(), hpa.GetName(), err)
+		}
+	}
+
+	return scaleMonoVertex(ctx, monovertex, scaleDefinition, c)
 }
 
 /*
@@ -799,24 +878,6 @@ func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string
 }
 
 func (r *MonoVertexRolloutReconciler) progressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
-	numaLogger := logger.FromContext(ctx)
-
-	// Temporary: we cannot support Progressive rollout assessment for HPA: See issue https://github.com/numaproj/numaplane/issues/868
-	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
-	for _, rider := range monoVertexRollout.Spec.Riders {
-
-		unstruc, err := kubernetes.RawExtensionToUnstructured(rider.Definition)
-		if err != nil {
-			numaLogger.Errorf(err, "Failed to convert rider definition to map")
-			continue
-		}
-		gvk := unstruc.GroupVersionKind()
-
-		if gvk.Group == "autoscaling" && gvk.Kind == "HorizontalPodAutoscaler" {
-			numaLogger.Debug("MonoVertexRollout %s/%s contains HPA Rider: Full Progressive Rollout is unsupported")
-			return true
-		}
-	}
 
 	return false
 }

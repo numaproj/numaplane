@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -978,131 +977,6 @@ func createMonoVertexOfScale(scaleDefinition numaflowv1.Scale) *numaflowv1.MonoV
 	return mv
 }
 
-func TestProgressiveUnsupported(t *testing.T) {
-	ctx := context.Background()
-
-	// Create a test reconciler
-	reconciler := &MonoVertexRolloutReconciler{}
-
-	tests := []struct {
-		name     string
-		riders   []apiv1.Rider
-		expected bool
-	}{
-		{
-			name:     "No riders",
-			riders:   []apiv1.Rider{},
-			expected: false,
-		},
-		{
-			name: "ConfigMap rider only",
-			riders: []apiv1.Rider{
-				{
-					Progressive: true,
-					Definition: runtime.RawExtension{
-						Raw: createConfigMapRawExtension(t),
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "HPA rider - should return true",
-			riders: []apiv1.Rider{
-				{
-					Progressive: true,
-					Definition: runtime.RawExtension{
-						Raw: createHPARawExtension(t),
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "Mixed riders with HPA - should return true",
-			riders: []apiv1.Rider{
-				{
-					Progressive: true,
-					Definition: runtime.RawExtension{
-						Raw: createConfigMapRawExtension(t),
-					},
-				},
-				{
-					Progressive: true,
-					Definition: runtime.RawExtension{
-						Raw: createHPARawExtension(t),
-					},
-				},
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a MonoVertexRollout with the test riders
-			monoVertexRollout := &apiv1.MonoVertexRollout{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-rollout",
-					Namespace: "test-namespace",
-				},
-				Spec: apiv1.MonoVertexRolloutSpec{
-					Riders: tt.riders,
-				},
-			}
-
-			result := reconciler.progressiveUnsupported(ctx, monoVertexRollout)
-			assert.Equal(t, tt.expected, result, "ProgressiveUnsupported should return %v for test case: %s", tt.expected, tt.name)
-		})
-	}
-}
-
-// Helper functions to create RawExtension objects for different resource types
-
-func createConfigMapRawExtension(t *testing.T) []byte {
-	t.Helper()
-	configMap := corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-configmap",
-		},
-		Data: map[string]string{
-			"key": "value",
-		},
-	}
-	raw, err := json.Marshal(configMap)
-	assert.NoError(t, err)
-	return raw
-}
-
-func createHPARawExtension(t *testing.T) []byte {
-	t.Helper()
-	hpa := autoscalingv2.HorizontalPodAutoscaler{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "autoscaling/v2",
-			Kind:       "HorizontalPodAutoscaler",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-hpa",
-		},
-		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
-			MinReplicas: ptr.To(int32(1)),
-			MaxReplicas: 10,
-			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
-				APIVersion: "numaflow.numaproj.io/v1alpha1",
-				Kind:       "MonoVertex",
-				Name:       "test-monovertex",
-			},
-		},
-	}
-	raw, err := json.Marshal(hpa)
-	assert.NoError(t, err)
-	return raw
-}
-
 func Test_SkipProgressiveAssessment(t *testing.T) {
 	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
@@ -1175,54 +1049,6 @@ func Test_SkipProgressiveAssessment(t *testing.T) {
 			forcePromoteConfigured: true,
 			riders:                 nil,
 			expectedSkip:           true,
-		},
-		{
-			name:                   "HPA rider present - should skip",
-			monoVertexSpec:         monoVertexSpec,
-			forcePromoteConfigured: false,
-			riders: []apiv1.Rider{
-				{
-					Progressive: true,
-					Definition: runtime.RawExtension{
-						Raw: createHPARawExtension(t),
-					},
-				},
-			},
-			expectedSkip: true,
-		},
-		{
-			name:                   "ConfigMap rider only (no HPA) - should NOT skip",
-			monoVertexSpec:         monoVertexSpec,
-			forcePromoteConfigured: false,
-			riders: []apiv1.Rider{
-				{
-					Progressive: true,
-					Definition: runtime.RawExtension{
-						Raw: createConfigMapRawExtension(t),
-					},
-				},
-			},
-			expectedSkip: false,
-		},
-		{
-			name:                   "Mixed riders including HPA - should skip",
-			monoVertexSpec:         monoVertexSpec,
-			forcePromoteConfigured: false,
-			riders: []apiv1.Rider{
-				{
-					Progressive: true,
-					Definition: runtime.RawExtension{
-						Raw: createConfigMapRawExtension(t),
-					},
-				},
-				{
-					Progressive: true,
-					Definition: runtime.RawExtension{
-						Raw: createHPARawExtension(t),
-					},
-				},
-			},
-			expectedSkip: true,
 		},
 	}
 

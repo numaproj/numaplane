@@ -62,9 +62,9 @@ type progressiveController interface {
 	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessPromotedChildPostUpgrade performs operations on the promoted child after the creation of the Upgrading child in K8S (just the operations which are unique to this Kind)
+	// ProcessPromotedChildPostUpgradeStart performs operations on the promoted child after the creation of the Upgrading child in K8S (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
-	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	ProcessPromotedChildPostUpgradeStart(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
@@ -74,9 +74,9 @@ type progressiveController interface {
 	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessUpgradingChildPostUpgrade performs operations on the upgrading child after its creation in K8S (just the operations which are unique to this Kind)
+	// ProcessUpgradingChildPostUpgradeStart performs operations on the upgrading child after its creation in K8S (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
-	ProcessUpgradingChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	ProcessUpgradingChildPostUpgradeStart(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessUpgradingChildPostFailure performs operations on the upgrading child after the upgrade fails (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
@@ -183,7 +183,7 @@ func ProcessResource(
 	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
 	initializationIncomplete := !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown
 	if initializationIncomplete {
-		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
+		needsRequeue, err := postUpgradingChildCreatedProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
 		if needsRequeue {
 			return false, common.DefaultRequeueDelay, err
 		} else {
@@ -572,7 +572,7 @@ func checkForUpgradeReplacement(
 	// After creating the new Upgrading child, do post-upgrade process (check that AssessmentResult is not set just in case) and return
 	if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
 
-		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, newUpgradingChildDef, controller, c)
+		needsRequeue, err := postUpgradingChildCreatedProcess(ctx, rolloutObject, existingPromotedChildDef, newUpgradingChildDef, controller, c)
 		if needsRequeue {
 			return true, false, err
 		}
@@ -644,6 +644,8 @@ func CheckRidersForDifferences(
 	if err != nil {
 		return false, err
 	}
+	// We need to exclude HPA from the check - during Progressive Upgrade, we don't use HPA
+	newRiders = riders.RidersExceptHPA(newRiders)
 
 	// Which Riders have already been deployed?
 	// Use "trial" state to get upgrading riders, otherwise get promoted riders
@@ -652,6 +654,7 @@ func CheckRidersForDifferences(
 	if err != nil {
 		return false, err
 	}
+	existingRiders = removeHPAFromUnstructuredList(existingRiders)
 
 	// Now compare the desired Riders with the existing Riders to see if any need updating
 	needUpdating, _, _, _, _, err := usde.RidersNeedUpdating(ctx, existingChildDef.GetNamespace(), existingChildDef.GetKind(), existingChildDef.GetName(),
@@ -660,6 +663,18 @@ func CheckRidersForDifferences(
 		return false, err
 	}
 	return needUpdating, nil
+}
+
+// removeHPAFromUnstructuredList filters out any HorizontalPodAutoscaler items from the list
+func removeHPAFromUnstructuredList(list unstructured.UnstructuredList) unstructured.UnstructuredList {
+	result := unstructured.UnstructuredList{}
+	result.SetGroupVersionKind(list.GroupVersionKind())
+	for _, item := range list.Items {
+		if !kubernetes.IsHPA(item.GroupVersionKind()) {
+			result.Items = append(result.Items, item)
+		}
+	}
+	return result
 }
 
 // PerformResourceHealthCheckForPipelineType makes an assessment of the upgrading child (either Pipeline or MonoVertex) to determine
@@ -853,7 +868,8 @@ func startUpgradeProcess(
 	return newUpgradingChildDef, false, nil
 }
 
-func startPostUpgradeProcess(
+// postUpgradingChildCreatedProcess is called right after the Upgrading child is created
+func postUpgradingChildCreatedProcess(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
 	existingPromotedChild *unstructured.Unstructured,
@@ -872,23 +888,28 @@ func startPostUpgradeProcess(
 	if err != nil {
 		return false, err
 	}
+	// We need to exclude any HPA Rider from the Upgrading child
+	// During Progressive Upgrade, we don't use HPA because it interferes with the fixed scaling we need
+	newRiders = riders.RidersExceptHPA(newRiders)
+
 	riderAdditions := unstructured.UnstructuredList{}
 	riderAdditions.Items = make([]unstructured.Unstructured, len(newRiders))
 	for index, rider := range newRiders {
 		riderAdditions.Items[index] = rider.Definition
 	}
+
 	if err = riders.UpdateRidersInK8S(ctx, newUpgradingChild, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, c); err != nil {
 		return false, err
 	}
 
-	requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChild, c)
+	requeue, err := controller.ProcessPromotedChildPostUpgradeStart(ctx, rolloutObject, existingPromotedChild, c)
 	if err != nil {
 		return false, err
 	}
 	if requeue {
 		return true, nil
 	}
-	requeue, err = controller.ProcessUpgradingChildPostUpgrade(ctx, rolloutObject, newUpgradingChild, c)
+	requeue, err = controller.ProcessUpgradingChildPostUpgradeStart(ctx, rolloutObject, newUpgradingChild, c)
 	if err != nil {
 		return false, err
 	}
