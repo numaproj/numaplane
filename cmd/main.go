@@ -19,7 +19,9 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -234,6 +236,12 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+	if enableLeaderElection {
+		if err := mgr.AddReadyzCheck("leaderElection", leaderElectionCheck(mgr.Elected())); err != nil {
+			setupLog.Error(err, "unable to set up leader election ready check")
+			os.Exit(1)
+		}
+	}
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
@@ -263,4 +271,17 @@ func loadConfigs() {
 	logger.SetBaseLogger(numaLogger)
 	clog.SetLogger(*numaLogger.LogrLogger)
 
+}
+
+// leaderElectionCheck returns a health check that fails until the manager is elected leader.
+// The elected channel is closed when this manager becomes the leader.
+func leaderElectionCheck(elected <-chan struct{}) healthz.Checker {
+	return func(_ *http.Request) error {
+		select {
+		case <-elected:
+			return nil // elected, healthy
+		default:
+			return errors.New("not yet elected leader")
+		}
+	}
 }
