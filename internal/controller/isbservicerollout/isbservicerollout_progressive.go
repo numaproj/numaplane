@@ -2,6 +2,7 @@ package isbservicerollout
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -66,7 +67,21 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 		})
 	}
 	if assessmentResult == apiv1.AssessmentResultFailure {
+		childStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
+		if err != nil {
+			return assessmentResult, fmt.Sprintf("Pipeline %s failed", failedPipeline), err
+		}
+		_ = progressive.UpdateUpgradingChildStatus(isbServiceRollout, func(status *apiv1.UpgradingChildStatus) {
+			status.FailureReason = fmt.Sprintf("Pipeline %s failed", failedPipeline)
+			status.ChildStatus.Raw = childStatus
+		})
 		return assessmentResult, fmt.Sprintf("Pipeline %s failed", failedPipeline), nil
+	}
+	// clear values for childStatus and failureReason if previously set
+	childStatus := isbServiceRollout.GetUpgradingChildStatus()
+	if childStatus != nil && childStatus.ChildStatus.Raw != nil {
+		childStatus.ChildStatus.Raw = nil
+		childStatus.FailureReason = ""
 	}
 	return assessmentResult, "", nil
 }

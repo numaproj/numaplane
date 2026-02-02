@@ -81,10 +81,16 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 
 		// if we fail once, it's okay: we'll check again later
 		if assessment == apiv1.AssessmentResultFailure {
+			childStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
+			if err != nil {
+				return assessment, reasonFailure, err
+			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
 				status.TrialWindowStartTime = nil
 				status.AssessmentResult = apiv1.AssessmentResultUnknown
+				status.FailureReason = reasonFailure
+				status.ChildStatus.Raw = childStatus
 			})
 			return apiv1.AssessmentResultUnknown, "", nil
 		}
@@ -116,6 +122,10 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		}
 	} else {
 		if childStatus.BasicAssessmentResult == apiv1.AssessmentResultSuccess {
+			if childStatus.ChildStatus.Raw != nil {
+				childStatus.ChildStatus.Raw = nil
+				childStatus.FailureReason = ""
+			}
 			return r.checkAnalysisTemplates(ctx, mvtxRollout, existingUpgradingChildDef)
 		}
 		return childStatus.BasicAssessmentResult, "Basic assessment failed", nil
