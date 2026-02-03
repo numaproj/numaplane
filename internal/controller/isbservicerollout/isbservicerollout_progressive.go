@@ -59,31 +59,34 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	if err != nil {
 		return assessmentResult, "", err
 	}
+
+	// get childStatus and set if nil
+	childStatus := isbServiceRollout.GetUpgradingChildStatus()
+	if childStatus == nil {
+		err := isbServiceRollout.ResetUpgradingChildStatus(existingUpgradingChildDef)
+		if err != nil {
+			return assessmentResult, "", err
+		}
+	}
+
 	// set BasicAssessmentEndTime to now
 	if assessmentResult != apiv1.AssessmentResultUnknown {
-		_ = progressive.UpdateUpgradingChildStatus(isbServiceRollout, func(status *apiv1.UpgradingChildStatus) {
-			assessmentEndTime := metav1.NewTime(time.Now())
-			status.BasicAssessmentEndTime = &assessmentEndTime
-		})
+		assessmentEndTime := metav1.NewTime(time.Now())
+		childStatus.BasicAssessmentEndTime = &assessmentEndTime
 	}
 	if assessmentResult == apiv1.AssessmentResultFailure {
-		childStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
+		isbServiceChildStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
 		if err != nil {
 			return assessmentResult, fmt.Sprintf("Pipeline %s failed", failedPipeline), err
 		}
-		_ = progressive.UpdateUpgradingChildStatus(isbServiceRollout, func(status *apiv1.UpgradingChildStatus) {
-			status.FailureReason = fmt.Sprintf("Pipeline %s failed", failedPipeline)
-			status.ChildStatus.Raw = childStatus
-		})
+		childStatus.FailureReason = fmt.Sprintf("Pipeline %s failed", failedPipeline)
+		childStatus.ChildStatus.Raw = isbServiceChildStatus
 		return assessmentResult, fmt.Sprintf("Pipeline %s failed", failedPipeline), nil
 	}
 	if assessmentResult == apiv1.AssessmentResultSuccess {
 		// clear values for childStatus and failureReason if previously set
-		childStatus := isbServiceRollout.GetUpgradingChildStatus()
-		if childStatus != nil {
-			childStatus.ChildStatus.Raw = nil
-			childStatus.FailureReason = ""
-		}
+		childStatus.ChildStatus.Raw = nil
+		childStatus.FailureReason = ""
 	}
 	return assessmentResult, "", nil
 }

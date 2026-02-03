@@ -81,6 +81,12 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	numaLogger := logger.FromContext(ctx)
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	childStatus := pipelineRollout.GetUpgradingChildStatus()
+	if childStatus == nil {
+		err := pipelineRollout.ResetUpgradingChildStatus(existingUpgradingChildDef)
+		if err != nil {
+			return "", "", err
+		}
+	}
 	currentTime := time.Now()
 
 	// If a basic assessment result is not yet set, we need to perform basic assessment first
@@ -89,11 +95,10 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		// Check if endTime has arrived, fail immediately
 		if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
 			numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
-			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-				status.AssessmentResult = apiv1.AssessmentResultFailure
-				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
-				status.BasicAssessmentResult = apiv1.AssessmentResultFailure
-			})
+			childStatus.AssessmentResult = apiv1.AssessmentResultFailure
+			childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+			childStatus.BasicAssessmentResult = apiv1.AssessmentResultFailure
+
 			return apiv1.AssessmentResultFailure, "Basic Resource Health Check failed", nil
 		}
 
@@ -132,17 +137,15 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 
 		// if we fail once, it's okay: we'll check again later
 		if assessment == apiv1.AssessmentResultFailure {
-			childStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
+			pipelineChildStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
 			if err != nil {
 				return assessment, reasonFailure, err
 			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
-			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-				status.TrialWindowStartTime = nil
-				status.AssessmentResult = apiv1.AssessmentResultUnknown
-				status.FailureReason = reasonFailure
-				status.ChildStatus.Raw = childStatus
-			})
+			childStatus.TrialWindowStartTime = nil
+			childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
+			childStatus.FailureReason = reasonFailure
+			childStatus.ChildStatus.Raw = pipelineChildStatus
 
 			return apiv1.AssessmentResultUnknown, "", nil
 		}
@@ -151,20 +154,16 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		// check "successful".
 		if assessment == apiv1.AssessmentResultSuccess {
 			if !childStatus.IsTrialWindowStartTimeSet() {
-				_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-					status.TrialWindowStartTime = &metav1.Time{Time: currentTime}
-					status.AssessmentResult = apiv1.AssessmentResultUnknown
-				})
+				childStatus.TrialWindowStartTime = &metav1.Time{Time: currentTime}
+				childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
 				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 			}
 
 			// Check if the trail window is set and if the success window has passed.
 			if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
 				// Success window passed, launch AnalysisRun or declared success
-				_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-					status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
-					status.BasicAssessmentResult = apiv1.AssessmentResultSuccess
-				})
+				childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+				childStatus.BasicAssessmentResult = apiv1.AssessmentResultSuccess
 				return r.checkAnalysisTemplates(ctx, pipelineRollout, existingUpgradingChildDef)
 			}
 
