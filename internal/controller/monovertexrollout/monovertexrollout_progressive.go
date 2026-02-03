@@ -57,6 +57,12 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 	numaLogger := logger.FromContext(ctx)
 	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	childStatus := mvtxRollout.GetUpgradingChildStatus()
+	if childStatus == nil {
+		err := mvtxRollout.ResetUpgradingChildStatus(existingUpgradingChildDef)
+		if err != nil {
+			return "", "", err
+		}
+	}
 	currentTime := time.Now()
 
 	// If a basic assessment result is not yet set, we need to perform basic assessment first
