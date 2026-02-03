@@ -391,14 +391,8 @@ func processUpgradingChild(
 	// Assess the upgrading child status only if within the assessment time window and if not previously failed.
 	// Otherwise, assess the previous child status.
 	assessment := childStatus.AssessmentResult
-	failureReason := childStatus.FailureReason
-	childSts := childStatus.ChildStatus.Raw
 	if childStatus.CanAssess() {
-		assessment, failureReason, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, assessmentSchedule)
-		if err != nil {
-			return false, 0, err
-		}
-		childSts, err = json.Marshal(existingUpgradingChildDef.Object["status"])
+		assessment, _, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, assessmentSchedule)
 		if err != nil {
 			return false, 0, err
 		}
@@ -416,8 +410,6 @@ func processUpgradingChild(
 
 		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultFailure
-			status.FailureReason = failureReason
-			status.ChildStatus.Raw = childSts
 		})
 
 		err = ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateFailed, existingUpgradingChildDef)
