@@ -174,10 +174,8 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		}
 	} else {
 		if childStatus.BasicAssessmentResult == apiv1.AssessmentResultSuccess {
-			if childStatus.ChildStatus.Raw != nil {
-				childStatus.ChildStatus.Raw = nil
-				childStatus.FailureReason = ""
-			}
+			childStatus.ChildStatus.Raw = nil
+			childStatus.FailureReason = ""
 			return r.checkAnalysisTemplates(ctx, pipelineRollout, existingUpgradingChildDef)
 		}
 		return childStatus.BasicAssessmentResult, "Basic assessment failed", nil

@@ -77,11 +77,13 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 		})
 		return assessmentResult, fmt.Sprintf("Pipeline %s failed", failedPipeline), nil
 	}
-	// clear values for childStatus and failureReason if previously set
-	childStatus := isbServiceRollout.GetUpgradingChildStatus()
-	if childStatus != nil && childStatus.ChildStatus.Raw != nil {
-		childStatus.ChildStatus.Raw = nil
-		childStatus.FailureReason = ""
+	if assessmentResult == apiv1.AssessmentResultSuccess {
+		// clear values for childStatus and failureReason if previously set
+		childStatus := isbServiceRollout.GetUpgradingChildStatus()
+		if childStatus != nil {
+			childStatus.ChildStatus.Raw = nil
+			childStatus.FailureReason = ""
+		}
 	}
 	return assessmentResult, "", nil
 }
