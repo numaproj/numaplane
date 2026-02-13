@@ -190,7 +190,7 @@ func (monoVertexRollout *MonoVertexRollout) ResetUpgradingChildStatus(upgradingM
 				Name:                   upgradingMonoVertex.GetName(),
 				BasicAssessmentEndTime: nil,
 				AssessmentResult:       AssessmentResultUnknown,
-				FailureReason:          "",
+				FailureReasons:         []string{},
 			},
 			Analysis: AnalysisStatus{},
 		},

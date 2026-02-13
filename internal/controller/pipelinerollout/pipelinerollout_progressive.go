@@ -144,7 +144,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			childStatus.TrialWindowStartTime = nil
 			childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
-			childStatus.FailureReason = reasonFailure
+			childStatus.FailureReasons = append(childStatus.FailureReasons, reasonFailure)
 			childStatus.ChildStatus.Raw = pipelineChildStatus
 
 			return apiv1.AssessmentResultUnknown, "", nil
@@ -174,7 +174,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	} else {
 		if childStatus.BasicAssessmentResult == apiv1.AssessmentResultSuccess {
 			childStatus.ChildStatus.Raw = nil
-			childStatus.FailureReason = ""
+			childStatus.FailureReasons = nil
 			return r.checkAnalysisTemplates(ctx, pipelineRollout, existingUpgradingChildDef)
 		}
 		return childStatus.BasicAssessmentResult, "Basic assessment failed", nil
