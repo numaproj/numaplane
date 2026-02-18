@@ -740,8 +740,7 @@ func IsPipelineTypePhaseHealthy(ctx context.Context, existingUpgradingChildDef *
 
 }
 
-// CalculateFailureReason issues a reason for failure; if there are multiple reasons, it returns one of them
-// TODO: return all reasons instead of single
+// CalculateFailureReason returns all reasons for failure that occur during an upgrade
 func CalculateFailureReason(replicasFailureReason, phase string, failedCondition *metav1.Condition) []string {
 
 	var failureReasons []string
