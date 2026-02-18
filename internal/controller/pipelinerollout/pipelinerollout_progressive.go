@@ -130,21 +130,21 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		}
 
 		// First perform basic resource health check
-		assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
+		assessment, failureReasons, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
 		if err != nil {
-			return assessment, reasonFailure, err
+			return assessment, "", err
 		}
 
 		// if we fail once, it's okay: we'll check again later
 		if assessment == apiv1.AssessmentResultFailure {
 			pipelineChildStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
 			if err != nil {
-				return assessment, reasonFailure, err
+				return assessment, "", err
 			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			childStatus.TrialWindowStartTime = nil
 			childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
-			childStatus.FailureReasons = append(childStatus.FailureReasons, reasonFailure)
+			childStatus.FailureReasons = failureReasons
 			childStatus.ChildStatus.Raw = pipelineChildStatus
 
 			return apiv1.AssessmentResultUnknown, "", nil

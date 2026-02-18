@@ -681,20 +681,20 @@ func PerformResourceHealthCheckForPipelineType(
 	ctx context.Context,
 	existingUpgradingChildDef *unstructured.Unstructured,
 	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error),
-) (apiv1.AssessmentResult, string, error) {
+) (apiv1.AssessmentResult, []string, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", err
+		return apiv1.AssessmentResultUnknown, nil, err
 	}
 
 	healthyConditions, failedCondition := checkChildConditions(&upgradingObjectStatus)
 
 	healthyReplicas, replicasFailureReason, err := verifyReplicasFunc(existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, replicasFailureReason, err
+		return apiv1.AssessmentResultUnknown, []string{replicasFailureReason}, err
 	}
 
 	numaLogger.
@@ -708,15 +708,15 @@ func PerformResourceHealthCheckForPipelineType(
 
 	phaseHealthy, err := IsPipelineTypePhaseHealthy(ctx, existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", err
+		return apiv1.AssessmentResultUnknown, nil, err
 	}
 
 	// conduct standard health assessment first
 	if phaseHealthy && healthyConditions && healthyReplicas {
-		return apiv1.AssessmentResultSuccess, "", nil
+		return apiv1.AssessmentResultSuccess, nil, nil
 	}
 
-	return apiv1.AssessmentResultUnknown, "", nil
+	return apiv1.AssessmentResultUnknown, nil, nil
 }
 
 func IsPipelineTypePhaseHealthy(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
@@ -741,14 +741,22 @@ func IsPipelineTypePhaseHealthy(ctx context.Context, existingUpgradingChildDef *
 }
 
 // CalculateFailureReason issues a reason for failure; if there are multiple reasons, it returns one of them
-func CalculateFailureReason(replicasFailureReason, phase string, failedCondition *metav1.Condition) string {
+// TODO: return all reasons instead of single
+func CalculateFailureReason(replicasFailureReason, phase string, failedCondition *metav1.Condition) []string {
+
+	var failureReasons []string
+
 	if phase == "Failed" {
-		return "child phase is in Failed state"
-	} else if failedCondition != nil {
-		return fmt.Sprintf("condition %s is False for Reason: %s", failedCondition.Type, failedCondition.Reason)
-	} else {
-		return replicasFailureReason
+		failureReasons = append(failureReasons, "child phase is in Failed state")
 	}
+	if failedCondition != nil {
+		failureReasons = append(failureReasons, fmt.Sprintf("condition %s is False for Reason: %s", failedCondition.Type, failedCondition.Reason))
+	}
+	if replicasFailureReason != "" {
+		failureReasons = append(failureReasons, replicasFailureReason)
+	}
+
+	return failureReasons
 }
 
 /*
