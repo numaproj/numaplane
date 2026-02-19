@@ -706,9 +706,7 @@ func PerformResourceHealthCheckForPipelineType(
 		return apiv1.AssessmentResultUnknown, []string{}, err
 	}
 	if !healthyReplicas {
-		for _, replicaFailureReason := range replicasFailureReasons {
-			failureReasons = append(failureReasons, replicaFailureReason)
-		}
+		failureReasons = append(failureReasons, replicasFailureReasons...)
 	}
 
 	numaLogger.
