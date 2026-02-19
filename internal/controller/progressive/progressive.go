@@ -694,9 +694,11 @@ func PerformResourceHealthCheckForPipelineType(
 		failureReasons = append(failureReasons, "child phase is in Failed state")
 	}
 
-	healthyConditions, failedCondition := checkChildConditions(&upgradingObjectStatus)
+	healthyConditions, failedConditions := checkChildConditions(&upgradingObjectStatus)
 	if !healthyConditions {
-		failureReasons = append(failureReasons, fmt.Sprintf("condition %s is False for Reason: %s", failedCondition.Type, failedCondition.Reason))
+		for _, failedCondition := range failedConditions {
+			failureReasons = append(failureReasons, fmt.Sprintf("condition %s is False for Reason: %s", failedCondition.Type, failedCondition.Reason))
+		}
 	}
 
 	healthyReplicas, replicasFailureReason, err := verifyReplicasFunc(existingUpgradingChildDef)
@@ -924,14 +926,20 @@ func postUpgradingChildCreatedProcess(
 }
 
 // return true if all Conditions are true
-func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) (bool, *metav1.Condition) {
+func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) (bool, []*metav1.Condition) {
 	if len(upgradingObjectStatus.Conditions) == 0 {
 		return false, nil
 	}
+
+	var falseChildConditions []*metav1.Condition
 	for _, c := range upgradingObjectStatus.Conditions {
 		if c.Status != metav1.ConditionTrue {
-			return false, &c
+			falseChildConditions = append(falseChildConditions, &c)
 		}
+	}
+
+	if len(falseChildConditions) > 0 {
+		return false, falseChildConditions
 	}
 	return true, nil
 }
