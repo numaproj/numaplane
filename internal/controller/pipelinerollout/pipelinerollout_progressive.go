@@ -103,30 +103,32 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		}
 
 		// function for checking readiness of Pipeline Vertex replicas
-		verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
+		verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, []string, error) {
 			verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 				numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
 				fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPipelineName, existingUpgradingChildDef.GetName()), "")
+
+			var failureReasons []string
 			if err != nil {
-				return false, "", err
+				return false, failureReasons, err
 			}
 
 			areAllVerticesReplicasReady := true
-			var replicasFailureReason string
+			// var replicasFailureReason string
 			for _, vertex := range verticesList.Items {
 				areVertexReplicasReady, failureReason, err := progressive.AreVertexReplicasReady(&vertex)
 				if err != nil {
-					return false, "", err
+					return false, failureReasons, err
 				}
 
 				if !areVertexReplicasReady {
 					areAllVerticesReplicasReady = false
-					replicasFailureReason = fmt.Sprintf("%s (vertex: %s)", failureReason, vertex.GetName())
-					break
+					failureReasons = append(failureReasons, fmt.Sprintf("%s (vertex: %s)", failureReason, vertex.GetName()))
+					continue
 				}
 			}
 
-			return areAllVerticesReplicasReady, replicasFailureReason, nil
+			return areAllVerticesReplicasReady, failureReasons, nil
 		}
 
 		// First perform basic resource health check

@@ -680,7 +680,7 @@ func removeHPAFromUnstructuredList(list unstructured.UnstructuredList) unstructu
 func PerformResourceHealthCheckForPipelineType(
 	ctx context.Context,
 	existingUpgradingChildDef *unstructured.Unstructured,
-	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error),
+	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, []string, error),
 ) (apiv1.AssessmentResult, []string, error) {
 
 	numaLogger := logger.FromContext(ctx)
@@ -701,12 +701,14 @@ func PerformResourceHealthCheckForPipelineType(
 		}
 	}
 
-	healthyReplicas, replicasFailureReason, err := verifyReplicasFunc(existingUpgradingChildDef)
+	healthyReplicas, replicasFailureReasons, err := verifyReplicasFunc(existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, []string{replicasFailureReason}, err
+		return apiv1.AssessmentResultUnknown, []string{}, err
 	}
 	if !healthyReplicas {
-		failureReasons = append(failureReasons, replicasFailureReason)
+		for _, replicaFailureReason := range replicasFailureReasons {
+			failureReasons = append(failureReasons, replicaFailureReason)
+		}
 	}
 
 	numaLogger.
@@ -985,22 +987,22 @@ Returns:
   - A boolean indicating whether the ready replicas are sufficient.
   - In the case that ready replicas aren't sufficient, a message providing more information
 */
-func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
+func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured) (bool, []string, error) {
 	desiredReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "desiredReplicas")
 	if err != nil {
-		return false, "", err
+		return false, nil, err
 	}
 
 	readyReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "readyReplicas")
 	if err != nil {
-		return false, "", err
+		return false, nil, err
 	}
 
 	if readyReplicas >= desiredReplicas {
-		return true, "", nil
+		return true, nil, nil
 	}
 
-	return false, fmt.Sprintf("readyReplicas=%d is less than desiredReplicas=%d", readyReplicas, desiredReplicas), nil
+	return false, []string{fmt.Sprintf("readyReplicas=%d is less than desiredReplicas=%d", readyReplicas, desiredReplicas)}, nil
 }
 
 // For a given Rollout, stop the Progressive upgrade
