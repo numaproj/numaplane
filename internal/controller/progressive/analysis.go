@@ -89,6 +89,44 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 	return uniqueTemplates, uniqueClusterTemplates, nil
 }
 
+// dedupMetrics returns a copy of the given metrics slice with duplicates removed by metric name.
+// The first occurrence of each name is kept.
+func dedupMetrics(metrics []argorolloutsv1.Metric) []argorolloutsv1.Metric {
+	seen := make(map[string]bool)
+	out := make([]argorolloutsv1.Metric, 0, len(metrics))
+	for _, m := range metrics {
+		if seen[m.Name] {
+			continue
+		}
+		seen[m.Name] = true
+		out = append(out, m)
+	}
+	return out
+}
+
+// dedupMetricsForAnalysisTemplates removes duplicate metrics from the given AnalysisTemplates and
+// ClusterAnalysisTemplates. When templates are merged (e.g. from nested refs), the same metric may
+// appear multiple times; this function ensures each metric appears at most once per template.
+// It returns the same template slices with metrics deduplicated, or an error if processing fails.
+func dedupMetricsForAnalysisTemplates(ctx context.Context, templates []*argorolloutsv1.AnalysisTemplate, clusterTemplates []*argorolloutsv1.ClusterAnalysisTemplate) ([]*argorolloutsv1.AnalysisTemplate, []*argorolloutsv1.ClusterAnalysisTemplate, error) {
+	numaLogger := logger.FromContext(ctx)
+	for index, t := range templates {
+		deduped := dedupMetrics(t.Spec.Metrics)
+		if len(deduped) < len(t.Spec.Metrics) {
+			numaLogger.Warnf("AnalysisTemplate %s had duplicate metrics; using first occurrence only", t.Name)
+		}
+		templates[index].Spec.Metrics = deduped
+	}
+	for index, t := range clusterTemplates {
+		deduped := dedupMetrics(t.Spec.Metrics)
+		if len(deduped) < len(t.Spec.Metrics) {
+			numaLogger.Warnf("ClusterAnalysisTemplate %s had duplicate metrics; using first occurrence only", t.Name)
+		}
+		clusterTemplates[index].Spec.Metrics = deduped
+	}
+	return templates, clusterTemplates, nil
+}
+
 /*
 CreateAnalysisRun finds all templates specified in the Analysis field in the spec of a rollout and creates the resulting AnalysisRun in k8s.
 
@@ -111,6 +149,12 @@ func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpg
 
 	// find all specified templates to merge into single AnalysisRun
 	analysisTemplates, clusterAnalysisTemplates, err := GetAnalysisTemplatesFromRefs(ctx, &analysis.Templates, existingUpgradingChildDef.GetNamespace(), client)
+	if err != nil {
+		return err
+	}
+
+	// temporary code to take care of an issue in which incoming AnalysisTemplates have a duplicate metric
+	analysisTemplates, clusterAnalysisTemplates, err = dedupMetricsForAnalysisTemplates(ctx, analysisTemplates, clusterAnalysisTemplates)
 	if err != nil {
 		return err
 	}
