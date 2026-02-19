@@ -146,7 +146,11 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 		if err != nil {
 			return apiv1.AssessmentResultUnknown, "", err
 		}
-		return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
+		assessment, err := progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, "", err
+		}
+		return assessment, "", nil
 	}
 	return apiv1.AssessmentResultSuccess, "", nil
 }

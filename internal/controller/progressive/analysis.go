@@ -250,13 +250,13 @@ func PerformAnalysis(
 func AssessAnalysisStatus(
 	ctx context.Context,
 	existingUpgradingChildDef *unstructured.Unstructured,
-	analysisStatus *apiv1.AnalysisStatus) (apiv1.AssessmentResult, string, error) {
+	analysisStatus *apiv1.AnalysisStatus) (apiv1.AssessmentResult, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// make sure we haven't gone past the max time allowed for an AnalysisRun
 	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", err
+		return apiv1.AssessmentResultUnknown, err
 	}
 
 	// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
@@ -265,18 +265,26 @@ func AssessAnalysisStatus(
 			Debugf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase)
 		switch analysisStatus.Phase {
 		case argorolloutsv1.AnalysisPhaseSuccessful:
-			return apiv1.AssessmentResultSuccess, "", nil
-		case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
-			return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
+			return apiv1.AssessmentResultSuccess, nil
+		case argorolloutsv1.AnalysisPhaseFailed:
+			return apiv1.AssessmentResultFailure, nil
+		case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseInconclusive:
+			// Decision not to consider this a failure since it's either a misconfiguration of the AnalysisTemplate or unavailable Provider, etc
+			numaLogger.WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
+				Warnf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase)
+			return apiv1.AssessmentResultSuccess, nil
 		default:
 			// if analysisRun is not completed yet, we check if it has exceeded the analysisRunTimeout
+			// Decision not to consider this a failure since it's either a misconfiguration of the AnalysisTemplate or Argo Rollouts unavailable, etc
 			if time.Since(analysisStatus.StartTime.Time) >= analysisRunTimeout {
-				return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s in phase %s has exceeded the analysisRunTimeout", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
+				numaLogger.WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
+					Warnf("AnalysisRun %s has exceeded the analysisRunTimeout", analysisStatus.AnalysisRunName)
+				return apiv1.AssessmentResultSuccess, nil
 			}
-			return apiv1.AssessmentResultUnknown, "", nil
+			return apiv1.AssessmentResultUnknown, nil
 		}
 	}
 
 	// no AnalysisRun so by default we can mark this successful
-	return apiv1.AssessmentResultSuccess, "", nil
+	return apiv1.AssessmentResultSuccess, nil
 }
