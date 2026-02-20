@@ -79,7 +79,11 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 		if err != nil {
 			return assessmentResult, "", err
 		}
-		childStatus.FailureReasons = failedPipelines
+		var failedPipelineReasons []string
+		for _, failedPipeline := range failedPipelines {
+			failedPipelineReasons = append(failedPipelineReasons, fmt.Sprintf("Pipeline %s failed", failedPipeline))
+		}
+		childStatus.FailureReasons = failedPipelineReasons
 		childStatus.ChildStatus.Raw = isbServiceChildStatus
 		return assessmentResult, "", nil
 	}
@@ -127,7 +131,7 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
 		case apiv1.AssessmentResultFailure:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline is failed")
-			failedPipelines = append(failedPipelines, fmt.Sprintf("Pipeline %s failed", upgradingPipelineStatus.Name))
+			failedPipelines = append(failedPipelines, upgradingPipelineStatus.Name)
 		case apiv1.AssessmentResultUnknown:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline assessment is unknown")
 			return apiv1.AssessmentResultUnknown, failedPipelines, nil
