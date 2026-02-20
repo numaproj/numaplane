@@ -127,7 +127,7 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
 		case apiv1.AssessmentResultFailure:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline is failed")
-			failedPipelines = append(failedPipelines, upgradingPipelineStatus.Name)
+			failedPipelines = append(failedPipelines, fmt.Sprintf("Pipeline %s failed", upgradingPipelineStatus.Name))
 		case apiv1.AssessmentResultUnknown:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline assessment is unknown")
 			return apiv1.AssessmentResultUnknown, failedPipelines, nil
