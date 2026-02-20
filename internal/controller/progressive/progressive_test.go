@@ -625,7 +625,7 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 		desiredReplicas *int64
 		readyReplicas   *int64
 		expectedResult  bool
-		failureReason   string
+		failureReasons  []string
 	}{
 		{
 			name:            "desired = 0, ready = 0",
@@ -638,7 +638,7 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 			desiredReplicas: ptr.To(int64(3)),
 			readyReplicas:   ptr.To(int64(0)),
 			expectedResult:  false,
-			failureReason:   "readyReplicas=0 is less than desiredReplicas=3",
+			failureReasons:  []string{"readyReplicas=0 is less than desiredReplicas=3"},
 		},
 		{
 			name:            "desired = 0, ready > 0",
@@ -657,7 +657,7 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 			desiredReplicas: ptr.To(int64(3)),
 			readyReplicas:   ptr.To(int64(2)),
 			expectedResult:  false,
-			failureReason:   "readyReplicas=2 is less than desiredReplicas=3",
+			failureReasons:  []string{"readyReplicas=2 is less than desiredReplicas=3"},
 		},
 		{
 			name:            "desired > 0, ready > 0, desired = ready",
@@ -694,7 +694,7 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 			desiredReplicas: ptr.To(int64(3)),
 			readyReplicas:   nil,
 			expectedResult:  false,
-			failureReason:   "readyReplicas=0 is less than desiredReplicas=3",
+			failureReasons:  []string{"readyReplicas=0 is less than desiredReplicas=3"},
 		},
 	}
 
@@ -714,9 +714,9 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 				_ = unstructured.SetNestedField(unstr.Object, *tc.readyReplicas, "status", "readyReplicas")
 			}
 
-			actualResult, failureReason, actualErr := AreVertexReplicasReady(unstr)
+			actualResult, failureReasons, actualErr := AreVertexReplicasReady(unstr)
 
-			assert.Equal(t, tc.failureReason, failureReason)
+			assert.Equal(t, tc.failureReasons, failureReasons)
 			assert.Nil(t, actualErr)
 			assert.Equal(t, tc.expectedResult, actualResult)
 		})

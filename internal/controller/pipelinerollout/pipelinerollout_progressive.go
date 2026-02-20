@@ -115,14 +115,16 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 
 			areAllVerticesReplicasReady := true
 			for _, vertex := range verticesList.Items {
-				areVertexReplicasReady, failureReason, err := progressive.AreVertexReplicasReady(&vertex)
+				areVertexReplicasReady, failureReasons, err := progressive.AreVertexReplicasReady(&vertex)
 				if err != nil {
 					return false, failureReasons, err
 				}
 
 				if !areVertexReplicasReady {
 					areAllVerticesReplicasReady = false
-					failureReasons = append(failureReasons, fmt.Sprintf("%s (vertex: %s)", failureReason[0], vertex.GetName()))
+					for _, failureReason := range failureReasons {
+						failureReasons = append(failureReasons, fmt.Sprintf("%s (vertex: %s)", failureReason, vertex.GetName()))
+					}
 				}
 			}
 
