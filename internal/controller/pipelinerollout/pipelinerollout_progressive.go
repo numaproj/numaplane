@@ -164,7 +164,8 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 				// Success window passed, launch AnalysisRun or declared success
 				childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 				childStatus.BasicAssessmentResult = apiv1.AssessmentResultSuccess
-				return r.checkAnalysisTemplates(ctx, pipelineRollout, existingUpgradingChildDef)
+				assessment, err := r.checkAnalysisTemplates(ctx, pipelineRollout, existingUpgradingChildDef)
+				return assessment, "", err
 			}
 
 			numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", existingUpgradingChildDef.GetName())
@@ -175,7 +176,8 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		if childStatus.BasicAssessmentResult == apiv1.AssessmentResultSuccess {
 			childStatus.ChildStatus.Raw = nil
 			childStatus.FailureReason = ""
-			return r.checkAnalysisTemplates(ctx, pipelineRollout, existingUpgradingChildDef)
+			assessment, err := r.checkAnalysisTemplates(ctx, pipelineRollout, existingUpgradingChildDef)
+			return assessment, "", err
 		}
 		return childStatus.BasicAssessmentResult, "Basic assessment failed", nil
 	}
@@ -186,14 +188,14 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 // checkAnalysisTemplates checks if there are any analysis templates to run and runs them if so.
 func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
-	existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
+	existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 
 	numaLogger := logger.FromContext(ctx)
 	analysis := pipelineRollout.GetAnalysis()
 
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", fmt.Errorf("error getting the global config: %v", err)
+		return apiv1.AssessmentResultUnknown, fmt.Errorf("error getting the global config: %v", err)
 	}
 
 	// only check for and create AnalysisRun if templates are specified
@@ -202,15 +204,15 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 		numaLogger.Debugf("Performing analysis for upgrading child %s", existingUpgradingChildDef.GetName())
 		analysisStatus, err := progressive.PerformAnalysis(ctx, existingUpgradingChildDef, pipelineRollout, pipelineRollout.GetAnalysis(), pipelineRollout.GetAnalysisStatus(), r.client)
 		if err != nil {
-			return apiv1.AssessmentResultUnknown, "", err
+			return apiv1.AssessmentResultUnknown, err
 		}
 		assessment, err := progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
 		if err != nil {
-			return apiv1.AssessmentResultUnknown, "", err
+			return apiv1.AssessmentResultUnknown, err
 		}
-		return assessment, "", nil
+		return assessment, nil
 	}
-	return apiv1.AssessmentResultSuccess, "", nil
+	return apiv1.AssessmentResultSuccess, nil
 }
 
 // CheckForDifferences checks to see if the pipeline definition matches the spec and the required metadata

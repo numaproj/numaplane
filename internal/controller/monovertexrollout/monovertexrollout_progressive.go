@@ -111,7 +111,8 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 				// Success window passed, launch AnalysisRuns or declare success
 				childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 				childStatus.BasicAssessmentResult = apiv1.AssessmentResultSuccess
-				return r.checkAnalysisTemplates(ctx, mvtxRollout, existingUpgradingChildDef)
+				assessment, err := r.checkAnalysisTemplates(ctx, mvtxRollout, existingUpgradingChildDef)
+				return assessment, "", err
 			}
 
 			numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", existingUpgradingChildDef.GetName())
@@ -122,7 +123,8 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		if childStatus.BasicAssessmentResult == apiv1.AssessmentResultSuccess {
 			childStatus.ChildStatus.Raw = nil
 			childStatus.FailureReason = ""
-			return r.checkAnalysisTemplates(ctx, mvtxRollout, existingUpgradingChildDef)
+			assessment, err := r.checkAnalysisTemplates(ctx, mvtxRollout, existingUpgradingChildDef)
+			return assessment, "", err
 		}
 		return childStatus.BasicAssessmentResult, "Basic assessment failed", nil
 	}
@@ -134,7 +136,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 // otherwise it returns success.
 func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 	mvtxRollout *apiv1.MonoVertexRollout,
-	existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
+	existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 
 	numaLogger := logger.FromContext(ctx)
 	analysis := mvtxRollout.GetAnalysis()
@@ -144,15 +146,15 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 		numaLogger.Debugf("Performing analysis for upgrading child %s", existingUpgradingChildDef.GetName())
 		analysisStatus, err := progressive.PerformAnalysis(ctx, existingUpgradingChildDef, mvtxRollout, mvtxRollout.GetAnalysis(), mvtxRollout.GetAnalysisStatus(), r.client)
 		if err != nil {
-			return apiv1.AssessmentResultUnknown, "", err
+			return apiv1.AssessmentResultUnknown, err
 		}
 		assessment, err := progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
 		if err != nil {
-			return apiv1.AssessmentResultUnknown, "", err
+			return apiv1.AssessmentResultUnknown, err
 		}
-		return assessment, "", nil
+		return assessment, nil
 	}
-	return apiv1.AssessmentResultSuccess, "", nil
+	return apiv1.AssessmentResultSuccess, nil
 }
 
 // CheckForDifferences checks to see if the monovertex definition matches the spec and the required metadata
