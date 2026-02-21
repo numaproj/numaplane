@@ -1162,6 +1162,11 @@ func (in *UpgradingChildStatus) DeepCopyInto(out *UpgradingChildStatus) {
 		in, out := &in.TrialWindowStartTime, &out.TrialWindowStartTime
 		*out = (*in).DeepCopy()
 	}
+	if in.FailureReasons != nil {
+		in, out := &in.FailureReasons, &out.FailureReasons
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	in.ChildStatus.DeepCopyInto(&out.ChildStatus)
 	if in.Riders != nil {
 		in, out := &in.Riders, &out.Riders

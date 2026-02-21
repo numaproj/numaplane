@@ -63,8 +63,8 @@ type UpgradingChildStatus struct {
 	// in the middle of an upgrade
 	Discontinued bool `json:"discontinued,omitempty"`
 
-	// FailureReason indicates the reason for the failure
-	FailureReason string `json:"failureReason,omitempty"`
+	// FailureReasons is an array of strings indicating the reasons for failure
+	FailureReasons []string `json:"failureReasons,omitempty"`
 
 	// ChildStatus is the full dump of child status object
 	ChildStatus runtime.RawExtension `json:"childStatus,omitempty"`
