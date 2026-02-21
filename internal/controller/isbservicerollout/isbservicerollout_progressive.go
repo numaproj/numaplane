@@ -128,7 +128,9 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 	for _, pipelineRollout := range pipelineRollouts {
 		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
 		if upgradingPipelineStatus == nil || upgradingPipelineStatus.InterStepBufferServiceName != existingUpgradingChildDef.GetName() {
+			// we need to make sure the PipelineRollout has updated to use an Upgrading Pipeline which is on the new isbsvc first
 			numaLogger.WithValues("pipelineRollout", pipelineRollout.GetName()).Debug("assessing ISBService; pipeline is not yet upgrading with this ISBService")
+			return apiv1.AssessmentResultUnknown, []string{}, nil
 		}
 		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
 		case apiv1.AssessmentResultFailure:
