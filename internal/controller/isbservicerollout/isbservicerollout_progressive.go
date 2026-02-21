@@ -50,6 +50,9 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
+	numaLogger := logger.FromContext(ctx).WithValues("isbservice", existingUpgradingChildDef.GetName())
+	ctx = logger.WithLogger(ctx, numaLogger)
+
 	// TODO: For now, just assessing the health of the underlying Pipelines
 	// In the future, consider assessing the health of the isbsvc itself using the rolling window algorithm.
 	// Note: until we have health check for isbsvc, we don't need to worry about resource health check start time or end time
@@ -125,7 +128,7 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 	for _, pipelineRollout := range pipelineRollouts {
 		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
 		if upgradingPipelineStatus == nil || upgradingPipelineStatus.InterStepBufferServiceName != existingUpgradingChildDef.GetName() {
-			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline is not yet upgrading with this ISBService")
+			numaLogger.WithValues("pipelineRollout", pipelineRollout.GetName()).Debug("assessing ISBService; pipeline is not yet upgrading with this ISBService")
 		}
 		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
 		case apiv1.AssessmentResultFailure:
