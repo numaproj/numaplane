@@ -607,13 +607,13 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	return needsUpdate, !isbServiceReconciled, nil
 }
 
+// TODO: consider passing in a "live" boolean parameter
 func (r *ISBServiceRolloutReconciler) getPipelineRolloutList(ctx context.Context, isbRolloutNamespace string, isbsvcRolloutName string) ([]apiv1.PipelineRollout, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	pipelineRolloutsForISBSvc := make([]apiv1.PipelineRollout, 0)
-	var pipelineRolloutInNamespace apiv1.PipelineRolloutList
-	// get all of the PipelineRollouts on the namespace and filter out any that aren't tied to this ISBServiceRollout
-	err := r.client.List(ctx, &pipelineRolloutInNamespace, &client.ListOptions{Namespace: isbRolloutNamespace})
+	// get all of the PipelineRollouts on the namespace (live, typed) and filter out any that aren't tied to this ISBServiceRollout
+	pipelineRolloutInNamespace, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(isbRolloutNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return pipelineRolloutsForISBSvc, err
 	}
