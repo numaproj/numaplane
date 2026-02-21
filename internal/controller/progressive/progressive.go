@@ -680,43 +680,54 @@ func removeHPAFromUnstructuredList(list unstructured.UnstructuredList) unstructu
 func PerformResourceHealthCheckForPipelineType(
 	ctx context.Context,
 	existingUpgradingChildDef *unstructured.Unstructured,
-	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error),
-) (apiv1.AssessmentResult, string, error) {
+	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, []string, error),
+) (apiv1.AssessmentResult, []string, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
+	var failureReasons []string
 	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", err
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	if upgradingObjectStatus.Phase == "Failed" {
+		failureReasons = append(failureReasons, "child phase is in Failed state")
 	}
 
-	healthyConditions, failedCondition := checkChildConditions(&upgradingObjectStatus)
+	healthyConditions, failedConditions := checkChildConditions(&upgradingObjectStatus)
+	if !healthyConditions {
+		for _, failedCondition := range failedConditions {
+			failureReasons = append(failureReasons, fmt.Sprintf("condition %s is False for Reason: %s", failedCondition.Type, failedCondition.Reason))
+		}
+	}
 
-	healthyReplicas, replicasFailureReason, err := verifyReplicasFunc(existingUpgradingChildDef)
+	healthyReplicas, replicasFailureReasons, err := verifyReplicasFunc(existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, replicasFailureReason, err
+		return apiv1.AssessmentResultUnknown, []string{}, err
+	}
+	if !healthyReplicas {
+		failureReasons = append(failureReasons, replicasFailureReasons...)
 	}
 
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
-	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
-		failureReason := CalculateFailureReason(replicasFailureReason, upgradingObjectStatus.Phase, failedCondition)
-		return apiv1.AssessmentResultFailure, failureReason, nil
+	if len(failureReasons) > 0 {
+		return apiv1.AssessmentResultFailure, failureReasons, nil
 	}
 
 	phaseHealthy, err := IsPipelineTypePhaseHealthy(ctx, existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", err
+		return apiv1.AssessmentResultUnknown, nil, err
 	}
 
 	// conduct standard health assessment first
 	if phaseHealthy && healthyConditions && healthyReplicas {
-		return apiv1.AssessmentResultSuccess, "", nil
+		return apiv1.AssessmentResultSuccess, nil, nil
 	}
 
-	return apiv1.AssessmentResultUnknown, "", nil
+	return apiv1.AssessmentResultUnknown, nil, nil
 }
 
 func IsPipelineTypePhaseHealthy(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
@@ -738,17 +749,6 @@ func IsPipelineTypePhaseHealthy(ctx context.Context, existingUpgradingChildDef *
 
 	return upgradingObjectStatus.Phase == string(numaflowv1.PipelinePhaseRunning), nil
 
-}
-
-// CalculateFailureReason issues a reason for failure; if there are multiple reasons, it returns one of them
-func CalculateFailureReason(replicasFailureReason, phase string, failedCondition *metav1.Condition) string {
-	if phase == "Failed" {
-		return "child phase is in Failed state"
-	} else if failedCondition != nil {
-		return fmt.Sprintf("condition %s is False for Reason: %s", failedCondition.Type, failedCondition.Reason)
-	} else {
-		return replicasFailureReason
-	}
 }
 
 /*
@@ -926,14 +926,20 @@ func postUpgradingChildCreatedProcess(
 }
 
 // return true if all Conditions are true
-func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) (bool, *metav1.Condition) {
+func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) (bool, []*metav1.Condition) {
 	if len(upgradingObjectStatus.Conditions) == 0 {
 		return false, nil
 	}
+
+	var falseChildConditions []*metav1.Condition
 	for _, c := range upgradingObjectStatus.Conditions {
 		if c.Status != metav1.ConditionTrue {
-			return false, &c
+			falseChildConditions = append(falseChildConditions, &c)
 		}
+	}
+
+	if len(falseChildConditions) > 0 {
+		return false, falseChildConditions
 	}
 	return true, nil
 }
@@ -979,22 +985,22 @@ Returns:
   - A boolean indicating whether the ready replicas are sufficient.
   - In the case that ready replicas aren't sufficient, a message providing more information
 */
-func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
+func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured) (bool, []string, error) {
 	desiredReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "desiredReplicas")
 	if err != nil {
-		return false, "", err
+		return false, nil, err
 	}
 
 	readyReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "readyReplicas")
 	if err != nil {
-		return false, "", err
+		return false, nil, err
 	}
 
 	if readyReplicas >= desiredReplicas {
-		return true, "", nil
+		return true, nil, nil
 	}
 
-	return false, fmt.Sprintf("readyReplicas=%d is less than desiredReplicas=%d", readyReplicas, desiredReplicas), nil
+	return false, []string{fmt.Sprintf("readyReplicas=%d is less than desiredReplicas=%d", readyReplicas, desiredReplicas)}, nil
 }
 
 // For a given Rollout, stop the Progressive upgrade

@@ -103,48 +103,50 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		}
 
 		// function for checking readiness of Pipeline Vertex replicas
-		verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
+		verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, []string, error) {
 			verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 				numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
 				fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPipelineName, existingUpgradingChildDef.GetName()), "")
+
+			var failureReasons []string
 			if err != nil {
-				return false, "", err
+				return false, failureReasons, err
 			}
 
 			areAllVerticesReplicasReady := true
-			var replicasFailureReason string
 			for _, vertex := range verticesList.Items {
-				areVertexReplicasReady, failureReason, err := progressive.AreVertexReplicasReady(&vertex)
+				areVertexReplicasReady, failureReasons, err := progressive.AreVertexReplicasReady(&vertex)
 				if err != nil {
-					return false, "", err
+					return false, failureReasons, err
 				}
 
 				if !areVertexReplicasReady {
 					areAllVerticesReplicasReady = false
-					replicasFailureReason = fmt.Sprintf("%s (vertex: %s)", failureReason, vertex.GetName())
-					break
+					for _, failureReason := range failureReasons {
+						failureReasons = append(failureReasons, fmt.Sprintf("%s (vertex: %s)", failureReason, vertex.GetName()))
+					}
 				}
 			}
 
-			return areAllVerticesReplicasReady, replicasFailureReason, nil
+			return areAllVerticesReplicasReady, failureReasons, nil
 		}
 
 		// First perform basic resource health check
-		assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
+		assessment, failureReasons, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
 		if err != nil {
-			return assessment, reasonFailure, err
+			return assessment, "", err
 		}
 
 		// if we fail once, it's okay: we'll check again later
 		if assessment == apiv1.AssessmentResultFailure {
 			pipelineChildStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
 			if err != nil {
-				return assessment, reasonFailure, err
+				return assessment, "", err
 			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			childStatus.TrialWindowStartTime = nil
 			childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
-			childStatus.FailureReason = reasonFailure
+			childStatus.FailureReasons = failureReasons
 			childStatus.ChildStatus.Raw = pipelineChildStatus
 
 			return apiv1.AssessmentResultUnknown, "", nil
@@ -175,7 +177,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	} else {
 		if childStatus.BasicAssessmentResult == apiv1.AssessmentResultSuccess {
 			childStatus.ChildStatus.Raw = nil
-			childStatus.FailureReason = ""
+			childStatus.FailureReasons = nil
 			assessment, err := r.checkAnalysisTemplates(ctx, pipelineRollout, existingUpgradingChildDef)
 			return assessment, "", err
 		}

@@ -320,9 +320,12 @@ spec:
                           This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
                           in the middle of an upgrade
                         type: boolean
-                      failureReason:
-                        description: FailureReason indicates the reason for the failure
-                        type: string
+                      failureReasons:
+                        description: FailureReasons is an array of strings indicating
+                          the reasons for failure
+                        items:
+                          type: string
+                        type: array
                       forcedSuccess:
                         description: ForcedSuccess indicates if this promotion was
                           forced to complete
@@ -813,9 +816,12 @@ spec:
                           This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
                           in the middle of an upgrade
                         type: boolean
-                      failureReason:
-                        description: FailureReason indicates the reason for the failure
-                        type: string
+                      failureReasons:
+                        description: FailureReasons is an array of strings indicating
+                          the reasons for failure
+                        items:
+                          type: string
+                        type: array
                       forcedSuccess:
                         description: ForcedSuccess indicates if this promotion was
                           forced to complete
@@ -1800,9 +1806,12 @@ spec:
                           This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
                           in the middle of an upgrade
                         type: boolean
-                      failureReason:
-                        description: FailureReason indicates the reason for the failure
-                        type: string
+                      failureReasons:
+                        description: FailureReasons is an array of strings indicating
+                          the reasons for failure
+                        items:
+                          type: string
+                        type: array
                       forcedSuccess:
                         description: ForcedSuccess indicates if this promotion was
                           forced to complete

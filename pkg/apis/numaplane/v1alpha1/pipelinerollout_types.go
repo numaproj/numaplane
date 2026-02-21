@@ -275,7 +275,7 @@ func (pipelineRollout *PipelineRollout) ResetUpgradingChildStatus(upgradingPipel
 				Name:                   upgradingPipeline.GetName(),
 				BasicAssessmentEndTime: nil,
 				AssessmentResult:       AssessmentResultUnknown,
-				FailureReason:          "",
+				FailureReasons:         []string{},
 			},
 			Analysis: AnalysisStatus{},
 		},
