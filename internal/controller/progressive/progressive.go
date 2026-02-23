@@ -694,11 +694,9 @@ func PerformResourceHealthCheckForPipelineType(
 		failureReasons = append(failureReasons, "child phase is in Failed state")
 	}
 
-	healthyConditions, failedConditions := checkChildConditions(&upgradingObjectStatus)
-	if !healthyConditions {
-		for _, failedCondition := range failedConditions {
-			failureReasons = append(failureReasons, fmt.Sprintf("condition %s is False for Reason: %s", failedCondition.Type, failedCondition.Reason))
-		}
+	failedConditions := checkChildConditions(&upgradingObjectStatus)
+	for _, failedCondition := range failedConditions {
+		failureReasons = append(failureReasons, fmt.Sprintf("condition %s is False for Reason %q: %s", failedCondition.Type, failedCondition.Reason, failedCondition.Message))
 	}
 
 	healthyReplicas, replicasFailureReasons, err := verifyReplicasFunc(existingUpgradingChildDef)
@@ -711,7 +709,7 @@ func PerformResourceHealthCheckForPipelineType(
 
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
-		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
+		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, len(failedConditions) == 0, healthyReplicas)
 
 	if len(failureReasons) > 0 {
 		return apiv1.AssessmentResultFailure, failureReasons, nil
@@ -723,7 +721,7 @@ func PerformResourceHealthCheckForPipelineType(
 	}
 
 	// conduct standard health assessment first
-	if phaseHealthy && healthyConditions && healthyReplicas {
+	if phaseHealthy && len(failedConditions) == 0 && healthyReplicas {
 		return apiv1.AssessmentResultSuccess, nil, nil
 	}
 
@@ -926,9 +924,9 @@ func postUpgradingChildCreatedProcess(
 }
 
 // return true if all Conditions are true
-func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) (bool, []*metav1.Condition) {
+func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) []*metav1.Condition {
 	if len(upgradingObjectStatus.Conditions) == 0 {
-		return false, nil
+		return nil
 	}
 
 	var falseChildConditions []*metav1.Condition
@@ -939,9 +937,9 @@ func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) (bool
 	}
 
 	if len(falseChildConditions) > 0 {
-		return false, falseChildConditions
+		return falseChildConditions
 	}
-	return true, nil
+	return nil
 }
 
 func CalculateScaleMinMaxValues(podsCount int) int64 {
