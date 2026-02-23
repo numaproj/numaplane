@@ -50,6 +50,9 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
+	numaLogger := logger.FromContext(ctx).WithValues("isbservice", existingUpgradingChildDef.GetName())
+	ctx = logger.WithLogger(ctx, numaLogger)
+
 	// TODO: For now, just assessing the health of the underlying Pipelines
 	// In the future, consider assessing the health of the isbsvc itself using the rolling window algorithm.
 	// Note: until we have health check for isbsvc, we don't need to worry about resource health check start time or end time
@@ -103,7 +106,7 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 ) (apiv1.AssessmentResult, []string, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	var failedPipelines []string
+	var failedPipelines, successfulPipelines []string
 	// What is the name of the ISBServiceRollout?
 	isbsvcRolloutName, found := existingUpgradingChildDef.GetLabels()[common.LabelKeyParentRollout]
 	if !found {
@@ -125,26 +128,29 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 	for _, pipelineRollout := range pipelineRollouts {
 		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
 		if upgradingPipelineStatus == nil || upgradingPipelineStatus.InterStepBufferServiceName != existingUpgradingChildDef.GetName() {
-			numaLogger.WithValues("pipelinerollout", pipelineRollout.GetName()).Debug("can't assess ISBService; pipeline is not yet upgrading with this ISBService")
-			return apiv1.AssessmentResultUnknown, failedPipelines, nil
+			// we need to make sure the PipelineRollout has updated to use an Upgrading Pipeline which is on the new isbsvc first
+			numaLogger.WithValues("pipelineRollout", pipelineRollout.GetName()).Debug("can't assess ISBService; pipeline is not yet upgrading with this ISBService")
+			return apiv1.AssessmentResultUnknown, []string{}, nil
 		}
 		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
 		case apiv1.AssessmentResultFailure:
-			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline is failed")
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline is failed")
 			failedPipelines = append(failedPipelines, upgradingPipelineStatus.Name)
 		case apiv1.AssessmentResultUnknown:
-			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline assessment is unknown")
-			return apiv1.AssessmentResultUnknown, failedPipelines, nil
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline assessment is unknown")
 		case apiv1.AssessmentResultSuccess:
-			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline succeeded")
-
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline succeeded")
+			successfulPipelines = append(successfulPipelines, upgradingPipelineStatus.Name)
 		}
 	}
 	if len(failedPipelines) > 0 {
 		return apiv1.AssessmentResultFailure, failedPipelines, nil
 	}
+	if len(successfulPipelines) == len(pipelineRollouts) {
+		return apiv1.AssessmentResultSuccess, []string{}, nil
+	}
 
-	return apiv1.AssessmentResultSuccess, failedPipelines, nil
+	return apiv1.AssessmentResultUnknown, []string{}, nil
 }
 
 // CheckForDifferences checks to see if the isbsvc definition matches the spec and the required metadata
