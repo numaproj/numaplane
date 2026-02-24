@@ -233,7 +233,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 	It("Should validate Pipeline upgrade using Progressive strategy - failure analysis", func() {
 		updatedAnalysisTemplateSpec := initialAnalysisTemplateSpec.DeepCopy()
-		updatedAnalysisTemplateSpec.Metrics[0].SuccessCondition = "result[0] > 0"
+		updatedAnalysisTemplateSpec.Metrics[0].SuccessCondition = "len(result) > 0 && result[0] > 0"
 		CreateAnalysisTemplate(analysisTemplateNameFailure, Namespace, *updatedAnalysisTemplateSpec)
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategyForFailureCase, apiv1.Metadata{})
 
@@ -241,7 +241,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, updatedPipelineSpec)
-		VerifyAnalysisRunStatus("pipeline-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
+		VerifyAnalysisRunStatus("pipeline-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameFailure)
