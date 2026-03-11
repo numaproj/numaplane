@@ -19,6 +19,7 @@ package monovertexrollout
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -969,6 +970,127 @@ func Test_scaleMonoVertex(t *testing.T) {
 			assert.Equal(t, tt.expectedScale, resultMonoVertex.Spec.Scale)
 		})
 	}
+}
+
+func Test_buildPromotedPodSelector(t *testing.T) {
+	tests := []struct {
+		name             string
+		monoVertexName   string
+		expectedSelector string
+	}{
+		{
+			name:           "standard name",
+			monoVertexName: "my-monovertex-0",
+			expectedSelector: fmt.Sprintf("%s=%s,%s=%s",
+				numaflowv1.KeyComponent, numaflowv1.ComponentMonoVertex,
+				numaflowv1.KeyMonoVertexName, "my-monovertex-0"),
+		},
+		{
+			name:           "rollout test name",
+			monoVertexName: ctlrcommon.DefaultTestMonoVertexName,
+			expectedSelector: fmt.Sprintf("%s=%s,%s=%s",
+				numaflowv1.KeyComponent, numaflowv1.ComponentMonoVertex,
+				numaflowv1.KeyMonoVertexName, ctlrcommon.DefaultTestMonoVertexName),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildPromotedPodSelector(tt.monoVertexName)
+			assert.Equal(t, tt.expectedSelector, result)
+		})
+	}
+}
+
+// Test that promotedPodSelector is set when a promoted MonoVertex is first created
+func Test_reconcile_promotedPodSelector_newMonoVertex(t *testing.T) {
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	ctx := context.Background()
+
+	if ctlrcommon.TestCustomMetrics == nil {
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(logger.New())
+	}
+
+	recorder := record.NewFakeRecorder(64)
+	r := NewMonoVertexRolloutReconciler(client, scheme.Scheme, ctlrcommon.TestCustomMetrics, recorder)
+
+	// clean up any existing MonoVertices and the rollout
+	_ = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+
+	rollout := ctlrcommon.CreateTestMVRollout(monoVertexSpec, map[string]string{}, map[string]string{},
+		map[string]string{}, map[string]string{}, nil)
+	_ = client.Delete(ctx, rollout)
+
+	rollout.Status.Init(rollout.Generation)
+	rolloutCopy := *rollout
+	err = client.Create(ctx, rollout)
+	assert.NoError(t, err)
+	rollout.Status = rolloutCopy.Status
+	err = client.Status().Update(ctx, rollout)
+	assert.NoError(t, err)
+
+	_, err = r.reconcile(ctx, rollout, time.Now())
+	assert.NoError(t, err)
+
+	// the first promoted MonoVertex gets name "<rollout-name>-0"
+	expectedName := ctlrcommon.DefaultTestMonoVertexRolloutName + "-0"
+	expectedSelector := buildPromotedPodSelector(expectedName)
+	assert.Equal(t, expectedSelector, rollout.Status.PromotedPodSelector)
+}
+
+// Test that promotedPodSelector reflects whichever MonoVertex is currently promoted
+func Test_reconcile_promotedPodSelector_existingMonoVertex(t *testing.T) {
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	ctx := context.Background()
+
+	if ctlrcommon.TestCustomMetrics == nil {
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(logger.New())
+	}
+
+	recorder := record.NewFakeRecorder(64)
+	r := NewMonoVertexRolloutReconciler(client, scheme.Scheme, ctlrcommon.TestCustomMetrics, recorder)
+
+	_ = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+
+	rollout := ctlrcommon.CreateTestMVRollout(monoVertexSpec, map[string]string{}, map[string]string{},
+		map[string]string{common.AnnotationKeyNumaflowInstanceID: "0"}, map[string]string{},
+		&apiv1.MonoVertexRolloutStatus{})
+	_ = client.Delete(ctx, rollout)
+
+	rollout.Status.Init(rollout.Generation)
+	if rollout.Status.NameCount == nil {
+		rollout.Status.NameCount = new(int32)
+	}
+	*rollout.Status.NameCount = int32(1)
+
+	rolloutCopy := *rollout
+	err = client.Create(ctx, rollout)
+	assert.NoError(t, err)
+	rollout.Status = rolloutCopy.Status
+	err = client.Status().Update(ctx, rollout)
+	assert.NoError(t, err)
+
+	// create the already-existing promoted MonoVertex in Kubernetes
+	existingMonoVertexDef := &defaultOriginalMonoVertexDef
+	existingMonoVertexDef.OwnerReferences = []metav1.OwnerReference{
+		*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind),
+	}
+	monoVertex, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, existingMonoVertexDef, metav1.CreateOptions{})
+	assert.NoError(t, err)
+	monoVertex.Status = defaultOriginalMonoVertexDef.Status
+	_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).UpdateStatus(ctx, monoVertex, metav1.UpdateOptions{})
+	assert.NoError(t, err)
+
+	_, err = r.reconcile(ctx, rollout, time.Now())
+	assert.NoError(t, err)
+
+	expectedSelector := buildPromotedPodSelector(ctlrcommon.DefaultTestMonoVertexName)
+	assert.Equal(t, expectedSelector, rollout.Status.PromotedPodSelector)
 }
 
 func createMonoVertexOfScale(scaleDefinition numaflowv1.Scale) *numaflowv1.MonoVertex {
