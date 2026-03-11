@@ -55,6 +55,9 @@ type MonoVertexRolloutStatus struct {
 
 	// Riders stores the list of Riders that have been deployed along with the "promoted" MonoVertex
 	Riders []RiderStatus `json:"riders,omitempty"`
+
+	// PromotedPodSelector is the pod selector for the promoted MonoVertex
+	PromotedPodSelector string `json:"promotedPodSelector,omitempty"`
 }
 
 type MonoVertexProgressiveStatus struct {
@@ -89,6 +92,7 @@ type PromotedMonoVertexStatus struct {
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:subresource:scale:specpath=.spec.monoVertex.spec.replicas,statuspath=.status.replicas,selectorpath=.status.promotedPodSelector
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
 // MonoVertexRollout is the Schema for the monovertexrollouts API
