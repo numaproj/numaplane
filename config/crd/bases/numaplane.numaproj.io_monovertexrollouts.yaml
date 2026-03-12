@@ -511,4 +511,8 @@ spec:
     served: true
     storage: true
     subresources:
+      scale:
+        labelSelectorPath: .status.promotedPodSelector
+        specReplicasPath: .spec.monoVertex.spec.replicas
+        statusReplicasPath: .status.replicas
       status: {}
