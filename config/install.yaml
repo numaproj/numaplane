@@ -891,6 +891,10 @@ spec:
                     - originalScaleMinMax
                     type: object
                 type: object
+              promotedPodSelector:
+                description: PromotedPodSelector is the pod selector for the promoted
+                  MonoVertex
+                type: string
               riders:
                 description: Riders stores the list of Riders that have been deployed
                   along with the "promoted" MonoVertex
