@@ -222,6 +222,11 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		return ctrl.Result{}, fmt.Errorf("error looking for promoted monovertex: %v", err)
 	}
 
+	// keep promotedPodSelector current so VPA can always target the correct pods
+	if len(promotedMonovertices.Items) > 0 {
+		monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(promotedMonovertices.Items[0].GetName())
+	}
+
 	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -237,6 +242,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 				return ctrl.Result{}, err
 			}
 
+			monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(newMonoVertexDef.GetName())
 			monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
 
@@ -362,6 +368,11 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			if err != nil {
 				return 0, err
 			}
+
+			// update promotedPodSelector immediately so VPA targets the newly promoted child's pods
+			// without waiting for the next reconcile
+			monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(promotedMonoVertex.GetName())
+
 			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, promotedMonoVertex.GetName(), promotedMonoVertex)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
@@ -836,6 +847,14 @@ func (r *MonoVertexRolloutReconciler) Recycle(ctx context.Context,
 		return false, err
 	}
 	return true, nil
+}
+
+// buildPromotedPodSelector returns the label selector string that identifies pods belonging to
+// the promoted MonoVertex, used to populate status.promotedPodSelector for VPA targeting.
+func buildPromotedPodSelector(monoVertexName string) string {
+	return fmt.Sprintf("%s=%s,%s=%s",
+		numaflowv1.KeyComponent, numaflowv1.ComponentMonoVertex,
+		numaflowv1.KeyMonoVertexName, monoVertexName)
 }
 
 func getLiveMonovertexRollout(ctx context.Context, name, namespace string) (*apiv1.MonoVertexRollout, error) {
