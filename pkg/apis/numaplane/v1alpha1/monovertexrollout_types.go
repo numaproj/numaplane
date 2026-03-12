@@ -55,6 +55,9 @@ type MonoVertexRolloutStatus struct {
 
 	// Riders stores the list of Riders that have been deployed along with the "promoted" MonoVertex
 	Riders []RiderStatus `json:"riders,omitempty"`
+
+	// PromotedPodSelector is the pod selector for the promoted MonoVertex
+	PromotedPodSelector string `json:"promotedPodSelector,omitempty"`
 }
 
 type MonoVertexProgressiveStatus struct {
