@@ -973,32 +973,11 @@ func Test_scaleMonoVertex(t *testing.T) {
 }
 
 func Test_buildPromotedPodSelector(t *testing.T) {
-	tests := []struct {
-		name             string
-		monoVertexName   string
-		expectedSelector string
-	}{
-		{
-			name:           "standard name",
-			monoVertexName: "my-monovertex-0",
-			expectedSelector: fmt.Sprintf("%s=%s,%s=%s",
-				numaflowv1.KeyComponent, numaflowv1.ComponentMonoVertex,
-				numaflowv1.KeyMonoVertexName, "my-monovertex-0"),
-		},
-		{
-			name:           "rollout test name",
-			monoVertexName: ctlrcommon.DefaultTestMonoVertexName,
-			expectedSelector: fmt.Sprintf("%s=%s,%s=%s",
-				numaflowv1.KeyComponent, numaflowv1.ComponentMonoVertex,
-				numaflowv1.KeyMonoVertexName, ctlrcommon.DefaultTestMonoVertexName),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := buildPromotedPodSelector(tt.monoVertexName)
-			assert.Equal(t, tt.expectedSelector, result)
-		})
-	}
+	monoVertexName := "my-monovertex-0"
+	expected := fmt.Sprintf("%s=%s,%s=%s",
+		numaflowv1.KeyComponent, numaflowv1.ComponentMonoVertex,
+		numaflowv1.KeyMonoVertexName, monoVertexName)
+	assert.Equal(t, expected, buildPromotedPodSelector(monoVertexName))
 }
 
 // Test that promotedPodSelector is set when a promoted MonoVertex is first created
