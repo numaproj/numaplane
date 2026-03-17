@@ -357,52 +357,57 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
-		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, needsUpdate, r, r.client)
+		assessmentComplete, failed, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, needsUpdate, r, r.client)
 		if err != nil {
 			return 0, err
 		}
-		if done {
-			// update the list of riders in the Status based on our child which was just promoted
-			promotedMonoVertex, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, monoVertexRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
-			if err != nil {
-				return 0, err
-			}
+		if progressiveRequeueDelay > 0 {
+			requeueDelay = progressiveRequeueDelay
+		}
+		if assessmentComplete {
+			if !failed {
+				// update the list of riders in the Status based on our child which was just promoted
+				promotedMonoVertex, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, monoVertexRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
+				if err != nil {
+					return 0, err
+				}
 
-			// update promotedPodSelector immediately so VPA targets the newly promoted child's pods
-			// without waiting for the next reconcile
-			monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(promotedMonoVertex.GetName())
+				// update promotedPodSelector immediately so VPA targets the newly promoted child's pods
+				// without waiting for the next reconcile
+				monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(promotedMonoVertex.GetName())
 
-			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, promotedMonoVertex.GetName(), promotedMonoVertex)
-			if err != nil {
-				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
-			}
-			r.SetCurrentRiderList(ctx, monoVertexRollout, currentRiderList)
+				currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, promotedMonoVertex.GetName(), promotedMonoVertex)
+				if err != nil {
+					return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
+				}
+				r.SetCurrentRiderList(ctx, monoVertexRollout, currentRiderList)
 
-			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
-			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
-			err = r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
-			if err != nil {
-				return 0, err
-			}
+				// we need to prevent the possibility that we're done but we fail to update the Progressive Status
+				// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
+				err = r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
+				if err != nil {
+					return 0, err
+				}
 
-			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
-			monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus = nil
+				r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
+				monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus = nil
 
-			// generate metrics for MonoVertex progressive rollout results
-			if monoVertexRollout.GetUpgradingChildStatus() != nil {
-				// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
-				assessmentResult := metrics.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().AssessmentResult)
-				if assessmentResult != "" {
-					r.customMetrics.IncMonovertexProgressiveCompleted(monoVertexRollout.GetRolloutObjectMeta().GetNamespace(), monoVertexRollout.GetRolloutObjectMeta().GetName(),
-						monoVertexRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-						assessmentResult, monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess)
+				// generate metrics for MonoVertex progressive rollout results
+				if monoVertexRollout.GetUpgradingChildStatus() != nil {
+					// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+					assessmentResult := metrics.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().AssessmentResult)
+					if assessmentResult != "" {
+						r.customMetrics.IncMonovertexProgressiveCompleted(monoVertexRollout.GetRolloutObjectMeta().GetNamespace(), monoVertexRollout.GetRolloutObjectMeta().GetName(),
+							monoVertexRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+							assessmentResult, monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess)
+					}
+				}
+				// we need to requeue one time to ensure that the newly promoted MonoVertex scales back to its rollout-defined scale
+				if requeueDelay == 0 {
+					requeueDelay = common.DefaultRequeueDelay
 				}
 			}
-			// we need to requeue one time to ensure that the newly promoted MonoVertex scales back to its rollout-defined scale
-			requeueDelay = common.DefaultRequeueDelay
 
-		} else {
-			requeueDelay = progressiveRequeueDelay
 		}
 	default:
 		if needsUpdate {

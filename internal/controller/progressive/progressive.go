@@ -122,7 +122,8 @@ const (
 )
 
 // return:
-// - whether we're done
+// - whether the assessment is complete
+// - whether the assessment failed
 // - duration indicating the requeue delay for the controller to use for next reconciliation
 // - error if any
 func ProcessResource(
@@ -132,14 +133,14 @@ func ProcessResource(
 	promotedDifference bool,
 	controller progressiveController,
 	c client.Client,
-) (bool, time.Duration, error) {
+) (bool, bool, time.Duration, error) {
 
 	// Make sure that our Promoted Child Status reflects the current promoted child
 	promotedChildStatus := rolloutObject.GetPromotedChildStatus()
 	if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChild.GetName() {
 		err := rolloutObject.ResetPromotedChildStatus(existingPromotedChild)
 		if err != nil {
-			return false, 0, err
+			return false, false, 0, err
 		}
 	}
 
@@ -147,12 +148,12 @@ func ProcessResource(
 	var currentUpgradingChildDef *unstructured.Unstructured
 	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeTrial, nil, true, c)
 	if err != nil {
-		return false, 0, err
+		return false, false, 0, err
 	} else if currentUpgradingChildDef == nil {
 		// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
 		currentUpgradingChildDef, err = ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
 		if err != nil {
-			return false, 0, err
+			return false, false, 0, err
 		}
 	}
 
@@ -161,15 +162,15 @@ func ProcessResource(
 		// Create it
 		_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
 		if needRequeue {
-			return false, common.DefaultRequeueDelay, err
+			return false, false, common.DefaultRequeueDelay, err
 		} else {
-			return false, 0, err
+			return false, false, 0, err
 		}
 	}
 
 	// nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
 	if currentUpgradingChildDef == nil {
-		return true, 0, err
+		return true, false, 0, err
 	}
 
 	// There's already an Upgrading child, now process it
@@ -177,7 +178,7 @@ func ProcessResource(
 	// get UpgradingChildStatus and reset it if necessary
 	childStatus, err := getUpgradingChildStatus(ctx, rolloutObject, currentUpgradingChildDef)
 	if err != nil {
-		return false, 0, err
+		return false, false, 0, err
 	}
 
 	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
@@ -185,27 +186,30 @@ func ProcessResource(
 	if initializationIncomplete {
 		needsRequeue, err := postUpgradingChildCreatedProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
 		if needsRequeue {
-			return false, common.DefaultRequeueDelay, err
+			return false, false, common.DefaultRequeueDelay, err
 		} else {
-			return false, 0, err
+			return false, false, 0, err
 		}
 	}
 
 	// determine if we need to replace the Upgrading child with a newer one
-	needsRequeue, done, err := checkForUpgradeReplacement(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
-	if needsRequeue || err != nil {
-		return false, common.DefaultRequeueDelay, err
-	}
-	if done {
-		return true, 0, nil
-	}
-
-	done, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	needsRequeue, assessmentComplete, err := checkForUpgradeReplacement(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if err != nil {
-		return false, 0, err
+		return false, false, common.DefaultRequeueDelay, err
+	}
+	if assessmentComplete {
+		return true, false, 0, nil
+	}
+	if needsRequeue {
+		return false, false, common.DefaultRequeueDelay, nil
 	}
 
-	return done, requeueDelay, nil
+	assessmentComplete, assessmentFailed, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	if err != nil {
+		return false, false, 0, err
+	}
+
+	return assessmentComplete, assessmentFailed, requeueDelay, nil
 }
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
@@ -324,7 +328,8 @@ Parameters:
 - c: The Kubernetes client for interacting with the cluster.
 
 Returns:
-- A boolean indicating if the upgrade is done.
+- A boolean indicating if the assessment is complete.
+- A boolean indicating if the assessment failed.
 - A duration indicating the requeue delay for the controller to use for next reconciliation.
 - An error if any issues occur during the process.
 */
@@ -334,13 +339,13 @@ func processUpgradingChild(
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
-) (bool, time.Duration, error) {
+) (bool, bool, time.Duration, error) {
 
 	numaLogger := logger.FromContext(ctx).WithValues("upgrading child", fmt.Sprintf("%s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()))
 
 	assessmentSchedule, err := getChildStatusAssessmentSchedule(ctx, rolloutObject)
 	if err != nil {
-		return false, 0, err
+		return false, false, 0, err
 	}
 
 	childStatus := rolloutObject.GetUpgradingChildStatus()
@@ -348,7 +353,7 @@ func processUpgradingChild(
 	// check if we should skip the asssessment
 	skipAssessment, reason, err := controller.SkipProgressiveAssessment(ctx, rolloutObject)
 	if err != nil {
-		return false, 0, err
+		return false, false, 0, err
 	}
 
 	// check for "force promote" label on the child
@@ -367,14 +372,14 @@ func processUpgradingChild(
 
 		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef)
 		if err != nil {
-			return false, 0, err
+			return false, false, 0, err
 		}
 
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
-			return done, 0, err
+			return done, false, 0, err
 		} else {
-			return done, assessmentSchedule.Interval, err
+			return done, false, assessmentSchedule.Interval, err
 		}
 	}
 
@@ -394,7 +399,7 @@ func processUpgradingChild(
 	if childStatus.CanAssess() {
 		assessment, _, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, assessmentSchedule)
 		if err != nil {
-			return false, 0, err
+			return false, false, 0, err
 		}
 
 		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus, "assessment", assessment).
@@ -414,36 +419,36 @@ func processUpgradingChild(
 
 		err = ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateFailed, existingUpgradingChildDef)
 		if err != nil {
-			return false, 0, err
+			return true, true, 0, err
 		}
 
 		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 		if err != nil {
-			return false, 0, err
+			return true, true, 0, err
 		}
 		if requeue {
-			return false, common.DefaultRequeueDelay, nil
+			return true, true, common.DefaultRequeueDelay, nil
 		}
 		requeue, err = controller.ProcessUpgradingChildPostFailure(ctx, rolloutObject, existingUpgradingChildDef, c)
 		if err != nil {
-			return false, 0, err
+			return true, true, 0, err
 		}
 		if requeue {
-			return false, common.DefaultRequeueDelay, nil
+			return true, true, common.DefaultRequeueDelay, nil
 		}
 
-		return false, 0, nil
+		return true, true, 0, nil
 
 	case apiv1.AssessmentResultSuccess:
 		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef)
 		if err != nil {
-			return true, 0, err
+			return true, false, 0, err
 		}
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
-			return done, 0, err
+			return done, false, 0, err
 		} else {
-			return done, assessmentSchedule.Interval, err
+			return done, false, assessmentSchedule.Interval, err
 		}
 
 	default:
@@ -451,7 +456,7 @@ func processUpgradingChild(
 			status.AssessmentResult = apiv1.AssessmentResultUnknown
 		})
 
-		return false, assessmentSchedule.Interval, nil
+		return false, false, assessmentSchedule.Interval, nil
 	}
 }
 
