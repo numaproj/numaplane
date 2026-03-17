@@ -313,7 +313,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	// if we still have interstepbufferservices that need deleting, or if we're in the middle of an upgrade strategy, then requeue
-	if !allDeleted || inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+	if !allDeleted || inProgressStrategy == apiv1.UpgradeStrategyPPND {
 		if requeueDelay == 0 {
 			requeueDelay = common.DefaultRequeueDelay
 		} else {

@@ -446,7 +446,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// get current in progress strategy if there is one
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
-	inProgressStrategySet := inProgressStrategy != apiv1.UpgradeStrategyNoOp
 
 	// clean up recyclable pipelines
 	allDeleted, err := r.garbageCollectChildren(ctx, pipelineRollout)
@@ -454,7 +453,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return 0, nil, err
 	}
 	// there are some cases that require re-queueing
-	if !allDeleted || inProgressStrategySet {
+	if !allDeleted || inProgressStrategy == apiv1.UpgradeStrategyPPND {
 		if requeueDelay == 0 {
 			requeueDelay = common.DefaultRequeueDelay
 		} else {

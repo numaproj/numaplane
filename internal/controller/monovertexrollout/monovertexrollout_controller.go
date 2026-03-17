@@ -266,8 +266,6 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		}
 	}
 
-	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, monoVertexRollout)
-
 	// clean up recyclable monovertices
 	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
 	if err != nil {
@@ -275,7 +273,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	}
 
 	// if we still have monovertices that need deleting, or if we're in the middle of an upgrade strategy, then requeue
-	if !allDeleted || inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+	if !allDeleted {
 		if requeueDelay == 0 {
 			requeueDelay = common.DefaultRequeueDelay
 		} else {
