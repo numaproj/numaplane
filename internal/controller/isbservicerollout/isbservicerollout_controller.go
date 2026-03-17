@@ -454,33 +454,39 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing InterstepBufferService with Progressive")
 
-		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, needsUpdate, r, r.client)
+		assessmentComplete, failed, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, needsUpdate, r, r.client)
 		if err != nil {
 			return 0, fmt.Errorf("error processing isbsvc with progressive: %s", err.Error())
 		}
-		if done {
-			// update the list of riders in the Status based on our child which was just promoted
-			promotedISBService, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
-			if err != nil {
-				return 0, err
-			}
+		requeueDelay := time.Duration(0)
+		if progressiveRequeueDelay > 0 {
+			requeueDelay = progressiveRequeueDelay
+		}
+		if assessmentComplete {
+			if !failed {
+				// update the list of riders in the Status based on our child which was just promoted
+				promotedISBService, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
+				if err != nil {
+					return 0, err
+				}
 
-			currentRiderList, err := r.GetDesiredRiders(isbServiceRollout, promotedISBService.GetName(), promotedISBService)
-			if err != nil {
-				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newISBServiceDef.GetName(), err)
-			}
-			r.SetCurrentRiderList(ctx, isbServiceRollout, currentRiderList)
+				currentRiderList, err := r.GetDesiredRiders(isbServiceRollout, promotedISBService.GetName(), promotedISBService)
+				if err != nil {
+					return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newISBServiceDef.GetName(), err)
+				}
+				r.SetCurrentRiderList(ctx, isbServiceRollout, currentRiderList)
 
-			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
+				r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
 
-			// Update metrics for progressive rollout
-			if isbServiceRollout.GetUpgradingChildStatus() != nil {
-				// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
-				assessmentResult := metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult)
-				if assessmentResult != "" {
-					r.customMetrics.IncISBServiceProgressiveCompleted(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
-						isbServiceRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-						assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess)
+				// Update metrics for progressive rollout
+				if isbServiceRollout.GetUpgradingChildStatus() != nil {
+					// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+					assessmentResult := metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult)
+					if assessmentResult != "" {
+						r.customMetrics.IncISBServiceProgressiveCompleted(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
+							isbServiceRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+							assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess)
+					}
 				}
 			}
 		} else {
@@ -498,8 +504,9 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			}
 
 			// requeue using the provided delay
-			return progressiveRequeueDelay, nil
+			requeueDelay = progressiveRequeueDelay
 		}
+		return requeueDelay, nil
 	case apiv1.UpgradeStrategyApply:
 		// update ISBService
 		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef, needsRecreate)
