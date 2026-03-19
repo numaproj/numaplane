@@ -134,6 +134,7 @@ func Test_processUpgradingChild(t *testing.T) {
 		skipProgressiveAssessment bool
 		existingUpgradingChildDef *numaflowv1.MonoVertex
 		expectedDone              bool
+		expectedFailed            bool
 		expectedRequeueDelay      time.Duration
 		expectedError             error
 	}{
@@ -157,6 +158,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			skipProgressiveAssessment: false,
 			existingUpgradingChildDef: createMonoVertex("test-success"),
 			expectedDone:              true,
+			expectedFailed:            false,
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
@@ -185,7 +187,8 @@ func Test_processUpgradingChild(t *testing.T) {
 			),
 			skipProgressiveAssessment: false,
 			existingUpgradingChildDef: createMonoVertex("test-failure"),
-			expectedDone:              false,
+			expectedDone:              true,
+			expectedFailed:            true,
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
@@ -215,6 +218,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			skipProgressiveAssessment: true,
 			existingUpgradingChildDef: createMonoVertex("test-force-promote"),
 			expectedDone:              true,
+			expectedFailed:            false,
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
@@ -244,6 +248,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			skipProgressiveAssessment: false,
 			existingUpgradingChildDef: createMonoVertex("test-analysis-success"),
 			expectedDone:              true,
+			expectedFailed:            false,
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
@@ -272,7 +277,8 @@ func Test_processUpgradingChild(t *testing.T) {
 			),
 			skipProgressiveAssessment: false,
 			existingUpgradingChildDef: createMonoVertex("test-analysis-failure"),
-			expectedDone:              false,
+			expectedDone:              true,
+			expectedFailed:            true,
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
@@ -297,7 +303,7 @@ func Test_processUpgradingChild(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			actualDone, actualRequeueDelay, actualErr := processUpgradingChild(
+			actualDone, actualFailed, actualRequeueDelay, actualErr := processUpgradingChild(
 				ctx, tc.rolloutObject, fakeProgressiveController{skipProgressiveAssessment: tc.skipProgressiveAssessment}, monoVertexToUnstruct(defaultExistingPromotedChildDef), monoVertexToUnstruct(tc.existingUpgradingChildDef), client)
 
 			if tc.expectedError != nil {
@@ -307,6 +313,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			} else {
 				assert.Nil(t, actualErr)
 				assert.Equal(t, tc.expectedDone, actualDone)
+				assert.Equal(t, tc.expectedFailed, actualFailed)
 				assert.Equal(t, tc.expectedRequeueDelay, actualRequeueDelay)
 			}
 		})
