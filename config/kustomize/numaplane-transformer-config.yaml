@@ -25,7 +25,7 @@ images:
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/namereference.go
 nameReference:
-  # Argo Rollouts analysis templates referenced from progressive strategy
+  # Argo Rollouts AnalysisTemplates referenced from PipelineRollouts and MonoVertexRollouts need to be named correctly
   - kind: AnalysisTemplate
     group: argoproj.io
     version: v1alpha1
