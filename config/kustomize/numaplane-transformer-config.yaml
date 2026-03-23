@@ -25,7 +25,7 @@ images:
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/namereference.go
 nameReference:
-  # Argo Rollouts analysis templates referenced from progressive strategy (namespace- and cluster-scoped).
+  # Argo Rollouts analysis templates referenced from progressive strategy
   - kind: AnalysisTemplate
     group: argoproj.io
     version: v1alpha1
