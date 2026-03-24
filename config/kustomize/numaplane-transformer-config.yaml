@@ -1,26 +1,52 @@
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/images.go
 images:
   - path: spec/pipeline/spec/vertices/sidecars/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/udf/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/udsink/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/transformer/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/udsource/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/sideInputs/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/monoVertex/spec/source/udsource/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/source/transformer/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/sink/udsink/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/sink/fallback/udsink/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/udf/container/image
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/namereference.go
@@ -31,438 +57,830 @@ nameReference:
     version: v1alpha1
     fieldSpecs:
       - path: spec/strategy/analysis/templates/templateName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/strategy/analysis/templates/templateName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
   - kind: ConfigMap
     version: v1
     fieldSpecs:
       - path: spec/pipeline/spec/vertices/volumes/configMap/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/volumes/projected/sources/configMap/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/containerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/containerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/initContainerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/initContainerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/initContainers/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/initContainers/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sidecars/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sidecars/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/udf/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/udf/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sink/udsink/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sink/udsink/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/source/transformer/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/source/transformer/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/source/udsource/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/source/udsource/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/sideInputs/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/sideInputs/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/containerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/containerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/job/containerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/job/containerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/containerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/containerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/interStepBufferService/spec/jetstream/containerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/containerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/monoVertex/spec/source/transformer/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/source/transformer/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/source/udsource/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/source/udsource/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/sink/udsink/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/sink/udsink/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/sink/fallback/udsink/container/env/valueFrom/configMapKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/sink/fallback/udsink/container/envFrom/configMapRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
   - kind: Secret
     version: v1
     fieldSpecs:
       - path: spec/pipeline/spec/vertices/volumes/secret/secretName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/volumes/projected/sources/secret/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/containerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/containerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/initContainerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/initContainerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/initContainers/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/initContainers/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sidecars/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sidecars/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/udf/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/udf/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sink/udsink/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sink/udsink/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/source/transformer/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/source/transformer/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/source/udsource/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/source/udousrce/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/sideInputs/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/sideInputs/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/containerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/containerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/job/containerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/job/containerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/containerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/containerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/vertices/imagePullSecrets/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/imagePullSecrets/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/job/imagePullSecrets/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/imagePullSecrets/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/imagePullSecrets/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/interStepBufferService/spec/jetstream/containerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/containerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/monoVertex/spec/source/transformer/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/source/transformer/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/source/udsource/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/source/udousrce/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/sink/udsink/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/sink/udsink/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/sink/fallback/udsink/container/env/valueFrom/secretKeyRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
       - path: spec/monoVertex/spec/sink/fallback/udsink/container/envFrom/secretRef/name
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
   - kind: ServiceAccount
     version: v1
     fieldSpecs:
       - path: spec/pipeline/spec/vertices/serviceAccountName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/serviceAccountName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/job/serviceAccountName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/serviceAccountName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/serviceAccountName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/interStepBufferService/spec/jetstream/serviceAccountName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/monoVertex/spec/serviceAccountName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
   - kind: PersistentVolumeClaim
     version: v1
     fieldSpecs:
       - path: spec/pipeline/spec/vertices/volumes/persistentVolumeClaim/claimName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
   - kind: PriorityClass
     version: v1
     group: scheduling.k8s.io
     fieldSpecs:
       - path: spec/pipeline/spec/vertices/priorityClassName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/daemon/priorityClassName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/job/priorityClassName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/sideInputsManager/priorityClassName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/pipeline/spec/templates/vertex/priorityClassName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: PipelineRollout
       - path: spec/interStepBufferService/spec/jetstream/priorityClassName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: ISBServiceRollout
       - path: spec/monoVertex/spec/priorityClassName
+        group: numaplane.numaproj.io
+        version: v1alpha1
         kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/commonlabels.go
 commonLabels:
   - path: spec/pipeline/spec/vertices/metadata/labels
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/daemon/metadata/labels
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/job/metadata/labels
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/sideInputsManager/metadata/labels
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/vertex/metadata/labels
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/interStepBufferService/spec/jetstream/metadata/labels
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: ISBServiceRollout
   - path: spec/monoVertex/spec/metadata/labels
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/commonannotations.go
 commonAnnotations:
   - path: spec/pipeline/spec/vertices/metadata/annotations
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/daemon/metadata/annotations
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/job/metadata/annotations
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/sideInputsManager/metadata/annotations
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/vertex/metadata/annotations
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/interStepBufferService/spec/jetstream/metadata/annotations
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: ISBServiceRollout
   - path: spec/monoVertex/spec/metadata/annotations
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/varreference.go
 varReference:
   - path: spec/pipeline/spec/vertices/sidecars/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sidecars/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sidecars/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/udf/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/udf/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/udf/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/udsink/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/udsink/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/udsink/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/transformer/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/transformer/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/transformer/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/udsource/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/udsource/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/udsource/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/sideInputs/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/sideInputs/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/sideInputs/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/containerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/initContainerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/initContainers/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/daemon/containerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/job/containerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/vertex/containerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sidecars/volumeMounts/mountPath
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/udf/container/volumeMounts/mountPath
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/udsink/container/volumeMounts/mountPath
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/volumeMounts/mountPath
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/transformer/container/volumeMounts/mountPath
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/vertices/source/udsource/container/volumeMounts/mountPath
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/pipeline/spec/sideInputs/container/volumeMounts/mountPath
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: PipelineRollout
   - path: spec/interStepBufferService/spec/jetstream/containerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: ISBServiceRollout
   - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: ISBServiceRollout
   - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: ISBServiceRollout
   - path: spec/monoVertex/spec/interStepBufferService/spec/source/transformer/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/source/transformer/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/source/transformer/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/source/udsource/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/source/udsource/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/source/udsource/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/sink/udsink/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/sink/udsink/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/sink/udsink/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/sink/fallback/udsink/container/args
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/sink/fallback/udsink/container/command
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
   - path: spec/monoVertex/spec/sink/fallback/udsink/container/env/value
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/replicas.go
 replicas:
   - path: spec/interStepBufferService/spec/jetstream/replicas
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: ISBServiceRollout
   - path: spec/monoVertex/spec/replicas
     create: true
+    group: numaplane.numaproj.io
+    version: v1alpha1
     kind: MonoVertexRollout
