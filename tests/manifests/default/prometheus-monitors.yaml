@@ -1,3 +1,24 @@
+# These are used by the Prometheus Operator so it can query Numaplane and Numaflow Pods for metrics
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  labels:
+    app.kubernetes.io/part-of: numaplane
+  name: numaplane-controller-metrics
+  namespace: numaplane-system
+spec:
+  namespaceSelector:
+    matchNames:
+      - numaplane-system
+  podMetricsEndpoints:
+    - scheme: http
+      path: /metrics
+      port: metrics
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller-manager
+      app.kubernetes.io/part-of: numaplane
+---
 # These are used by the Prometheus Operator so it can query Numaflow Pipeline and MonoVertex Pods for metrics
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
