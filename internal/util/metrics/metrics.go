@@ -60,7 +60,7 @@ type CustomMetrics struct {
 	NumaflowControllerRolloutsHealth *prometheus.GaugeVec
 	// NumaflowControllerRolloutsRunning is the gauge for the number of running NumaflowControllerRollouts
 	NumaflowControllerRolloutsRunning *prometheus.GaugeVec
-	// NumaflowControllerRolloutRunningVersion records the version label last set per rollout so a version change can delete the stale series.
+	// NumaflowControllerRolloutRunningVersion records the Numaflow Controller version previously set for the purpose of deleting stale time series
 	NumaflowControllerRolloutRunningVersion map[string]map[string]string
 	// NumaflowControllerRolloutSyncErrors is the counter for the total number of NumaflowControllerRollout reconciliation errors
 	NumaflowControllerRolloutSyncErrors *prometheus.CounterVec
