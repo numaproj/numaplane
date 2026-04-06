@@ -51,6 +51,7 @@ func createTestMetrics() *metrics.CustomMetrics {
 			Name: "test_progressive_pipeline_drains",
 			Help: "Test metric",
 		}, []string{metrics.LabelNamespace, metrics.LabelPipelineRollout, metrics.LabelPipeline, metrics.LabelDrainComplete, metrics.LabelDrainResult}),
+		NumaflowControllerRolloutRunningVersion: make(map[string]map[string]string),
 	}
 }
 

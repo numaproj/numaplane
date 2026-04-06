@@ -60,6 +60,8 @@ type CustomMetrics struct {
 	NumaflowControllerRolloutsHealth *prometheus.GaugeVec
 	// NumaflowControllerRolloutsRunning is the gauge for the number of running NumaflowControllerRollouts
 	NumaflowControllerRolloutsRunning *prometheus.GaugeVec
+	// NumaflowControllerRolloutRunningVersion records the version label last set per rollout so a version change can delete the stale series.
+	NumaflowControllerRolloutRunningVersion map[string]map[string]string
 	// NumaflowControllerRolloutSyncErrors is the counter for the total number of NumaflowControllerRollout reconciliation errors
 	NumaflowControllerRolloutSyncErrors *prometheus.CounterVec
 	// NumaflowControllerRolloutSyncs is the counter for the total number of NumaflowControllerRollout reconciliations
@@ -127,11 +129,12 @@ const (
 )
 
 var (
-	phases         = []string{apiv1.PhasePending.String(), apiv1.PhaseDeployed.String(), apiv1.PhaseFailed.String()}
-	defaultLabels  = prometheus.Labels{LabelIntuit: "true"}
-	pipelineLock   sync.Mutex
-	isbServiceLock sync.Mutex
-	monoVertexLock sync.Mutex
+	phases                               = []string{apiv1.PhasePending.String(), apiv1.PhaseDeployed.String(), apiv1.PhaseFailed.String()}
+	defaultLabels                        = prometheus.Labels{LabelIntuit: "true"}
+	pipelineLock                         sync.Mutex
+	isbServiceLock                       sync.Mutex
+	monoVertexLock                       sync.Mutex
+	numaflowControllerRolloutRunningLock sync.Mutex
 
 	LabelValueDrainResult_PipelineFailed   LabelValueDrainResult = "PipelineFailed"
 	LabelValueDrainResult_NeverDrained     LabelValueDrainResult = "DrainIncomplete"
@@ -431,6 +434,7 @@ func RegisterCustomMetrics(numaLogger *logger.NumaLogger) *CustomMetrics {
 		MonoVertexROSyncErrors:                    monoVertexROSyncErrors,
 		NumaflowControllerRolloutsHealth:          numaflowControllerRolloutsHealth,
 		NumaflowControllerRolloutsRunning:         numaflowControllerRolloutsRunning,
+		NumaflowControllerRolloutRunningVersion:   make(map[string]map[string]string),
 		NumaflowControllerRolloutSyncs:            numaflowControllerRolloutSyncs,
 		NumaflowControllerRolloutSyncErrors:       numaflowControllerRolloutSyncErrors,
 		NumaflowControllerRolloutPausedSeconds:    numaflowControllerRolloutPausedSeconds,
@@ -602,6 +606,43 @@ func (m *CustomMetrics) DeleteNumaflowControllerRolloutsHealth(namespace, name s
 		deleted := m.NumaflowControllerRolloutsHealth.DeleteLabelValues(namespace, name, phase)
 		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of numaflow controller rollout health metrics for %s/%s", namespace, name)
 	}
+}
+
+// SetNumaflowControllerRolloutRunning sets the running gauge for one rollout, removing a stale time series if the version label changed.
+func (m *CustomMetrics) SetNumaflowControllerRolloutRunning(name, namespace, version string) {
+	numaflowControllerRolloutRunningLock.Lock()
+	defer numaflowControllerRolloutRunningLock.Unlock()
+	// Check if there's a previous Numaflow Controller version tag for this namespace. If so, we need to remove it.
+	// We maintain a map to track that.
+	if m.NumaflowControllerRolloutRunningVersion[namespace] == nil {
+		m.NumaflowControllerRolloutRunningVersion[namespace] = make(map[string]string)
+	}
+	namespaceMap := m.NumaflowControllerRolloutRunningVersion[namespace]
+	previousVersion, exists := namespaceMap[name]
+	if exists && previousVersion == version {
+		return
+	}
+	// delete the time series for previous version
+	m.NumaflowControllerRolloutsRunning.DeleteLabelValues(name, namespace, previousVersion)
+	// add the new time series
+	m.NumaflowControllerRolloutsRunning.WithLabelValues(name, namespace, version).Set(1)
+	// update the entry in the map to the new version
+	namespaceMap[name] = version
+}
+
+// DeleteNumaflowControllerRolloutRunning removes the running gauge series and tracking for a rollout (e.g. on delete).
+func (m *CustomMetrics) DeleteNumaflowControllerRolloutRunning(name, namespace, version string) {
+	// clean up our map
+	numaflowControllerRolloutRunningLock.Lock()
+	defer numaflowControllerRolloutRunningLock.Unlock()
+	if namespaceMap := m.NumaflowControllerRolloutRunningVersion[namespace]; namespaceMap != nil {
+		delete(namespaceMap, name)
+		if len(namespaceMap) == 0 {
+			delete(m.NumaflowControllerRolloutRunningVersion, namespace)
+		}
+	}
+	// delete the time series entry
+	m.NumaflowControllerRolloutsRunning.DeleteLabelValues(name, namespace, version)
 }
 
 // SetNumaflowControllersHealth sets the health of the numaflow controller
