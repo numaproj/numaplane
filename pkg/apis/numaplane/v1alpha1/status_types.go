@@ -152,14 +152,15 @@ func (s *Status) GetCondition(t ConditionType) *metav1.Condition {
 	return nil
 }
 
-// GetConditionValue reports whether t is present with Status True in conditions.
-func GetConditionValue(conditions []metav1.Condition, t ConditionType) bool {
+// GetConditionValue reports whether condition t is True. nil means no condition of that type exists.
+func GetConditionValue(conditions []metav1.Condition, t ConditionType) *bool {
 	for i := range conditions {
-		if conditions[i].Type == string(t) && conditions[i].Status == metav1.ConditionTrue {
-			return true
+		if conditions[i].Type == string(t) {
+			v := conditions[i].Status == metav1.ConditionTrue
+			return &v
 		}
 	}
-	return false
+	return nil
 }
 
 // Init sets certain Status parameters to a default initial state

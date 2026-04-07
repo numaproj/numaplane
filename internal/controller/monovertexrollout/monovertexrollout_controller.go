@@ -194,12 +194,14 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		// Set the health of the monoVertexRollout only if it is not being deleted.
 		if monoVertexRollout.DeletionTimestamp.IsZero() {
 			numaLogger.Debugf("Reconcilation finished for monoVertexRollout %s/%s, setting phase metrics: %s", monoVertexRollout.Namespace, monoVertexRollout.Name, monoVertexRollout.Status.Phase)
+			promotedChildHealth := apiv1.GetConditionValue(monoVertexRollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+			progressiveSuccess := apiv1.GetConditionValue(monoVertexRollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
 			r.customMetrics.SetMonoVerticesRolloutHealth(
 				monoVertexRollout.Namespace,
 				monoVertexRollout.Name,
 				string(monoVertexRollout.Status.Phase),
-				!apiv1.GetConditionValue(monoVertexRollout.Status.Conditions, apiv1.ConditionChildResourceHealthy),
-				!apiv1.GetConditionValue(monoVertexRollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded),
+				promotedChildHealth != nil && !*promotedChildHealth,
+				progressiveSuccess != nil && !*progressiveSuccess,
 			)
 		}
 	}()
