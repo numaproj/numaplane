@@ -82,8 +82,11 @@ spec:
           # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
           resources:
             requests:
-              cpu: 10m
-              memory: 64Mi
+              cpu: 100m
+              memory: 200Mi
+            limits:
+              cpu: 200m
+              memory: 2400Mi
           volumeMounts:
             - name: config-volume
               mountPath: /etc/numaplane
