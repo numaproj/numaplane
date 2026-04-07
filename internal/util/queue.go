@@ -17,8 +17,12 @@ type rateLimitingQueue struct {
 
 func NewWorkQueue(queueName string) workqueue.TypedRateLimitingInterface[interface{}] {
 	return rateLimitingQueue{
-		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[interface{}]()),
-		workerType:                 queueName,
+		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.DefaultTypedControllerRateLimiter[interface{}](),
+			// by adding the queue name, we can get queue metrics for this queue (prefixed by "workqueue_")
+			workqueue.TypedRateLimitingQueueConfig[interface{}]{Name: queueName},
+		),
+		workerType: queueName,
 	}
 }
 
