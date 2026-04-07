@@ -19,7 +19,7 @@ func NewWorkQueue(queueName string) workqueue.TypedRateLimitingInterface[interfa
 	return rateLimitingQueue{
 		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueueWithConfig(
 			workqueue.DefaultTypedControllerRateLimiter[interface{}](),
-			// by adding the queue name, we can get queue metrics for this queue (prefixed by "workqueue_")
+			// by adding the queue name, we can get the "workqueue_" prefixed metrics for this queue
 			workqueue.TypedRateLimitingQueueConfig[interface{}]{Name: queueName},
 		),
 		workerType: queueName,
