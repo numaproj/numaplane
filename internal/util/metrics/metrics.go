@@ -128,6 +128,7 @@ const (
 	LabelCompleted                 = "completed"
 	LabelPromotedChildHealthy      = "promotedChildHealthy"
 	LabelProgressiveSuccess        = "progressiveSuccess"
+	LabelChildHealthy              = "childHealthy"
 )
 
 var (
@@ -170,7 +171,7 @@ var (
 		Name:        "numaflow_controller_health",
 		Help:        "A metric to indicate whether the NumaflowController is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelNumaflowController, LabelPhase})
+	}, []string{LabelNamespace, LabelNumaflowController, LabelPhase, LabelChildHealthy})
 
 	// numaflowControllerRolloutsHealth indicates whether the numaflow controller rollouts are healthy (from k8s resource perspective)
 	numaflowControllerRolloutsHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -532,16 +533,16 @@ func (m *CustomMetrics) DecMonoVertexRollouts(name, namespace string) {
 
 // SetPipelineRolloutHealth sets the health of the pipeline rollout.
 func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase string, promotedChildHealthy, progressiveSuccess bool) {
-	pchStr := strconv.FormatBool(promotedChildHealthy)
-	psStr := strconv.FormatBool(progressiveSuccess)
+	promotedChildHealthyStr := strconv.FormatBool(promotedChildHealthy)
+	progressiveSuccessStr := strconv.FormatBool(progressiveSuccess)
 	for _, phase := range phases {
-		for _, pch := range []string{"true", "false"} {
-			for _, ps := range []string{"true", "false"} {
-				if phase == currentPhase && pch == pchStr && ps == psStr {
-					m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(1)
+		for _, promotedChildHealthy := range []string{"true", "false"} {
+			for _, progressiveSuccess := range []string{"true", "false"} {
+				if phase == currentPhase && promotedChildHealthy == promotedChildHealthyStr && progressiveSuccess == progressiveSuccessStr {
+					m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildHealthy, progressiveSuccess).Set(1)
 				} else {
 					// clear out any other time series for this particular PipelineRollout
-					m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(0)
+					m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildHealthy, progressiveSuccess).Set(0)
 				}
 			}
 		}
@@ -552,10 +553,10 @@ func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase s
 func (m *CustomMetrics) DeletePipelineRolloutHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting pipeline rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		for _, pch := range []string{"true", "false"} {
-			for _, ps := range []string{"true", "false"} {
-				deleted := m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase, pch, ps)
-				m.NumaLogger.WithValues("phase", phase, LabelPromotedChildHealthy, pch, LabelProgressiveSuccess, ps, "deleted", deleted).Debugf("Result of deletion of pipeline rollout health metrics for %s/%s", namespace, name)
+		for _, promotedChildHealthy := range []string{"true", "false"} {
+			for _, progressiveSuccess := range []string{"true", "false"} {
+				deleted := m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase, promotedChildHealthy, progressiveSuccess)
+				m.NumaLogger.WithValues("phase", phase, LabelPromotedChildHealthy, promotedChildHealthy, LabelProgressiveSuccess, progressiveSuccess, "deleted", deleted).Debugf("Result of deletion of pipeline rollout health metrics for %s/%s", namespace, name)
 			}
 		}
 	}
@@ -563,16 +564,16 @@ func (m *CustomMetrics) DeletePipelineRolloutHealth(namespace, name string) {
 
 // SetISBServicesRolloutHealth sets the health of the ISB service rollout.
 func (m *CustomMetrics) SetISBServicesRolloutHealth(namespace, name, currentPhase string, promotedChildHealthy, progressiveSuccess bool) {
-	pchStr := strconv.FormatBool(promotedChildHealthy)
-	psStr := strconv.FormatBool(progressiveSuccess)
+	promotedChildHealthyStr := strconv.FormatBool(promotedChildHealthy)
+	progressiveSuccessStr := strconv.FormatBool(progressiveSuccess)
 	for _, phase := range phases {
-		for _, pch := range []string{"true", "false"} {
-			for _, ps := range []string{"true", "false"} {
-				if phase == currentPhase && pch == pchStr && ps == psStr {
-					m.ISBServicesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(1)
+		for _, promotedChildHealthy := range []string{"true", "false"} {
+			for _, progressiveSuccess := range []string{"true", "false"} {
+				if phase == currentPhase && promotedChildHealthy == promotedChildHealthyStr && progressiveSuccess == progressiveSuccessStr {
+					m.ISBServicesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildHealthy, progressiveSuccess).Set(1)
 				} else {
 					// clear out older time series for this particular ISBServiceRollout
-					m.ISBServicesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(0)
+					m.ISBServicesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildHealthy, progressiveSuccess).Set(0)
 				}
 			}
 		}
@@ -583,10 +584,10 @@ func (m *CustomMetrics) SetISBServicesRolloutHealth(namespace, name, currentPhas
 func (m *CustomMetrics) DeleteISBServicesRolloutHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting isbsvc rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		for _, pch := range []string{"true", "false"} {
-			for _, ps := range []string{"true", "false"} {
-				deleted := m.ISBServicesRolloutHealth.DeleteLabelValues(namespace, name, phase, pch, ps)
-				m.NumaLogger.WithValues("phase", phase, LabelPromotedChildHealthy, pch, LabelProgressiveSuccess, ps, "deleted", deleted).Debugf("Result of deletion of isbsvc rollout health metrics for %s/%s", namespace, name)
+		for _, promotedChildHealthy := range []string{"true", "false"} {
+			for _, progressiveSuccess := range []string{"true", "false"} {
+				deleted := m.ISBServicesRolloutHealth.DeleteLabelValues(namespace, name, phase, promotedChildHealthy, progressiveSuccess)
+				m.NumaLogger.WithValues("phase", phase, LabelPromotedChildHealthy, promotedChildHealthy, LabelProgressiveSuccess, progressiveSuccess, "deleted", deleted).Debugf("Result of deletion of isbsvc rollout health metrics for %s/%s", namespace, name)
 			}
 		}
 	}
@@ -594,16 +595,16 @@ func (m *CustomMetrics) DeleteISBServicesRolloutHealth(namespace, name string) {
 
 // SetMonoVerticesRolloutHealth sets the health of the monovertex rollout.
 func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPhase string, promotedChildHealthy, progressiveSuccess bool) {
-	pchStr := strconv.FormatBool(promotedChildHealthy)
-	psStr := strconv.FormatBool(progressiveSuccess)
+	promotedChildHealthyStr := strconv.FormatBool(promotedChildHealthy)
+	progressiveSuccessStr := strconv.FormatBool(progressiveSuccess)
 	for _, phase := range phases {
-		for _, pch := range []string{"true", "false"} {
-			for _, ps := range []string{"true", "false"} {
-				if phase == currentPhase && pch == pchStr && ps == psStr {
-					m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(1)
+		for _, promotedChildHealthy := range []string{"true", "false"} {
+			for _, progressiveSuccess := range []string{"true", "false"} {
+				if phase == currentPhase && promotedChildHealthy == promotedChildHealthyStr && progressiveSuccess == progressiveSuccessStr {
+					m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildHealthy, progressiveSuccess).Set(1)
 				} else {
 					// clear out older time series for this particular MonoVertexRollout
-					m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(0)
+					m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildHealthy, progressiveSuccess).Set(0)
 				}
 			}
 		}
@@ -614,10 +615,10 @@ func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPha
 func (m *CustomMetrics) DeleteMonoVerticesRolloutHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting monovertex rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		for _, pch := range []string{"true", "false"} {
-			for _, ps := range []string{"true", "false"} {
-				deleted := m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase, pch, ps)
-				m.NumaLogger.WithValues("phase", phase, LabelPromotedChildHealthy, pch, LabelProgressiveSuccess, ps, "deleted", deleted).Debugf("Result of deletion of monovertex rollout health metrics for %s/%s", namespace, name)
+		for _, promotedChildHealthy := range []string{"true", "false"} {
+			for _, progressiveSuccess := range []string{"true", "false"} {
+				deleted := m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase, promotedChildHealthy, progressiveSuccess)
+				m.NumaLogger.WithValues("phase", phase, LabelPromotedChildHealthy, promotedChildHealthy, LabelProgressiveSuccess, progressiveSuccess, "deleted", deleted).Debugf("Result of deletion of monovertex rollout health metrics for %s/%s", namespace, name)
 			}
 		}
 	}
@@ -680,13 +681,17 @@ func (m *CustomMetrics) DeleteNumaflowControllerRolloutRunning(name, namespace, 
 	m.NumaflowControllerRolloutsRunning.DeleteLabelValues(name, namespace, version)
 }
 
-// SetNumaflowControllersHealth sets the health of the numaflow controller
-func (m *CustomMetrics) SetNumaflowControllersHealth(namespace, name, currentPhase string) {
+// SetNumaflowControllersHealth sets the health of the numaflow controller.
+func (m *CustomMetrics) SetNumaflowControllersHealth(namespace, name, currentPhase string, childHealthy bool) {
+	childHealthyStr := strconv.FormatBool(childHealthy)
 	for _, phase := range phases {
-		if phase == currentPhase {
-			m.NumaflowControllersHealth.WithLabelValues(namespace, name, phase).Set(1)
-		} else {
-			m.NumaflowControllersHealth.WithLabelValues(namespace, name, phase).Set(0)
+		for _, childHealthy := range []string{"true", "false"} {
+			if phase == currentPhase && childHealthy == childHealthyStr {
+				m.NumaflowControllersHealth.WithLabelValues(namespace, name, phase, childHealthy).Set(1)
+			} else {
+				// clear out older time series for this particular NumaflowController
+				m.NumaflowControllersHealth.WithLabelValues(namespace, name, phase, childHealthy).Set(0)
+			}
 		}
 	}
 }
@@ -695,8 +700,10 @@ func (m *CustomMetrics) SetNumaflowControllersHealth(namespace, name, currentPha
 func (m *CustomMetrics) DeleteNumaflowControllersHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting numaflow controller health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		deleted := m.NumaflowControllersHealth.DeleteLabelValues(namespace, name, phase)
-		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of numaflow controller health metrics for %s/%s", namespace, name)
+		for _, childHealthy := range []string{"true", "false"} {
+			deleted := m.NumaflowControllersHealth.DeleteLabelValues(namespace, name, phase, childHealthy)
+			m.NumaLogger.WithValues("phase", phase, LabelChildHealthy, childHealthy, "deleted", deleted).Debugf("Result of deletion of numaflow controller health metrics for %s/%s", namespace, name)
+		}
 	}
 }
 
