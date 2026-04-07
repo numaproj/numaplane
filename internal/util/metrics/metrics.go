@@ -126,6 +126,7 @@ const (
 	LabelForcedSuccess             = "forcedSuccess"
 	LabelResourceHealthSuccess     = "resourceHealthSuccess"
 	LabelCompleted                 = "completed"
+	LabelFailedCondition           = "failedCondition"
 )
 
 var (
@@ -145,9 +146,9 @@ var (
 	// pipelinesRolloutHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
 	pipelinesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaplane_pipeline_rollout_health",
-		Help:        "A metric to indicate whether the pipeline rollout is healthy. '1' means healthy, '0' means unhealthy",
+		Help:        "A metric to indicate whether the pipeline rollout is healthy. '1' means healthy, '0' means unhealthy. failedCondition is true when any v1alpha1.FailureConditions condition is True",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelPipeline, LabelPhase})
+	}, []string{LabelNamespace, LabelPipeline, LabelPhase, LabelFailedCondition})
 
 	// isbServicesRolloutHealth indicates whether the ISB service rollouts are healthy (from k8s resource perspective).
 	isbServicesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -528,13 +529,19 @@ func (m *CustomMetrics) DecMonoVertexRollouts(name, namespace string) {
 	}
 }
 
-// SetPipelineRolloutHealth sets the health of the pipeline rollout
-func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase string) {
+// SetPipelineRolloutHealth sets the health of the pipeline rollout.
+// failedCondition is exposed as label failedCondition ("true"/"false"); it matches
+// apiv1.HasFailureCondition(rollout status conditions).
+func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase string, failedCondition bool) {
+	failedConditionStr := strconv.FormatBool(failedCondition)
 	for _, phase := range phases {
-		if phase == currentPhase {
-			m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase).Set(1)
-		} else {
-			m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase).Set(0)
+		for _, fc := range []string{"true", "false"} {
+			if phase == currentPhase && fc == failedConditionStr {
+				m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, fc).Set(1)
+			} else {
+				// for older phase values and older failedCondition values, set the metric to 0
+				m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, fc).Set(0)
+			}
 		}
 	}
 }
@@ -543,8 +550,10 @@ func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase s
 func (m *CustomMetrics) DeletePipelineRolloutHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting pipeline rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		deleted := m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase)
-		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of pipeline rollout health metrics for %s/%s", namespace, name)
+		for _, fc := range []string{"true", "false"} {
+			deleted := m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase, fc)
+			m.NumaLogger.WithValues("phase", phase, LabelFailedCondition, fc, "deleted", deleted).Debugf("Result of deletion of pipeline rollout health metrics for %s/%s", namespace, name)
+		}
 	}
 }
 

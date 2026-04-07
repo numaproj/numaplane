@@ -62,6 +62,13 @@ const (
 	ProgressingReasonString = "Progressing"
 )
 
+// FailureConditions lists the subset of Conditions which represent failure
+var FailureConditions = []ConditionType{
+	ConditionChildResourceHealthy,
+	ConditionChildResourceDeployed,
+	ConditionProgressiveUpgradeSucceeded,
+}
+
 // Status is a common structure which can be used for Status field.
 type Status struct {
 	// Conditions are the latest available observations of a resource's current state.
@@ -150,6 +157,18 @@ func (s *Status) GetCondition(t ConditionType) *metav1.Condition {
 		}
 	}
 	return nil
+}
+
+// HasFailureCondition reports whether any condition listed in FailureConditions is True.
+func HasFailureCondition(conditions []metav1.Condition) bool {
+	for _, t := range FailureConditions {
+		for i := range conditions {
+			if conditions[i].Type == string(t) && conditions[i].Status == metav1.ConditionTrue {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Init sets certain Status parameters to a default initial state
