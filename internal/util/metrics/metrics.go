@@ -163,7 +163,7 @@ var (
 		Name:        "numaplane_monovertex_rollout_health",
 		Help:        "A metric to indicate whether the MonoVertex is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelMonoVertex, LabelPhase})
+	}, []string{LabelNamespace, LabelMonoVertex, LabelPhase, LabelPromotedChildHealthy, LabelProgressiveSuccess})
 
 	// numaflowControllersHealth indicates whether the NumaflowControllers are healthy (from k8s resource perspective)
 	numaflowControllersHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -581,13 +581,20 @@ func (m *CustomMetrics) DeleteISBServicesRolloutHealth(namespace, name string) {
 	}
 }
 
-// SetMonoVerticesRolloutHealth sets the health of the monovertex rollout
-func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPhase string) {
+// SetMonoVerticesRolloutHealth sets the health of the monovertex rollout.
+func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPhase string, promotedChildHealthy, progressiveSuccess bool) {
+	pchStr := strconv.FormatBool(promotedChildHealthy)
+	psStr := strconv.FormatBool(progressiveSuccess)
 	for _, phase := range phases {
-		if phase == currentPhase {
-			m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase).Set(1)
-		} else {
-			m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase).Set(0)
+		for _, pch := range []string{"true", "false"} {
+			for _, ps := range []string{"true", "false"} {
+				if phase == currentPhase && pch == pchStr && ps == psStr {
+					m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(1)
+				} else {
+					// clear out older time series for this particular MonoVertexRollout
+					m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(0)
+				}
+			}
 		}
 	}
 }
@@ -596,8 +603,12 @@ func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPha
 func (m *CustomMetrics) DeleteMonoVerticesRolloutHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting monovertex rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		deleted := m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase)
-		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of monovertex rollout health metrics for %s/%s", namespace, name)
+		for _, pch := range []string{"true", "false"} {
+			for _, ps := range []string{"true", "false"} {
+				deleted := m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase, pch, ps)
+				m.NumaLogger.WithValues("phase", phase, LabelPromotedChildHealthy, pch, LabelProgressiveSuccess, ps, "deleted", deleted).Debugf("Result of deletion of monovertex rollout health metrics for %s/%s", namespace, name)
+			}
+		}
 	}
 }
 
