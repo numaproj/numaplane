@@ -126,6 +126,8 @@ const (
 	LabelForcedSuccess             = "forcedSuccess"
 	LabelResourceHealthSuccess     = "resourceHealthSuccess"
 	LabelCompleted                 = "completed"
+	LabelPromotedChildHealthy      = "promotedChildHealthy"
+	LabelProgressiveSuccess        = "progressiveSuccess"
 )
 
 var (
@@ -145,9 +147,9 @@ var (
 	// pipelinesRolloutHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
 	pipelinesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaplane_pipeline_rollout_health",
-		Help:        "A metric to indicate whether the pipeline rollout is healthy. '1' means healthy, '0' means unhealthy",
+		Help:        "A metric to indicate whether the pipeline rollout is healthy. '1' means healthy, '0' means unhealthy.",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelPipeline, LabelPhase})
+	}, []string{LabelNamespace, LabelPipeline, LabelPhase, LabelPromotedChildHealthy, LabelProgressiveSuccess})
 
 	// isbServicesRolloutHealth indicates whether the ISB service rollouts are healthy (from k8s resource perspective).
 	isbServicesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -528,13 +530,20 @@ func (m *CustomMetrics) DecMonoVertexRollouts(name, namespace string) {
 	}
 }
 
-// SetPipelineRolloutHealth sets the health of the pipeline rollout
-func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase string) {
+// SetPipelineRolloutHealth sets the health of the pipeline rollout.
+func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase string, promotedChildHealthy, progressiveSuccess bool) {
+	pchStr := strconv.FormatBool(promotedChildHealthy)
+	psStr := strconv.FormatBool(progressiveSuccess)
 	for _, phase := range phases {
-		if phase == currentPhase {
-			m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase).Set(1)
-		} else {
-			m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase).Set(0)
+		for _, pch := range []string{"true", "false"} {
+			for _, ps := range []string{"true", "false"} {
+				if phase == currentPhase && pch == pchStr && ps == psStr {
+					m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(1)
+				} else {
+					// clear out any other time series for this particular PipelineRollout
+					m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, pch, ps).Set(0)
+				}
+			}
 		}
 	}
 }
@@ -543,8 +552,12 @@ func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase s
 func (m *CustomMetrics) DeletePipelineRolloutHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting pipeline rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		deleted := m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase)
-		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of pipeline rollout health metrics for %s/%s", namespace, name)
+		for _, pch := range []string{"true", "false"} {
+			for _, ps := range []string{"true", "false"} {
+				deleted := m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase, pch, ps)
+				m.NumaLogger.WithValues("phase", phase, LabelPromotedChildHealthy, pch, LabelProgressiveSuccess, ps, "deleted", deleted).Debugf("Result of deletion of pipeline rollout health metrics for %s/%s", namespace, name)
+			}
+		}
 	}
 }
 
