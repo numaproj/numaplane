@@ -541,8 +541,7 @@ func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase s
 				if phase == currentPhase && promotedChildFailure == promotedChildFailureStr && progressiveFailure == progressiveFailureStr {
 					m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildFailure, progressiveFailure).Set(1)
 				} else {
-					// clear out any other time series for this particular PipelineRollout
-					m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildFailure, progressiveFailure).Set(0)
+					m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase, promotedChildFailure, progressiveFailure)
 				}
 			}
 		}
@@ -572,8 +571,7 @@ func (m *CustomMetrics) SetISBServicesRolloutHealth(namespace, name, currentPhas
 				if phase == currentPhase && promotedChildFailure == promotedChildFailureStr && progressiveFailure == progressiveFailureStr {
 					m.ISBServicesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildFailure, progressiveFailure).Set(1)
 				} else {
-					// clear out older time series for this particular ISBServiceRollout
-					m.ISBServicesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildFailure, progressiveFailure).Set(0)
+					m.ISBServicesRolloutHealth.DeleteLabelValues(namespace, name, phase, promotedChildFailure, progressiveFailure)
 				}
 			}
 		}
@@ -603,8 +601,7 @@ func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPha
 				if phase == currentPhase && promotedChildFailure == promotedChildFailureStr && progressiveFailure == progressiveFailureStr {
 					m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildFailure, progressiveFailure).Set(1)
 				} else {
-					// clear out older time series for this particular MonoVertexRollout
-					m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase, promotedChildFailure, progressiveFailure).Set(0)
+					m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase, promotedChildFailure, progressiveFailure)
 				}
 			}
 		}
@@ -630,7 +627,7 @@ func (m *CustomMetrics) SetNumaflowControllerRolloutsHealth(namespace, name, cur
 		if phase == currentPhase {
 			m.NumaflowControllerRolloutsHealth.WithLabelValues(namespace, name, phase).Set(1)
 		} else {
-			m.NumaflowControllerRolloutsHealth.WithLabelValues(namespace, name, phase).Set(0)
+			m.NumaflowControllerRolloutsHealth.DeleteLabelValues(namespace, name, phase)
 		}
 	}
 }
@@ -689,8 +686,7 @@ func (m *CustomMetrics) SetNumaflowControllersHealth(namespace, name, currentPha
 			if phase == currentPhase && childHealthy == childHealthyStr {
 				m.NumaflowControllersHealth.WithLabelValues(namespace, name, phase, childHealthy).Set(1)
 			} else {
-				// clear out older time series for this particular NumaflowController
-				m.NumaflowControllersHealth.WithLabelValues(namespace, name, phase, childHealthy).Set(0)
+				m.NumaflowControllersHealth.DeleteLabelValues(namespace, name, phase, childHealthy)
 			}
 		}
 	}
