@@ -467,9 +467,7 @@ func (m *CustomMetrics) IncPipelineROsRunning(name, namespace string) {
 		m.PipelineROCounterMap[namespace] = make(map[string]struct{})
 	}
 	m.PipelineROCounterMap[namespace][name] = struct{}{}
-	for ns, pipelines := range m.PipelineROCounterMap {
-		m.PipelineRolloutsRunning.WithLabelValues(ns).Set(float64(len(pipelines)))
-	}
+	m.PipelineRolloutsRunning.WithLabelValues(namespace).Set(float64(len(m.PipelineROCounterMap[namespace])))
 }
 
 // DecPipelineROsRunning decrements the PipelineRollout counter
@@ -477,9 +475,7 @@ func (m *CustomMetrics) DecPipelineROsRunning(name, namespace string) {
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
 	delete(m.PipelineROCounterMap[namespace], name)
-	for ns, pipelines := range m.PipelineROCounterMap {
-		m.PipelineRolloutsRunning.WithLabelValues(ns).Set(float64(len(pipelines)))
-	}
+	m.PipelineRolloutsRunning.WithLabelValues(namespace).Set(float64(len(m.PipelineROCounterMap[namespace])))
 }
 
 // IncISBServiceRollouts increments the ISBServiceRollout counter if it doesn't already know about it
@@ -490,9 +486,7 @@ func (m *CustomMetrics) IncISBServiceRollouts(name, namespace string) {
 		m.ISBServiceROCounterMap[namespace] = make(map[string]struct{})
 	}
 	m.ISBServiceROCounterMap[namespace][name] = struct{}{}
-	for ns, isbServices := range m.ISBServiceROCounterMap {
-		m.ISBServiceRolloutsRunning.WithLabelValues(ns).Set(float64(len(isbServices)))
-	}
+	m.ISBServiceRolloutsRunning.WithLabelValues(namespace).Set(float64(len(m.ISBServiceROCounterMap[namespace])))
 }
 
 // DecISBServiceRollouts decrements the ISBServiceRollout counter
@@ -500,9 +494,7 @@ func (m *CustomMetrics) DecISBServiceRollouts(name, namespace string) {
 	isbServiceLock.Lock()
 	defer isbServiceLock.Unlock()
 	delete(m.ISBServiceROCounterMap[namespace], name)
-	for ns, isbServices := range m.ISBServiceROCounterMap {
-		m.ISBServiceRolloutsRunning.WithLabelValues(ns).Set(float64(len(isbServices)))
-	}
+	m.ISBServiceRolloutsRunning.WithLabelValues(namespace).Set(float64(len(m.ISBServiceROCounterMap[namespace])))
 }
 
 // IncMonoVertexRollouts increments the MonoVertexRollout counter if it doesn't already know about it
@@ -513,9 +505,7 @@ func (m *CustomMetrics) IncMonoVertexRollouts(name, namespace string) {
 		m.MonoVerticesCounterMap[namespace] = make(map[string]struct{})
 	}
 	m.MonoVerticesCounterMap[namespace][name] = struct{}{}
-	for ns, monoVertices := range m.MonoVerticesCounterMap {
-		m.MonoVertexRolloutsRunning.WithLabelValues(ns).Set(float64(len(monoVertices)))
-	}
+	m.MonoVertexRolloutsRunning.WithLabelValues(namespace).Set(float64(len(m.MonoVerticesCounterMap[namespace])))
 }
 
 // DecMonoVertexRollouts decrements the MonoVertexRollout counter
@@ -523,9 +513,7 @@ func (m *CustomMetrics) DecMonoVertexRollouts(name, namespace string) {
 	monoVertexLock.Lock()
 	defer monoVertexLock.Unlock()
 	delete(m.MonoVerticesCounterMap[namespace], name)
-	for ns, monoVertices := range m.MonoVerticesCounterMap {
-		m.MonoVertexRolloutsRunning.WithLabelValues(ns).Set(float64(len(monoVertices)))
-	}
+	m.MonoVertexRolloutsRunning.WithLabelValues(namespace).Set(float64(len(m.MonoVerticesCounterMap[namespace])))
 }
 
 // SetPipelineRolloutHealth sets the health of the pipeline rollout
