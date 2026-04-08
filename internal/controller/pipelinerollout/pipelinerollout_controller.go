@@ -246,10 +246,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 			r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
+		r.customMetrics.IncPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 	}
-
-	// generate the metrics for the Pipeline.
-	r.customMetrics.IncPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 
 	r.recorder.Eventf(pipelineRollout, "Normal", "ReconcileSuccess", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")

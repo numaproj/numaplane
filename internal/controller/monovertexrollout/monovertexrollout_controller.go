@@ -174,10 +174,8 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			r.ErrorHandler(ctx, monoVertexRollout, statusUpdateErr, "StatusUpdateFailed", "Failed to update MonoVertexRollout")
 			return ctrl.Result{}, statusUpdateErr
 		}
+		r.customMetrics.IncMonoVertexRollouts(monoVertexRollout.Name, monoVertexRollout.Namespace)
 	}
-
-	// generate metrics for MonoVertex
-	r.customMetrics.IncMonoVertexRollouts(monoVertexRollout.Name, monoVertexRollout.Namespace)
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeNormal, "ReconciliationSuccessful", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
 
