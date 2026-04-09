@@ -223,7 +223,13 @@ func (r *NumaflowControllerReconciler) reconcile(
 		// Set the health of the controller only if it is not being deleted.
 		if controller.DeletionTimestamp.IsZero() {
 			numaLogger.Debugf("Reconcilation finished for controller %s/%s, setting phase metrics: %s", controller.Namespace, controller.Name, controller.Status.Phase)
-			r.customMetrics.SetNumaflowControllersHealth(controller.Namespace, controller.Name, string(controller.Status.Phase))
+			childHealth := apiv1.GetConditionValue(controller.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+			r.customMetrics.SetNumaflowControllersHealth(
+				controller.Namespace,
+				controller.Name,
+				string(controller.Status.Phase),
+				childHealth != nil && *childHealth,
+			)
 		}
 	}()
 

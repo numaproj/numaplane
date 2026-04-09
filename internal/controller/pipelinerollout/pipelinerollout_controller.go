@@ -350,7 +350,15 @@ func (r *PipelineRolloutReconciler) reconcile(
 		// Set the health of the pipelineRollout only if it is not being deleted.
 		if pipelineRollout.DeletionTimestamp.IsZero() {
 			numaLogger.Debugf("Reconcilation finished for pipelineRollout %s/%s, setting phase metrics: %s", pipelineRollout.Namespace, pipelineRollout.Name, pipelineRollout.Status.Phase)
-			r.customMetrics.SetPipelineRolloutHealth(pipelineRollout.Namespace, pipelineRollout.Name, string(pipelineRollout.Status.Phase))
+			promotedChildHealth := apiv1.GetConditionValue(pipelineRollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+			progressiveSuccess := apiv1.GetConditionValue(pipelineRollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
+			r.customMetrics.SetPipelineRolloutHealth(
+				pipelineRollout.Namespace,
+				pipelineRollout.Name,
+				string(pipelineRollout.Status.Phase),
+				promotedChildHealth != nil && !*promotedChildHealth,
+				progressiveSuccess != nil && !*progressiveSuccess,
+			)
 		}
 	}()
 
