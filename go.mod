@@ -1,6 +1,6 @@
 module github.com/numaproj/numaplane
 
-go 1.24.6
+go 1.25
 
 require (
 	github.com/ahmetb/gen-crd-api-reference-docs v0.3.0
