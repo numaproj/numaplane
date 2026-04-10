@@ -1,0 +1,29 @@
+# golangci-lint v2 format (required with Go 1.25+; official binary is built for current Go).
+version: "2"
+
+linters:
+  settings:
+    staticcheck:
+      # golangci-lint default is "all" minus several ST checks; extend that list to skip more style/quickfix rules.
+      # See https://staticcheck.dev/docs/checks/
+      checks:
+        - all
+        - "-ST1000"
+        - "-ST1003"
+        - "-ST1016"
+        - "-ST1020"
+        - "-ST1021"
+        - "-ST1022"
+        - "-ST1001" # dot imports (idiomatic for Ginkgo / Gomega)
+        - "-ST1005" # error string capitalization
+        - "-ST1019" # same package imported twice under different names
+        - "-ST1023" # redundant type on var declaration
+        - "-QF1001" # De Morgan simplification
+        - "-QF1003" # if-else chain → switch
+        - "-QF1008" # omit redundant struct field selector
+        - "-QF1011" # omit redundant type (similar to ST1023)
+    errcheck:
+      # Common defers where ignoring Close errors is acceptable.
+      exclude-functions:
+        - (*os.File).Close
+        - (io.ReadCloser).Close
