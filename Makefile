@@ -162,7 +162,7 @@ test-%: envtest ## Run e2e tests. Note we may need to increase the timeout in th
 	GOFLAGS="-count=1" ginkgo run -v --timeout 35m ./tests/e2e/$*
 
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
-GOLANGCI_LINT_VERSION ?= v1.61.0
+GOLANGCI_LINT_VERSION ?= v2.11.4
 golangci-lint:
 	@[ -f $(GOLANGCI_LINT) ] || { \
 	set -e ;\
