@@ -44,7 +44,7 @@ type NumaflowControllerRolloutStatus struct {
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:validation:XValidation:rule="matches(self.metadata.name, '^numaflow-controller.*')",message="The metadata name must start with 'numaflow-controller'"
+// +kubebuilder:validation:XValidation:rule="self.metadata.name.matches('^numaflow-controller.*')",message="The metadata name must start with 'numaflow-controller'"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.controller.version",description="The desired Numaflow Controller version"
