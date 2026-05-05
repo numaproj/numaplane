@@ -18,9 +18,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 
-	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	scheme "github.com/numaproj/numaplane/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -36,33 +36,34 @@ type MonoVertexRolloutsGetter interface {
 
 // MonoVertexRolloutInterface has methods to work with MonoVertexRollout resources.
 type MonoVertexRolloutInterface interface {
-	Create(ctx context.Context, monoVertexRollout *v1alpha1.MonoVertexRollout, opts v1.CreateOptions) (*v1alpha1.MonoVertexRollout, error)
-	Update(ctx context.Context, monoVertexRollout *v1alpha1.MonoVertexRollout, opts v1.UpdateOptions) (*v1alpha1.MonoVertexRollout, error)
+	Create(ctx context.Context, monoVertexRollout *numaplanev1alpha1.MonoVertexRollout, opts v1.CreateOptions) (*numaplanev1alpha1.MonoVertexRollout, error)
+	Update(ctx context.Context, monoVertexRollout *numaplanev1alpha1.MonoVertexRollout, opts v1.UpdateOptions) (*numaplanev1alpha1.MonoVertexRollout, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, monoVertexRollout *v1alpha1.MonoVertexRollout, opts v1.UpdateOptions) (*v1alpha1.MonoVertexRollout, error)
+	UpdateStatus(ctx context.Context, monoVertexRollout *numaplanev1alpha1.MonoVertexRollout, opts v1.UpdateOptions) (*numaplanev1alpha1.MonoVertexRollout, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.MonoVertexRollout, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.MonoVertexRolloutList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*numaplanev1alpha1.MonoVertexRollout, error)
+	List(ctx context.Context, opts v1.ListOptions) (*numaplanev1alpha1.MonoVertexRolloutList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.MonoVertexRollout, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *numaplanev1alpha1.MonoVertexRollout, err error)
 	MonoVertexRolloutExpansion
 }
 
 // monoVertexRollouts implements MonoVertexRolloutInterface
 type monoVertexRollouts struct {
-	*gentype.ClientWithList[*v1alpha1.MonoVertexRollout, *v1alpha1.MonoVertexRolloutList]
+	*gentype.ClientWithList[*numaplanev1alpha1.MonoVertexRollout, *numaplanev1alpha1.MonoVertexRolloutList]
 }
 
 // newMonoVertexRollouts returns a MonoVertexRollouts
 func newMonoVertexRollouts(c *NumaplaneV1alpha1Client, namespace string) *monoVertexRollouts {
 	return &monoVertexRollouts{
-		gentype.NewClientWithList[*v1alpha1.MonoVertexRollout, *v1alpha1.MonoVertexRolloutList](
+		gentype.NewClientWithList[*numaplanev1alpha1.MonoVertexRollout, *numaplanev1alpha1.MonoVertexRolloutList](
 			"monovertexrollouts",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1alpha1.MonoVertexRollout { return &v1alpha1.MonoVertexRollout{} },
-			func() *v1alpha1.MonoVertexRolloutList { return &v1alpha1.MonoVertexRolloutList{} }),
+			func() *numaplanev1alpha1.MonoVertexRollout { return &numaplanev1alpha1.MonoVertexRollout{} },
+			func() *numaplanev1alpha1.MonoVertexRolloutList { return &numaplanev1alpha1.MonoVertexRolloutList{} },
+		),
 	}
 }

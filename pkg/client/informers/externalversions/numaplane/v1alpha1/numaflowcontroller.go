@@ -18,13 +18,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apisnumaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	versioned "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/numaproj/numaplane/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/numaproj/numaplane/pkg/client/listers/numaplane/v1alpha1"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/client/listers/numaplane/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -35,7 +35,7 @@ import (
 // NumaflowControllers.
 type NumaflowControllerInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.NumaflowControllerLister
+	Lister() numaplanev1alpha1.NumaflowControllerLister
 }
 
 type numaflowControllerInformer struct {
@@ -70,7 +70,7 @@ func NewFilteredNumaflowControllerInformer(client versioned.Interface, namespace
 				return client.NumaplaneV1alpha1().NumaflowControllers(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&numaplanev1alpha1.NumaflowController{},
+		&apisnumaplanev1alpha1.NumaflowController{},
 		resyncPeriod,
 		indexers,
 	)
@@ -81,9 +81,9 @@ func (f *numaflowControllerInformer) defaultInformer(client versioned.Interface,
 }
 
 func (f *numaflowControllerInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&numaplanev1alpha1.NumaflowController{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisnumaplanev1alpha1.NumaflowController{}, f.defaultInformer)
 }
 
-func (f *numaflowControllerInformer) Lister() v1alpha1.NumaflowControllerLister {
-	return v1alpha1.NewNumaflowControllerLister(f.Informer().GetIndexer())
+func (f *numaflowControllerInformer) Lister() numaplanev1alpha1.NumaflowControllerLister {
+	return numaplanev1alpha1.NewNumaflowControllerLister(f.Informer().GetIndexer())
 }

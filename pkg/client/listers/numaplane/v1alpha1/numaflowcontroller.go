@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // NumaflowControllerLister helps list NumaflowControllers.
@@ -29,7 +29,7 @@ import (
 type NumaflowControllerLister interface {
 	// List lists all NumaflowControllers in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.NumaflowController, err error)
+	List(selector labels.Selector) (ret []*numaplanev1alpha1.NumaflowController, err error)
 	// NumaflowControllers returns an object that can list and get NumaflowControllers.
 	NumaflowControllers(namespace string) NumaflowControllerNamespaceLister
 	NumaflowControllerListerExpansion
@@ -37,17 +37,17 @@ type NumaflowControllerLister interface {
 
 // numaflowControllerLister implements the NumaflowControllerLister interface.
 type numaflowControllerLister struct {
-	listers.ResourceIndexer[*v1alpha1.NumaflowController]
+	listers.ResourceIndexer[*numaplanev1alpha1.NumaflowController]
 }
 
 // NewNumaflowControllerLister returns a new NumaflowControllerLister.
 func NewNumaflowControllerLister(indexer cache.Indexer) NumaflowControllerLister {
-	return &numaflowControllerLister{listers.New[*v1alpha1.NumaflowController](indexer, v1alpha1.Resource("numaflowcontroller"))}
+	return &numaflowControllerLister{listers.New[*numaplanev1alpha1.NumaflowController](indexer, numaplanev1alpha1.Resource("numaflowcontroller"))}
 }
 
 // NumaflowControllers returns an object that can list and get NumaflowControllers.
 func (s *numaflowControllerLister) NumaflowControllers(namespace string) NumaflowControllerNamespaceLister {
-	return numaflowControllerNamespaceLister{listers.NewNamespaced[*v1alpha1.NumaflowController](s.ResourceIndexer, namespace)}
+	return numaflowControllerNamespaceLister{listers.NewNamespaced[*numaplanev1alpha1.NumaflowController](s.ResourceIndexer, namespace)}
 }
 
 // NumaflowControllerNamespaceLister helps list and get NumaflowControllers.
@@ -55,15 +55,15 @@ func (s *numaflowControllerLister) NumaflowControllers(namespace string) Numaflo
 type NumaflowControllerNamespaceLister interface {
 	// List lists all NumaflowControllers in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.NumaflowController, err error)
+	List(selector labels.Selector) (ret []*numaplanev1alpha1.NumaflowController, err error)
 	// Get retrieves the NumaflowController from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha1.NumaflowController, error)
+	Get(name string) (*numaplanev1alpha1.NumaflowController, error)
 	NumaflowControllerNamespaceListerExpansion
 }
 
 // numaflowControllerNamespaceLister implements the NumaflowControllerNamespaceLister
 // interface.
 type numaflowControllerNamespaceLister struct {
-	listers.ResourceIndexer[*v1alpha1.NumaflowController]
+	listers.ResourceIndexer[*numaplanev1alpha1.NumaflowController]
 }

@@ -18,13 +18,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apisnumaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	versioned "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/numaproj/numaplane/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/numaproj/numaplane/pkg/client/listers/numaplane/v1alpha1"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/client/listers/numaplane/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -35,7 +35,7 @@ import (
 // NumaflowControllerRollouts.
 type NumaflowControllerRolloutInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.NumaflowControllerRolloutLister
+	Lister() numaplanev1alpha1.NumaflowControllerRolloutLister
 }
 
 type numaflowControllerRolloutInformer struct {
@@ -70,7 +70,7 @@ func NewFilteredNumaflowControllerRolloutInformer(client versioned.Interface, na
 				return client.NumaplaneV1alpha1().NumaflowControllerRollouts(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&numaplanev1alpha1.NumaflowControllerRollout{},
+		&apisnumaplanev1alpha1.NumaflowControllerRollout{},
 		resyncPeriod,
 		indexers,
 	)
@@ -81,9 +81,9 @@ func (f *numaflowControllerRolloutInformer) defaultInformer(client versioned.Int
 }
 
 func (f *numaflowControllerRolloutInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&numaplanev1alpha1.NumaflowControllerRollout{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisnumaplanev1alpha1.NumaflowControllerRollout{}, f.defaultInformer)
 }
 
-func (f *numaflowControllerRolloutInformer) Lister() v1alpha1.NumaflowControllerRolloutLister {
-	return v1alpha1.NewNumaflowControllerRolloutLister(f.Informer().GetIndexer())
+func (f *numaflowControllerRolloutInformer) Lister() numaplanev1alpha1.NumaflowControllerRolloutLister {
+	return numaplanev1alpha1.NewNumaflowControllerRolloutLister(f.Informer().GetIndexer())
 }

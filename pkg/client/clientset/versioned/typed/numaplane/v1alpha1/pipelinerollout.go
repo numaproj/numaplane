@@ -18,9 +18,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 
-	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	scheme "github.com/numaproj/numaplane/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -36,33 +36,34 @@ type PipelineRolloutsGetter interface {
 
 // PipelineRolloutInterface has methods to work with PipelineRollout resources.
 type PipelineRolloutInterface interface {
-	Create(ctx context.Context, pipelineRollout *v1alpha1.PipelineRollout, opts v1.CreateOptions) (*v1alpha1.PipelineRollout, error)
-	Update(ctx context.Context, pipelineRollout *v1alpha1.PipelineRollout, opts v1.UpdateOptions) (*v1alpha1.PipelineRollout, error)
+	Create(ctx context.Context, pipelineRollout *numaplanev1alpha1.PipelineRollout, opts v1.CreateOptions) (*numaplanev1alpha1.PipelineRollout, error)
+	Update(ctx context.Context, pipelineRollout *numaplanev1alpha1.PipelineRollout, opts v1.UpdateOptions) (*numaplanev1alpha1.PipelineRollout, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, pipelineRollout *v1alpha1.PipelineRollout, opts v1.UpdateOptions) (*v1alpha1.PipelineRollout, error)
+	UpdateStatus(ctx context.Context, pipelineRollout *numaplanev1alpha1.PipelineRollout, opts v1.UpdateOptions) (*numaplanev1alpha1.PipelineRollout, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.PipelineRollout, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.PipelineRolloutList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*numaplanev1alpha1.PipelineRollout, error)
+	List(ctx context.Context, opts v1.ListOptions) (*numaplanev1alpha1.PipelineRolloutList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.PipelineRollout, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *numaplanev1alpha1.PipelineRollout, err error)
 	PipelineRolloutExpansion
 }
 
 // pipelineRollouts implements PipelineRolloutInterface
 type pipelineRollouts struct {
-	*gentype.ClientWithList[*v1alpha1.PipelineRollout, *v1alpha1.PipelineRolloutList]
+	*gentype.ClientWithList[*numaplanev1alpha1.PipelineRollout, *numaplanev1alpha1.PipelineRolloutList]
 }
 
 // newPipelineRollouts returns a PipelineRollouts
 func newPipelineRollouts(c *NumaplaneV1alpha1Client, namespace string) *pipelineRollouts {
 	return &pipelineRollouts{
-		gentype.NewClientWithList[*v1alpha1.PipelineRollout, *v1alpha1.PipelineRolloutList](
+		gentype.NewClientWithList[*numaplanev1alpha1.PipelineRollout, *numaplanev1alpha1.PipelineRolloutList](
 			"pipelinerollouts",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1alpha1.PipelineRollout { return &v1alpha1.PipelineRollout{} },
-			func() *v1alpha1.PipelineRolloutList { return &v1alpha1.PipelineRolloutList{} }),
+			func() *numaplanev1alpha1.PipelineRollout { return &numaplanev1alpha1.PipelineRollout{} },
+			func() *numaplanev1alpha1.PipelineRolloutList { return &numaplanev1alpha1.PipelineRolloutList{} },
+		),
 	}
 }

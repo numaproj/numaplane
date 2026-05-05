@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // PipelineRolloutLister helps list PipelineRollouts.
@@ -29,7 +29,7 @@ import (
 type PipelineRolloutLister interface {
 	// List lists all PipelineRollouts in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.PipelineRollout, err error)
+	List(selector labels.Selector) (ret []*numaplanev1alpha1.PipelineRollout, err error)
 	// PipelineRollouts returns an object that can list and get PipelineRollouts.
 	PipelineRollouts(namespace string) PipelineRolloutNamespaceLister
 	PipelineRolloutListerExpansion
@@ -37,17 +37,17 @@ type PipelineRolloutLister interface {
 
 // pipelineRolloutLister implements the PipelineRolloutLister interface.
 type pipelineRolloutLister struct {
-	listers.ResourceIndexer[*v1alpha1.PipelineRollout]
+	listers.ResourceIndexer[*numaplanev1alpha1.PipelineRollout]
 }
 
 // NewPipelineRolloutLister returns a new PipelineRolloutLister.
 func NewPipelineRolloutLister(indexer cache.Indexer) PipelineRolloutLister {
-	return &pipelineRolloutLister{listers.New[*v1alpha1.PipelineRollout](indexer, v1alpha1.Resource("pipelinerollout"))}
+	return &pipelineRolloutLister{listers.New[*numaplanev1alpha1.PipelineRollout](indexer, numaplanev1alpha1.Resource("pipelinerollout"))}
 }
 
 // PipelineRollouts returns an object that can list and get PipelineRollouts.
 func (s *pipelineRolloutLister) PipelineRollouts(namespace string) PipelineRolloutNamespaceLister {
-	return pipelineRolloutNamespaceLister{listers.NewNamespaced[*v1alpha1.PipelineRollout](s.ResourceIndexer, namespace)}
+	return pipelineRolloutNamespaceLister{listers.NewNamespaced[*numaplanev1alpha1.PipelineRollout](s.ResourceIndexer, namespace)}
 }
 
 // PipelineRolloutNamespaceLister helps list and get PipelineRollouts.
@@ -55,15 +55,15 @@ func (s *pipelineRolloutLister) PipelineRollouts(namespace string) PipelineRollo
 type PipelineRolloutNamespaceLister interface {
 	// List lists all PipelineRollouts in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.PipelineRollout, err error)
+	List(selector labels.Selector) (ret []*numaplanev1alpha1.PipelineRollout, err error)
 	// Get retrieves the PipelineRollout from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha1.PipelineRollout, error)
+	Get(name string) (*numaplanev1alpha1.PipelineRollout, error)
 	PipelineRolloutNamespaceListerExpansion
 }
 
 // pipelineRolloutNamespaceLister implements the PipelineRolloutNamespaceLister
 // interface.
 type pipelineRolloutNamespaceLister struct {
-	listers.ResourceIndexer[*v1alpha1.PipelineRollout]
+	listers.ResourceIndexer[*numaplanev1alpha1.PipelineRollout]
 }

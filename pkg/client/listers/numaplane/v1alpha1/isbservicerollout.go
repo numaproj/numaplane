@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ISBServiceRolloutLister helps list ISBServiceRollouts.
@@ -29,7 +29,7 @@ import (
 type ISBServiceRolloutLister interface {
 	// List lists all ISBServiceRollouts in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.ISBServiceRollout, err error)
+	List(selector labels.Selector) (ret []*numaplanev1alpha1.ISBServiceRollout, err error)
 	// ISBServiceRollouts returns an object that can list and get ISBServiceRollouts.
 	ISBServiceRollouts(namespace string) ISBServiceRolloutNamespaceLister
 	ISBServiceRolloutListerExpansion
@@ -37,17 +37,17 @@ type ISBServiceRolloutLister interface {
 
 // iSBServiceRolloutLister implements the ISBServiceRolloutLister interface.
 type iSBServiceRolloutLister struct {
-	listers.ResourceIndexer[*v1alpha1.ISBServiceRollout]
+	listers.ResourceIndexer[*numaplanev1alpha1.ISBServiceRollout]
 }
 
 // NewISBServiceRolloutLister returns a new ISBServiceRolloutLister.
 func NewISBServiceRolloutLister(indexer cache.Indexer) ISBServiceRolloutLister {
-	return &iSBServiceRolloutLister{listers.New[*v1alpha1.ISBServiceRollout](indexer, v1alpha1.Resource("isbservicerollout"))}
+	return &iSBServiceRolloutLister{listers.New[*numaplanev1alpha1.ISBServiceRollout](indexer, numaplanev1alpha1.Resource("isbservicerollout"))}
 }
 
 // ISBServiceRollouts returns an object that can list and get ISBServiceRollouts.
 func (s *iSBServiceRolloutLister) ISBServiceRollouts(namespace string) ISBServiceRolloutNamespaceLister {
-	return iSBServiceRolloutNamespaceLister{listers.NewNamespaced[*v1alpha1.ISBServiceRollout](s.ResourceIndexer, namespace)}
+	return iSBServiceRolloutNamespaceLister{listers.NewNamespaced[*numaplanev1alpha1.ISBServiceRollout](s.ResourceIndexer, namespace)}
 }
 
 // ISBServiceRolloutNamespaceLister helps list and get ISBServiceRollouts.
@@ -55,15 +55,15 @@ func (s *iSBServiceRolloutLister) ISBServiceRollouts(namespace string) ISBServic
 type ISBServiceRolloutNamespaceLister interface {
 	// List lists all ISBServiceRollouts in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.ISBServiceRollout, err error)
+	List(selector labels.Selector) (ret []*numaplanev1alpha1.ISBServiceRollout, err error)
 	// Get retrieves the ISBServiceRollout from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha1.ISBServiceRollout, error)
+	Get(name string) (*numaplanev1alpha1.ISBServiceRollout, error)
 	ISBServiceRolloutNamespaceListerExpansion
 }
 
 // iSBServiceRolloutNamespaceLister implements the ISBServiceRolloutNamespaceLister
 // interface.
 type iSBServiceRolloutNamespaceLister struct {
-	listers.ResourceIndexer[*v1alpha1.ISBServiceRollout]
+	listers.ResourceIndexer[*numaplanev1alpha1.ISBServiceRollout]
 }
