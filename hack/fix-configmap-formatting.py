@@ -88,7 +88,7 @@ def main():
         
         # Scan backward to find the start of this ConfigMap
         configmap_start = None
-        for i in range(label_idx - 1, max(0, label_idx - 100), -1):
+        for i in range(label_idx - 1, -1, -1):
             if install_lines[i].strip().startswith('apiVersion:'):
                 configmap_start = i
                 break
