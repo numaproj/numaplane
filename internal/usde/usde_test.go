@@ -101,7 +101,6 @@ var volSize, _ = apiresource.ParseQuantity("10Mi")
 var memLimit, _ = apiresource.ParseQuantity("10Mi")
 var newMemLimit, _ = apiresource.ParseQuantity("20Mi")
 var defaultISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-	Redis: nil,
 	JetStream: &numaflowv1.JetStreamBufferService{
 		Version: "2.9.6",
 		Persistence: &numaflowv1.PersistenceStrategy{

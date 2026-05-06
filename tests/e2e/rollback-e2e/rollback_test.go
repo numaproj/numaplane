@@ -180,7 +180,6 @@ var (
 
 	volSize, _            = apiresource.ParseQuantity("10Mi")
 	initialISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: InitialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
@@ -192,7 +191,6 @@ var (
 	// change to "Persistence" causes ISBService (and its Pipelines) to be recreated
 	revisedVolSize, _     = apiresource.ParseQuantity("20Mi")
 	updatedISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: InitialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{

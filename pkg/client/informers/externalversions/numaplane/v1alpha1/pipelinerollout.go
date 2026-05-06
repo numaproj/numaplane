@@ -18,13 +18,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apisnumaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	versioned "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/numaproj/numaplane/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/numaproj/numaplane/pkg/client/listers/numaplane/v1alpha1"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/client/listers/numaplane/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -35,7 +35,7 @@ import (
 // PipelineRollouts.
 type PipelineRolloutInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.PipelineRolloutLister
+	Lister() numaplanev1alpha1.PipelineRolloutLister
 }
 
 type pipelineRolloutInformer struct {
@@ -70,7 +70,7 @@ func NewFilteredPipelineRolloutInformer(client versioned.Interface, namespace st
 				return client.NumaplaneV1alpha1().PipelineRollouts(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&numaplanev1alpha1.PipelineRollout{},
+		&apisnumaplanev1alpha1.PipelineRollout{},
 		resyncPeriod,
 		indexers,
 	)
@@ -81,9 +81,9 @@ func (f *pipelineRolloutInformer) defaultInformer(client versioned.Interface, re
 }
 
 func (f *pipelineRolloutInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&numaplanev1alpha1.PipelineRollout{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisnumaplanev1alpha1.PipelineRollout{}, f.defaultInformer)
 }
 
-func (f *pipelineRolloutInformer) Lister() v1alpha1.PipelineRolloutLister {
-	return v1alpha1.NewPipelineRolloutLister(f.Informer().GetIndexer())
+func (f *pipelineRolloutInformer) Lister() numaplanev1alpha1.PipelineRolloutLister {
+	return numaplanev1alpha1.NewPipelineRolloutLister(f.Informer().GetIndexer())
 }

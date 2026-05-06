@@ -399,7 +399,6 @@ func Test_ISBSvcRollout_IsUpgradeReplacementRequired(t *testing.T) {
 	// For child specs, pass the evaluated name like "my-isbsvc-0" as nameTemplateValue
 	createISBServiceSpec := func(version string, nameTemplateValue string) numaflowv1.InterStepBufferServiceSpec {
 		return numaflowv1.InterStepBufferServiceSpec{
-			Redis: &numaflowv1.RedisBufferService{},
 			JetStream: &numaflowv1.JetStreamBufferService{
 				Version: version,
 				Persistence: &numaflowv1.PersistenceStrategy{

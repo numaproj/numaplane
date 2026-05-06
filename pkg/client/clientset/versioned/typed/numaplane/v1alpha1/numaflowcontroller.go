@@ -18,9 +18,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 
-	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	scheme "github.com/numaproj/numaplane/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -36,33 +36,34 @@ type NumaflowControllersGetter interface {
 
 // NumaflowControllerInterface has methods to work with NumaflowController resources.
 type NumaflowControllerInterface interface {
-	Create(ctx context.Context, numaflowController *v1alpha1.NumaflowController, opts v1.CreateOptions) (*v1alpha1.NumaflowController, error)
-	Update(ctx context.Context, numaflowController *v1alpha1.NumaflowController, opts v1.UpdateOptions) (*v1alpha1.NumaflowController, error)
+	Create(ctx context.Context, numaflowController *numaplanev1alpha1.NumaflowController, opts v1.CreateOptions) (*numaplanev1alpha1.NumaflowController, error)
+	Update(ctx context.Context, numaflowController *numaplanev1alpha1.NumaflowController, opts v1.UpdateOptions) (*numaplanev1alpha1.NumaflowController, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, numaflowController *v1alpha1.NumaflowController, opts v1.UpdateOptions) (*v1alpha1.NumaflowController, error)
+	UpdateStatus(ctx context.Context, numaflowController *numaplanev1alpha1.NumaflowController, opts v1.UpdateOptions) (*numaplanev1alpha1.NumaflowController, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.NumaflowController, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.NumaflowControllerList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*numaplanev1alpha1.NumaflowController, error)
+	List(ctx context.Context, opts v1.ListOptions) (*numaplanev1alpha1.NumaflowControllerList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.NumaflowController, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *numaplanev1alpha1.NumaflowController, err error)
 	NumaflowControllerExpansion
 }
 
 // numaflowControllers implements NumaflowControllerInterface
 type numaflowControllers struct {
-	*gentype.ClientWithList[*v1alpha1.NumaflowController, *v1alpha1.NumaflowControllerList]
+	*gentype.ClientWithList[*numaplanev1alpha1.NumaflowController, *numaplanev1alpha1.NumaflowControllerList]
 }
 
 // newNumaflowControllers returns a NumaflowControllers
 func newNumaflowControllers(c *NumaplaneV1alpha1Client, namespace string) *numaflowControllers {
 	return &numaflowControllers{
-		gentype.NewClientWithList[*v1alpha1.NumaflowController, *v1alpha1.NumaflowControllerList](
+		gentype.NewClientWithList[*numaplanev1alpha1.NumaflowController, *numaplanev1alpha1.NumaflowControllerList](
 			"numaflowcontrollers",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1alpha1.NumaflowController { return &v1alpha1.NumaflowController{} },
-			func() *v1alpha1.NumaflowControllerList { return &v1alpha1.NumaflowControllerList{} }),
+			func() *numaplanev1alpha1.NumaflowController { return &numaplanev1alpha1.NumaflowController{} },
+			func() *numaplanev1alpha1.NumaflowControllerList { return &numaplanev1alpha1.NumaflowControllerList{} },
+		),
 	}
 }

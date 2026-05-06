@@ -38,7 +38,6 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 	ctx := context.Background()
 
 	isbsSpec := numaflowv1.InterStepBufferServiceSpec{
-		Redis: &numaflowv1.RedisBufferService{},
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: "latest",
 			Persistence: &numaflowv1.PersistenceStrategy{
@@ -123,7 +122,6 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 			// Prepare a new spec for update
 			newIsbsSpec := numaflowv1.InterStepBufferServiceSpec{
-				Redis: &numaflowv1.RedisBufferService{},
 				JetStream: &numaflowv1.JetStreamBufferService{
 					Version: "an updated version",
 					Persistence: &numaflowv1.PersistenceStrategy{

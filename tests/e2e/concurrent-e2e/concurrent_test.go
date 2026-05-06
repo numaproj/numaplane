@@ -186,7 +186,6 @@ var (
 
 	volSize, _            = apiresource.ParseQuantity("10Mi")
 	initialISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: InitialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
@@ -197,7 +196,6 @@ var (
 
 	// new jetstream version
 	dataLossISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: UpdatedJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
@@ -209,7 +207,6 @@ var (
 	// updating Resources.Limits will not cause data loss or require recreating ISBService
 	updatedMemLimit, _        = apiresource.ParseQuantity("2Gi")
 	directApplyISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: InitialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
@@ -226,7 +223,6 @@ var (
 	// change to "Persistence" causes ISBService (and its Pipelines) to be recreated
 	revisedVolSize, _           = apiresource.ParseQuantity("20Mi")
 	recreateFieldISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: InitialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
