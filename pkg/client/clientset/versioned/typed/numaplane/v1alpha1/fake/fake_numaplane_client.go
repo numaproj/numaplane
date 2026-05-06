@@ -28,23 +28,23 @@ type FakeNumaplaneV1alpha1 struct {
 }
 
 func (c *FakeNumaplaneV1alpha1) ISBServiceRollouts(namespace string) v1alpha1.ISBServiceRolloutInterface {
-	return &FakeISBServiceRollouts{c, namespace}
+	return newFakeISBServiceRollouts(c, namespace)
 }
 
 func (c *FakeNumaplaneV1alpha1) MonoVertexRollouts(namespace string) v1alpha1.MonoVertexRolloutInterface {
-	return &FakeMonoVertexRollouts{c, namespace}
+	return newFakeMonoVertexRollouts(c, namespace)
 }
 
 func (c *FakeNumaplaneV1alpha1) NumaflowControllers(namespace string) v1alpha1.NumaflowControllerInterface {
-	return &FakeNumaflowControllers{c, namespace}
+	return newFakeNumaflowControllers(c, namespace)
 }
 
 func (c *FakeNumaplaneV1alpha1) NumaflowControllerRollouts(namespace string) v1alpha1.NumaflowControllerRolloutInterface {
-	return &FakeNumaflowControllerRollouts{c, namespace}
+	return newFakeNumaflowControllerRollouts(c, namespace)
 }
 
 func (c *FakeNumaplaneV1alpha1) PipelineRollouts(namespace string) v1alpha1.PipelineRolloutInterface {
-	return &FakePipelineRollouts{c, namespace}
+	return newFakePipelineRollouts(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate
