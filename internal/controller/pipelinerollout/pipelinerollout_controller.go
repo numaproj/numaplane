@@ -391,6 +391,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, common.FinalizerName)
 	}
 
+	if err := numaflowtypes.ValidatePipelineSpec(pipelineRollout.Spec.Pipeline.Spec); err != nil {
+		return 0, nil, fmt.Errorf("invalid Numaflow Pipeline spec: %w", err)
+	}
+
 	// check if there's a promoted pipeline yet
 	promotedPipelines, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
 	if err != nil {
