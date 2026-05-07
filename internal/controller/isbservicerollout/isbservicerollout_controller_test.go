@@ -620,3 +620,28 @@ func Test_ISBSvcRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		})
 	}
 }
+
+func Test_reconcile_invalidSpec(t *testing.T) {
+	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	ctx := logger.WithLogger(context.Background(), logger.New())
+
+	if ctlrcommon.TestCustomMetrics == nil {
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(logger.New())
+	}
+
+	recorder := record.NewFakeRecorder(64)
+	r := NewISBServiceRolloutReconciler(client, scheme.Scheme, ctlrcommon.TestCustomMetrics, recorder)
+
+	pipelinerollout.PipelineROReconciler = &pipelinerollout.PipelineRolloutReconciler{Queue: util.NewWorkQueue("fake_queue")}
+
+	rollout := ctlrcommon.CreateISBServiceRollout(numaflowv1.InterStepBufferServiceSpec{}, nil)
+	rollout.Spec.InterStepBufferService.Spec.Raw = []byte(`{"jetstream":{"replicas":"notanumber"}}`)
+	rollout.Status.Init(rollout.Generation)
+
+	_, err = r.reconcile(ctx, rollout, time.Now())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Numaflow ISBService spec")
+}

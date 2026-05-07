@@ -1552,3 +1552,26 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		})
 	}
 }
+
+func Test_reconcile_invalidSpec(t *testing.T) {
+	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	ctx := logger.WithLogger(context.Background(), logger.New())
+
+	if ctlrcommon.TestCustomMetrics == nil {
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(logger.New())
+	}
+
+	recorder := record.NewFakeRecorder(64)
+	r := NewMonoVertexRolloutReconciler(client, scheme.Scheme, ctlrcommon.TestCustomMetrics, recorder)
+
+	rollout := ctlrcommon.CreateTestMVRollout(numaflowv1.MonoVertexSpec{}, nil, nil, nil, nil, nil)
+	rollout.Spec.MonoVertex.Spec.Raw = []byte(`{"replicas":"notanumber"}`)
+	rollout.Status.Init(rollout.Generation)
+
+	_, err = r.reconcile(ctx, rollout, time.Now())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Numaflow MonoVertex spec")
+}
