@@ -5,60 +5,20 @@ metadata:
   namespace: example-namespace
 spec:
   strategy:
-    progressive:
-      assessmentSchedule: "10,200,60,10"
-    # analysis:
-      # args:
-      #templates:
-      #- templateName: pipeline-template
-      #  clusterScope: false
-  riders:
-    - perVertex: true
-      definition:
-        apiVersion: autoscaling.k8s.io/v1beta2
-        kind: VerticalPodAutoscaler
-        metadata: 
-          name: vpa
-        spec:
-          targetRef: 
-            apiVersion: numaproj.io/v1alpha1
-            kind: Vertex
-            name: '{{.pipeline-name}}-{{.vertex-name}}'
-    # - perVertex: true
-    #   definition:
-    #     apiVersion: autoscaling/v2
-    #     kind: HorizontalPodAutoscaler
-    #     metadata: 
-    #       name: hpa
-    #     spec:
-    #       minReplicas: 1
-    #       maxReplicas: 10
-    #       metrics:
-    #       - object:
-    #           metric:
-    #             name: namespace_app_monovertex_container_cpu_utilization
-    #             selector:
-    #               matchLabels:
-    #                 container: udsource
-    #           target:
-    #             type: Value
-    #             value: 80
-    #           describedObject:
-    #             apiVersion: apps/v1
-    #             kind: Deployment 
-    #             name: '{{.pipeline-name}}-{{.vertex-name}}'
-    #         type: Object
-    #       scaleTargetRef:
-    #         apiVersion: numaflow.numaproj.io/v1alpha1
-    #         kind: Vertex
-    #         name: '{{.pipeline-name}}-{{.vertex-name}}'
+    #progressive: # only required if we need to override the defaults in numaplane-controller-config ConfigMap
+    #  assessmentSchedule: "10,200,60,10"
+    analysis:
+      templates:
+      - templateName: pipeline-template
+        clusterScope: false
+  riders: # can be defined here for resources that need to be deployed per-Pipeline or per-Vertex
 
+  # the Pipeline definition in Numaflow
   pipeline:
     metadata:
       annotations:
     #    numaflow.numaproj.io/instance: "0" # uncomment for Progressive rollout to set Numaflow Controller instance
         my-templated-annotation: '{{.pipeline-namespace}}-{{.pipeline-name}}'
-
     spec:
       lifecycle:
         pauseGracePeriodSeconds: 60
@@ -92,3 +52,60 @@ spec:
           to: cat
         - from: cat
           to: out
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: pipeline-template
+  namespace: example-namespace
+spec:
+  args:
+  - name: upgrading-pipeline-name
+  - name: pipeline-namespace
+  - name: interval
+    value: 60s
+  - name: success-limit
+    value: "4"
+  - name: failure-limit
+    value: "6"
+  metrics:
+  - consecutiveSuccessLimit: '{{args.success-limit}}'
+    failureLimit: '{{args.failure-limit}}'
+    interval: '{{args.interval}}'
+    name: in
+    provider:
+      prometheus:
+        address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
+        query: (vector(1) and on() ((sum(numaflow_forwarder_read_total{namespace="{{args.pipeline-namespace}}",
+          pipeline="{{args.upgrading-pipeline-name}}", vertex="in"}) or vector(0))
+          == 0)) or (vector(1) and on() ((sum(numaflow_forwarder_ack_total{namespace="{{args.pipeline-namespace}}",
+          pipeline="{{args.upgrading-pipeline-name}}", vertex="in"}) or vector(0))
+          > 0)) or vector(0)
+    successCondition: len(result) > 0 && result[0] > 0
+  - consecutiveSuccessLimit: '{{args.success-limit}}'
+    failureLimit: '{{args.failure-limit}}'
+    interval: '{{args.interval}}'
+    name: cat
+    provider:
+      prometheus:
+        address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
+        query: (vector(1) and on() ((sum(numaflow_forwarder_read_total{namespace="{{args.pipeline-namespace}}",
+          pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"})
+          or vector(0)) == 0)) or (vector(1) and on() ((sum(numaflow_forwarder_ack_total{namespace="{{args.pipeline-namespace}}",
+          pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"})
+          or vector(0)) > 0)) or vector(0)
+    successCondition: len(result) > 0 && result[0] > 0
+  - consecutiveSuccessLimit: '{{args.success-limit}}'
+    failureLimit: '{{args.failure-limit}}'
+    interval: '{{args.interval}}'
+    name: out
+    provider:
+      prometheus:
+        address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
+        query: (vector(1) and on() ((sum(numaflow_forwarder_read_total{namespace="{{args.pipeline-namespace}}",
+          pipeline="{{args.upgrading-pipeline-name}}", vertex="out"}) or vector(0))
+          == 0)) or (vector(1) and on() ((sum(numaflow_forwarder_ack_total{namespace="{{args.pipeline-namespace}}",
+          pipeline="{{args.upgrading-pipeline-name}}", vertex="out"}) or vector(0))
+          > 0)) or vector(0)
+    successCondition: len(result) > 0 && result[0] > 0

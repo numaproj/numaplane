@@ -1,15 +1,28 @@
 # numaplane
-Numaplane is a control plane for installing, managing and running numaflow resources on Kubernetes.
+Numaplane is a control plane for deploying and seamlessly upgrading [Numaflow](github.com/numaproj/numaflow) resources on Kubernetes.
+
+## Overview
+
+The primary goal of Numaplane is to make it easy to create and update Numaflow resources without the user needing to worry about:
+
+- any resource breaking
+- losing data
+- incurring downtime
+
+The way that Numaplane does this is to have its own set of Kubernetes Resource types (PipelineRollout, MonoVertexRollout, ISBServiceRollout, and NumaflowControllerRollout) which serve as wrappers around the Numaflow Resource types (Pipeline, MonoVertex, InterstepBufferService, Numaflow Controller Deployment). Because of this, Numaplane is able to dynamically create, update, and delete the underlying Numaflow resources as needed.
+
+Numaplane is deployed one-per-cluster and manages Numaflow deployments cluster-wide on any namespace.
+
+There are two strategies which can be used:
+1. The primary strategy is Progressive rollout. This is essentially a single stage Canary rollout - Numaplane deploys the new resource while the original is still running and only promotes it if successful. This strategy applies to the deployment of Pipeline, Monovertex, and InterstepBufferService. It is used in conjunction with Argo Rollouts and Prometheus. 
+2. The alternative strategy is known as Pause-and-Drain. This strategy applies to Pipeline and not Monovertex. Instead of deploying a second Pipeline in parallel, this simply pauses the Pipeline whenever it, its InterstepBufferService, or the Numaflow Controller in the same namespace are updated. This strategy only concerns itself with the issue of losing data. 
+
+The Progressive Rollout strategy should be preferred in most cases. 
+
 
 ## Getting Started
 
-### Prerequisites
-- go version v1.20.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
-
-### To build Numaplane image and run it on your local cluster with latest manifests
+### To build Numaplane image and run it on your local cluster with latest manifests (defaults to `STRATEGY=progressive`)
 
 `make start`
 
@@ -18,9 +31,19 @@ Numaplane is a control plane for installing, managing and running numaflow resou
 
 `make codegen`
 
+### To deploy the default configuration of Numaplane to a cluster:
 
-## Contributing
-**NOTE:** Run `make --help` for more information on all potential `make` targets
+`kubectl apply -f config/install.yaml`
+
+For a more in-depth overview, please see `https://github.com/numaproj/numaplane/blob/main/docs/getting-started.md`.
+
+## Docs
+
+- Walk through on [creating your Numaplane Resources and deploying updates using Progressive Rollouts](https://github.com/numaproj/numaplane/blob/main/docs/getting-started.md)
+- [Integrating with ArgoCD](https://github.com/numaproj/numaplane/blob/main/docs/argo-cd-integration.md) for a more robust user experience
+- [Templating](https://github.com/numaproj/numaplane/blob/main/docs/templated-specs.md) Numaflow specs 
+- [Deploying resources (Riders)](https://github.com/numaproj/numaplane/blob/main/docs/riders.md) alongside your child resource 
+
 
 ## How To Release
 
