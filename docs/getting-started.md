@@ -37,6 +37,8 @@ Note the Numaplane ConfigMap which can be customized as needed:
 kubectl get configmap -n numaplane-system numaplane-controller-config -o yaml
 ```
 
+(This may be easier to view in the repo at `config/manager/controller-config.yaml`.)
+
 ### Create creating Numaplane resources, which creates Numaflow resources
 
 Create a test namespace:
@@ -52,7 +54,7 @@ If you are running Numaflow in namespaced mode (rather than cluster mode), deplo
 kubectl apply -f config/samples/numaplane.numaproj.io_v1alpha1_numaflowcontrollerrollout.yaml
 ```
 
-This will deploy a Numaflow Controller in your namespace. Otherwise, make sure you have one running on the cluster level.
+This will deploy a Numaflow Controller in your namespace corresponding to the version number in the spec. (The Numaflow Controller manifest definition is a ConfigMap which lives in the `numaplane-system` namespace.) Otherwise, make sure you have a Numaflow Controller running on the cluster level.
 
 Deploy the `ISBServiceRollout`:
 
@@ -82,7 +84,20 @@ kubectl edit pipelinerollout my-pipeline
 
 ### Cause a Progressive Rollout
 
-To make a simple change which will cause a successful Progressive Rollout, add a new inconsequential environment variable in one of the Vertices. Save that.
+To make a simple change which will cause a successful Progressive Rollout, add a new inconsequential environment variable in one of the Vertices. For example:
+
+```
+      - name: cat
+        ...
+        udf:
+          container:
+            ...
+            env:
+            - name: TEST
+              value: test1
+```
+
+Save that.
 
 You should see after a few seconds that a second Pipeline gets created with your new spec. This one is indexed with a 1 and has the following label:
 
@@ -91,7 +106,7 @@ You should see after a few seconds that a second Pipeline gets created with your
 This one is now being assessed. You can view the Status of the PipelineRollout as the assessment is occurring. There is a section called `upgradingPipelineStatus` which provides start time and end time of the assessment, as well as whether it's still in progress, has succeeded, or has failed.
 
 ```shell
-kubectl watch pipelinerollout -o yaml
+kubectl get pipelinerollout my-pipeline --watch -o yaml
 ```
 
 During the assessment process, the original number of Pods running for each Vertex is maintained from before, but is split between the old Pipeline and new Pipeline. Say there were 4 Pods running for a given Vertex previously: there would be 2 running in the old and 2 running in the new. However, if there was only 1 Pod running previously for a given Vertex, then there will be 1 Pod running in the new Pipeline and 0 in the old. (This is manipulated through the `scale.min` and `scale.max` values in Pipeline spec.)
@@ -103,10 +118,10 @@ The Progressive Rollout assessment occurs in 2 steps:
 Observe not only the PipelineRollout Status but also the AnalysisRun Status:
 
 ```shell
-kubectl watch analysisrun -o yaml
+kubectl get analysisrun --watch -o yaml
 ```
 
-Assuming that Argo Rollouts and Prometheus are all functioning, the new Pipeline should succeed after a few minutes and you should see the Pipeline become `promoted` and the original Pipeline should get deleted. (For Pipelines, note that they are actually first drained and then deleted.)
+Assuming that Argo Rollouts and Prometheus are all functioning, the new Pipeline should succeed after a few minutes and you should see the Pipeline become `promoted` and the original Pipeline should get deleted. (For Pipelines, note that they are actually first drained (paused) and then deleted.)
 
 #### Cause a Progressive Rollout failure
 
@@ -116,9 +131,19 @@ The simplest way to cause a Progressive Rollout failure is to use an image path 
 kubectl edit pipelinerollout my-pipeline
 ```
 
-Change one of the image paths to one which doesn't exist. This time, you'll see a `my-pipeline-2` get created, which is your new `trial`. If you observe the PipelineRollout Status, this time you'll see that it is assessed as failed after a few minutes.
+Change one of the image paths to one which doesn't exist. 
 
-There's also a label on the Pipeline to indicate this:
+```
+        udf:
+          container:
+            ...
+            image: quay.io/numaio/numaflow-go/map-cat:fakepath
+            ...
+```
+
+This time, you'll see a `my-pipeline-2` get created, which is your new `trial`. If you observe the PipelineRollout Status, this time you'll see that it is assessed as failed after a few minutes. The Pipeline's Status at the time of failure is captured in the Status as well. 
+
+There's also a label on the Pipeline to indicate the failure:
 
 `numaplane.numaproj.io/progressive-result-state`: `failed`
 
@@ -130,7 +155,7 @@ The other thing that happens is that the new Pipeline scales down to `scale.min=
 kubectl edit pipelinerollout my-pipeline
 ```
 
-This time change the image path back to one which is valid, and also remove the environment variable added earlier - the combination of these two changes will cause a new Progressive Rollout (if we were only to do the former change, we would simply see `my-pipeline-2` deleted and that's it, since `my-pipeline-1` would already match the PipelineRollout spec).
+This time change the image path back to one which is valid (`quay.io/numaio/numaflow-go/map-cat:stable`), and also remove the environment variable added earlier - the combination of these two changes will cause a new Progressive Rollout (if we were only to do the former change, we would simply see `my-pipeline-2` deleted and that's it, since `my-pipeline-1` would already match the PipelineRollout spec).
 
 `my-pipeline-2` is now being replaced, so it's marked:
 
@@ -138,7 +163,7 @@ This time change the image path back to one which is valid, and also remove the 
 
 This means that it's marked for deletion; however, Pipelines must be drained before they're deleted to prevent data loss. Given that the Pipeline was not healthy, it is not able to drain by itself, which was the motivation for the feature known as "Force Draining" (link TBD).
 
-You should see a `my-pipeline-3` get created and pass all assessments. This will effectively replace `my-pipeline-1` which also gets the label `recyclable` and is then drained and deleted. (Since this one is healthy, it can drain on its own.)
+You should see a `my-pipeline-3` get created and pass all assessments. After it succeeds, it will effectively replace `my-pipeline-1` (our `promoted` one) which also gets the label `recyclable` and is then drained and deleted. (Since this one is healthy, it can drain on its own.)
 
 The "Force Draining" feature makes it so that `my-pipeline-2` takes on the healthy spec from `my-pipeline-3` and can then fully drain and then be deleted.
 
@@ -150,7 +175,9 @@ kubectl edit isbservicerollout my-isbsvc
 
 Change the version number to 2.10.11 and save it.
 
-When the InterstepBufferService spec is updated, it causes a new InterstepBufferService to get created, and so any PipelineRollout set to use it is also progressively rolled out to use the new one. You will see a `my-pipeline-4`. If you look at the spec, you'll see that it's mapped to `my-isbsvc-1`. Once again, you can observe the Status of the `PipelineRollout` and also the Status of the `ISBServiceRollout`. If all PipelineRollouts succeed (in this case just one), then the latter is also marked Successful. This will take a few minutes, but once complete you will just see `my-isbsvc-1` and `my-pipeline-4`.
+When the InterstepBufferService spec is updated, it causes a new InterstepBufferService to get created (`my-isbsvc-1`), and so any PipelineRollout set to use it is also progressively rolled out to use the new one. You will see a `my-pipeline-4`. If you look at the spec, you'll see that it's mapped to `my-isbsvc-1`. Once again, you can observe the Status of the `PipelineRollout` and also the Status of the `ISBServiceRollout`. If all PipelineRollouts succeed (in this case just one), then the InterstepBufferService is also marked Successful. This will take a few minutes, but once complete you will just see `my-isbsvc-1` and `my-pipeline-4`.
+
+Note that if you observe the PipelineRollout Status during the assessment, if there are any ephemeral failures of the Pipeline Status, those will be shown under `upgradingPipelineStatus.childStatus`. However, that is merely a capture of the last failure and not an indication by itself that the final result was Failure.
 
 #### Create a MonoVertexRollout and update it
 
