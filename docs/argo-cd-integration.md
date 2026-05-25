@@ -26,7 +26,7 @@ ArgoCD enables viewing the Spec/Status of any Kubernetes resource, so you can vi
 
 ### Overriding a "Failure" decision
 
-If a "Failure" decision is deemed incorrect, a user can override that decision by selecting the "Force Promote" menu item in ArgoCD on the new `MonoVertex` (the one with the "trial" label):
+If a "Failure" decision is deemed incorrect, a user can override that decision by selecting the "Force Promote" menu item in ArgoCD on the new `MonoVertex` or `Pipeline` (the one with the "trial" label):
 
 ![Force Promote](./images/force-promote.png)
 

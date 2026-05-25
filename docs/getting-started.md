@@ -7,7 +7,6 @@ This guide presumes the user is using Progressive Rollout strategy.
 - Kubernetes cluster
 - Container engine (Docker/Podman)
 - kubectl
-- Argo Rollouts (this will be automatically deployed if using Option 2 below to install)
 
 ## Installing Numaplane
 
@@ -39,7 +38,7 @@ kubectl get configmap -n numaplane-system numaplane-controller-config -o yaml
 
 (This may be easier to view in the repo at `config/manager/controller-config.yaml`.)
 
-### Create creating Numaplane resources, which creates Numaflow resources
+### Create Numaplane resources (which create Numaflow resources)
 
 Create a test namespace:
 
@@ -151,7 +150,7 @@ The other thing that happens is that the new Pipeline scales down to `scale.min=
 
 ##### What if there was a false failure?
 
-If for some reason, the failure was a false positive, there is a feature called "Force Promotion" for that. You could add a label called `numaplane.numaproj.io/force-promote`: `"true"`, which would cause the promotion to occur despite the failure. This can also be used while the assessment is still in process if the user isn't concerned about the risk. (For the purpose of the remaining steps in this doc working as is, don't do this now.)
+If for some reason, the failure was a false positive, there is a feature called "Force Promotion" for that. Adding the label `numaplane.numaproj.io/force-promote`: `"true"` to the failed Pipeline will cause the Pipeline to be promoted despite the failure. This can also be used while the assessment is still in process if the user isn't concerned about the risk. (For the purpose of the remaining steps in this doc working as is, don't do this now.)
 
 #### Cause a Progressive Rollout success
 

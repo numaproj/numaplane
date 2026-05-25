@@ -1,5 +1,5 @@
 # numaplane
-Numaplane is a control plane for deploying and seamlessly upgrading [Numaflow](github.com/numaproj/numaflow) resources on Kubernetes.
+Numaplane is a control plane for deploying and seamlessly upgrading [Numaflow](https://github.com/numaproj/numaflow) resources on Kubernetes.
 
 ## Overview
 
@@ -22,7 +22,7 @@ The Progressive Rollout strategy should be preferred in most cases.
 
 ## Getting Started
 
-### To build Numaplane image and run it on your local cluster with latest manifests (defaults to `STRATEGY=progressive`)
+### To build Numaplane image and run it on your local cluster with latest manifests 
 
 `make start`
 
@@ -31,11 +31,11 @@ The Progressive Rollout strategy should be preferred in most cases.
 
 `make codegen`
 
-### To deploy the default configuration of Numaplane to a cluster:
+### To deploy the default configuration of Numaplane to a cluster
 
 `kubectl apply -f config/install.yaml`
 
-For a more in-depth overview, please see `https://github.com/numaproj/numaplane/blob/main/docs/getting-started.md`.
+For a more in-depth overview, please see [getting-started.md](https://github.com/numaproj/numaplane/blob/main/docs/getting-started.md).
 
 ## Docs
 

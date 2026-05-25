@@ -35,4 +35,4 @@ Note the use of `{{.isbsvc-name}}`.
 
 When Numaplane sees this, it evaluates the actual InterstepBufferService name (with integer suffix).
 
-This feature also applies to Riders that are defined in the Rollout's spec. Those can also be templated with those same keys to reference the Numaflow resource name. 
+This feature also applies to [Riders](https://github.com/numaproj/numaplane/blob/main/docs/riders.md) that are defined in the Rollout's spec. Those can also be templated with those same keys to reference the Numaflow resource name. 
