@@ -22,12 +22,6 @@ The Progressive Rollout strategy should be preferred in most cases.
 
 ## Getting Started
 
-### Prerequisites
-- go version v1.20.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
-
 ### To build Numaplane image and run it on your local cluster with latest manifests (defaults to `STRATEGY=progressive`)
 
 `make start`
@@ -40,6 +34,15 @@ The Progressive Rollout strategy should be preferred in most cases.
 ### To deploy the default configuration of Numaplane to a cluster:
 
 `kubectl apply -f config/install.yaml`
+
+For a more in-depth overview, please see `https://github.com/numaproj/numaplane/blob/main/docs/getting-started.md`.
+
+## Docs
+
+- Walk through on [creating your Numaplane Resources and deploying updates using Progressive Rollouts](https://github.com/numaproj/numaplane/blob/main/docs/getting-started.md)
+- [Integrating with ArgoCD](https://github.com/numaproj/numaplane/blob/main/docs/argo-cd-integration.md) for a more robust user experience
+- [Templating](https://github.com/numaproj/numaplane/blob/main/docs/templated-specs.md) Numaflow specs 
+- [Deploying resources (Riders)](https://github.com/numaproj/numaplane/blob/main/docs/riders.md) alongside your child resource 
 
 
 ## How To Release
