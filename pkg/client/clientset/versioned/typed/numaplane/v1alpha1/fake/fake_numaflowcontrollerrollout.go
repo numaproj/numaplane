@@ -18,129 +18,34 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-
 	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeNumaflowControllerRollouts implements NumaflowControllerRolloutInterface
-type FakeNumaflowControllerRollouts struct {
+// fakeNumaflowControllerRollouts implements NumaflowControllerRolloutInterface
+type fakeNumaflowControllerRollouts struct {
+	*gentype.FakeClientWithList[*v1alpha1.NumaflowControllerRollout, *v1alpha1.NumaflowControllerRolloutList]
 	Fake *FakeNumaplaneV1alpha1
-	ns   string
 }
 
-var numaflowcontrollerrolloutsResource = v1alpha1.SchemeGroupVersion.WithResource("numaflowcontrollerrollouts")
-
-var numaflowcontrollerrolloutsKind = v1alpha1.SchemeGroupVersion.WithKind("NumaflowControllerRollout")
-
-// Get takes name of the numaflowControllerRollout, and returns the corresponding numaflowControllerRollout object, and an error if there is any.
-func (c *FakeNumaflowControllerRollouts) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.NumaflowControllerRollout, err error) {
-	emptyResult := &v1alpha1.NumaflowControllerRollout{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(numaflowcontrollerrolloutsResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeNumaflowControllerRollouts(fake *FakeNumaplaneV1alpha1, namespace string) numaplanev1alpha1.NumaflowControllerRolloutInterface {
+	return &fakeNumaflowControllerRollouts{
+		gentype.NewFakeClientWithList[*v1alpha1.NumaflowControllerRollout, *v1alpha1.NumaflowControllerRolloutList](
+			fake.Fake,
+			namespace,
+			v1alpha1.SchemeGroupVersion.WithResource("numaflowcontrollerrollouts"),
+			v1alpha1.SchemeGroupVersion.WithKind("NumaflowControllerRollout"),
+			func() *v1alpha1.NumaflowControllerRollout { return &v1alpha1.NumaflowControllerRollout{} },
+			func() *v1alpha1.NumaflowControllerRolloutList { return &v1alpha1.NumaflowControllerRolloutList{} },
+			func(dst, src *v1alpha1.NumaflowControllerRolloutList) { dst.ListMeta = src.ListMeta },
+			func(list *v1alpha1.NumaflowControllerRolloutList) []*v1alpha1.NumaflowControllerRollout {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1alpha1.NumaflowControllerRolloutList, items []*v1alpha1.NumaflowControllerRollout) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1alpha1.NumaflowControllerRollout), err
-}
-
-// List takes label and field selectors, and returns the list of NumaflowControllerRollouts that match those selectors.
-func (c *FakeNumaflowControllerRollouts) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.NumaflowControllerRolloutList, err error) {
-	emptyResult := &v1alpha1.NumaflowControllerRolloutList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(numaflowcontrollerrolloutsResource, numaflowcontrollerrolloutsKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1alpha1.NumaflowControllerRolloutList{ListMeta: obj.(*v1alpha1.NumaflowControllerRolloutList).ListMeta}
-	for _, item := range obj.(*v1alpha1.NumaflowControllerRolloutList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested numaflowControllerRollouts.
-func (c *FakeNumaflowControllerRollouts) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(numaflowcontrollerrolloutsResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a numaflowControllerRollout and creates it.  Returns the server's representation of the numaflowControllerRollout, and an error, if there is any.
-func (c *FakeNumaflowControllerRollouts) Create(ctx context.Context, numaflowControllerRollout *v1alpha1.NumaflowControllerRollout, opts v1.CreateOptions) (result *v1alpha1.NumaflowControllerRollout, err error) {
-	emptyResult := &v1alpha1.NumaflowControllerRollout{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(numaflowcontrollerrolloutsResource, c.ns, numaflowControllerRollout, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.NumaflowControllerRollout), err
-}
-
-// Update takes the representation of a numaflowControllerRollout and updates it. Returns the server's representation of the numaflowControllerRollout, and an error, if there is any.
-func (c *FakeNumaflowControllerRollouts) Update(ctx context.Context, numaflowControllerRollout *v1alpha1.NumaflowControllerRollout, opts v1.UpdateOptions) (result *v1alpha1.NumaflowControllerRollout, err error) {
-	emptyResult := &v1alpha1.NumaflowControllerRollout{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(numaflowcontrollerrolloutsResource, c.ns, numaflowControllerRollout, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.NumaflowControllerRollout), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeNumaflowControllerRollouts) UpdateStatus(ctx context.Context, numaflowControllerRollout *v1alpha1.NumaflowControllerRollout, opts v1.UpdateOptions) (result *v1alpha1.NumaflowControllerRollout, err error) {
-	emptyResult := &v1alpha1.NumaflowControllerRollout{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(numaflowcontrollerrolloutsResource, "status", c.ns, numaflowControllerRollout, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.NumaflowControllerRollout), err
-}
-
-// Delete takes name of the numaflowControllerRollout and deletes it. Returns an error if one occurs.
-func (c *FakeNumaflowControllerRollouts) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(numaflowcontrollerrolloutsResource, c.ns, name, opts), &v1alpha1.NumaflowControllerRollout{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeNumaflowControllerRollouts) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(numaflowcontrollerrolloutsResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1alpha1.NumaflowControllerRolloutList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched numaflowControllerRollout.
-func (c *FakeNumaflowControllerRollouts) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.NumaflowControllerRollout, err error) {
-	emptyResult := &v1alpha1.NumaflowControllerRollout{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(numaflowcontrollerrolloutsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.NumaflowControllerRollout), err
 }

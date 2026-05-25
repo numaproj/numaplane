@@ -18,9 +18,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 
-	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	scheme "github.com/numaproj/numaplane/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -36,33 +36,34 @@ type ISBServiceRolloutsGetter interface {
 
 // ISBServiceRolloutInterface has methods to work with ISBServiceRollout resources.
 type ISBServiceRolloutInterface interface {
-	Create(ctx context.Context, iSBServiceRollout *v1alpha1.ISBServiceRollout, opts v1.CreateOptions) (*v1alpha1.ISBServiceRollout, error)
-	Update(ctx context.Context, iSBServiceRollout *v1alpha1.ISBServiceRollout, opts v1.UpdateOptions) (*v1alpha1.ISBServiceRollout, error)
+	Create(ctx context.Context, iSBServiceRollout *numaplanev1alpha1.ISBServiceRollout, opts v1.CreateOptions) (*numaplanev1alpha1.ISBServiceRollout, error)
+	Update(ctx context.Context, iSBServiceRollout *numaplanev1alpha1.ISBServiceRollout, opts v1.UpdateOptions) (*numaplanev1alpha1.ISBServiceRollout, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, iSBServiceRollout *v1alpha1.ISBServiceRollout, opts v1.UpdateOptions) (*v1alpha1.ISBServiceRollout, error)
+	UpdateStatus(ctx context.Context, iSBServiceRollout *numaplanev1alpha1.ISBServiceRollout, opts v1.UpdateOptions) (*numaplanev1alpha1.ISBServiceRollout, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.ISBServiceRollout, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.ISBServiceRolloutList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*numaplanev1alpha1.ISBServiceRollout, error)
+	List(ctx context.Context, opts v1.ListOptions) (*numaplanev1alpha1.ISBServiceRolloutList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.ISBServiceRollout, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *numaplanev1alpha1.ISBServiceRollout, err error)
 	ISBServiceRolloutExpansion
 }
 
 // iSBServiceRollouts implements ISBServiceRolloutInterface
 type iSBServiceRollouts struct {
-	*gentype.ClientWithList[*v1alpha1.ISBServiceRollout, *v1alpha1.ISBServiceRolloutList]
+	*gentype.ClientWithList[*numaplanev1alpha1.ISBServiceRollout, *numaplanev1alpha1.ISBServiceRolloutList]
 }
 
 // newISBServiceRollouts returns a ISBServiceRollouts
 func newISBServiceRollouts(c *NumaplaneV1alpha1Client, namespace string) *iSBServiceRollouts {
 	return &iSBServiceRollouts{
-		gentype.NewClientWithList[*v1alpha1.ISBServiceRollout, *v1alpha1.ISBServiceRolloutList](
+		gentype.NewClientWithList[*numaplanev1alpha1.ISBServiceRollout, *numaplanev1alpha1.ISBServiceRolloutList](
 			"isbservicerollouts",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1alpha1.ISBServiceRollout { return &v1alpha1.ISBServiceRollout{} },
-			func() *v1alpha1.ISBServiceRolloutList { return &v1alpha1.ISBServiceRolloutList{} }),
+			func() *numaplanev1alpha1.ISBServiceRollout { return &numaplanev1alpha1.ISBServiceRollout{} },
+			func() *numaplanev1alpha1.ISBServiceRolloutList { return &numaplanev1alpha1.ISBServiceRolloutList{} },
+		),
 	}
 }

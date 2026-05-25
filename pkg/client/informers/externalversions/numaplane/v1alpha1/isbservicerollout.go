@@ -18,13 +18,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apisnumaplanev1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	versioned "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/numaproj/numaplane/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/numaproj/numaplane/pkg/client/listers/numaplane/v1alpha1"
+	numaplanev1alpha1 "github.com/numaproj/numaplane/pkg/client/listers/numaplane/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -35,7 +35,7 @@ import (
 // ISBServiceRollouts.
 type ISBServiceRolloutInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.ISBServiceRolloutLister
+	Lister() numaplanev1alpha1.ISBServiceRolloutLister
 }
 
 type iSBServiceRolloutInformer struct {
@@ -70,7 +70,7 @@ func NewFilteredISBServiceRolloutInformer(client versioned.Interface, namespace 
 				return client.NumaplaneV1alpha1().ISBServiceRollouts(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&numaplanev1alpha1.ISBServiceRollout{},
+		&apisnumaplanev1alpha1.ISBServiceRollout{},
 		resyncPeriod,
 		indexers,
 	)
@@ -81,9 +81,9 @@ func (f *iSBServiceRolloutInformer) defaultInformer(client versioned.Interface, 
 }
 
 func (f *iSBServiceRolloutInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&numaplanev1alpha1.ISBServiceRollout{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisnumaplanev1alpha1.ISBServiceRollout{}, f.defaultInformer)
 }
 
-func (f *iSBServiceRolloutInformer) Lister() v1alpha1.ISBServiceRolloutLister {
-	return v1alpha1.NewISBServiceRolloutLister(f.Informer().GetIndexer())
+func (f *iSBServiceRolloutInformer) Lister() numaplanev1alpha1.ISBServiceRolloutLister {
+	return numaplanev1alpha1.NewISBServiceRolloutLister(f.Informer().GetIndexer())
 }

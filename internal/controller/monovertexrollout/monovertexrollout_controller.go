@@ -222,6 +222,10 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		controllerutil.AddFinalizer(monoVertexRollout, common.FinalizerName)
 	}
 
+	if err := numaflowtypes.ValidateMonoVertexSpec(monoVertexRollout.Spec.MonoVertex.Spec); err != nil {
+		return ctrl.Result{}, fmt.Errorf("invalid Numaflow MonoVertex spec: %w", err)
+	}
+
 	// check if there's a promoted monovertex yet
 	promotedMonovertices, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, monoVertexRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
 	if err != nil {

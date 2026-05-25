@@ -52,9 +52,10 @@ data:
         includeSubfields: true
       - path: spec.vertices.source.transformer.builtin
         includeSubfields: true
-      - path: spec.vertices.sink.log
       - path: spec.vertices.sink.kafka
-      - path: spec.vertices.sink.blackhole
+      - path: spec.vertices.sink.serve
+      - path: spec.vertices.sink.sqs
+      - path: spec.vertices.sink.pulsar
       - path: spec.vertices.sink.udsink.container.image
       - path: spec.vertices.sink.udsink.container.volumeMounts
         includeSubfields: true
@@ -88,6 +89,35 @@ data:
         includeSubfields: true
       - path: spec.templates     # note: this one could be broken down further into just the fields that are at risk
         includeSubfields: true
+    progressive:
+      # Decision: Many of the fields inside of these source types and sink types are risky to change and could warrant doing Progressive Rollout
+      # There are too many different fields to go through each one and determine if it is, so for simplicity we do Progressive Rollout for all.
+      - path: spec.vertices.source.generator
+        includeSubfields: true
+      - path: spec.vertices.source.kafka
+        includeSubfields: true
+      - path: spec.vertices.source.http
+        includeSubfields: true
+      - path: spec.vertices.source.nats
+        includeSubfields: true
+      - path: spec.vertices.source.jetstream
+        includeSubfields: true
+      - path: spec.vertices.source.serving
+        includeSubfields: true
+      - path: spec.vertices.source.pulsar
+        includeSubfields: true
+      - path: spec.vertices.source.sqs
+        includeSubfields: true
+      
+      - path: spec.vertices.sink.kafka
+        includeSubfields: true
+      - path: spec.vertices.sink.serve
+        includeSubfields: true
+      - path: spec.vertices.sink.sqs
+        includeSubfields: true
+      - path: spec.vertices.sink.pulsar
+        includeSubfields: true
+      
   interstepbufferservice: |
     recreate:
       # Changing persistence settings and number of replicas needs to recreate both the ISBSvc and also the pipelines associated to it to 
@@ -170,6 +200,34 @@ data:
       - path: spec.source.udsource.container.envfrom
         includeSubfields: true
       - path: spec.volumes
+        includeSubfields: true
+
+      # Decision: Many of the fields inside of these source types and sink types are risky to change and could warrant doing Progressive Rollout
+      # There are too many different fields to go through each one and determine if it is, so for simplicity we do Progressive Rollout for all.
+      - path: spec.vertices.source.generator
+        includeSubfields: true
+      - path: spec.vertices.source.kafka
+        includeSubfields: true
+      - path: spec.vertices.source.http
+        includeSubfields: true
+      - path: spec.vertices.source.nats
+        includeSubfields: true
+      - path: spec.vertices.source.jetstream
+        includeSubfields: true
+      - path: spec.vertices.source.serving
+        includeSubfields: true
+      - path: spec.vertices.source.pulsar
+        includeSubfields: true
+      - path: spec.vertices.source.sqs
+        includeSubfields: true
+      
+      - path: spec.vertices.sink.kafka
+        includeSubfields: true
+      - path: spec.vertices.sink.serve
+        includeSubfields: true
+      - path: spec.vertices.sink.sqs
+        includeSubfields: true
+      - path: spec.vertices.sink.pulsar
         includeSubfields: true
   numaflowcontroller: |
     dataLoss:

@@ -238,6 +238,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		controllerutil.AddFinalizer(isbServiceRollout, common.FinalizerName)
 	}
 
+	if err := numaflowtypes.ValidateISBServiceSpec(isbServiceRollout.Spec.InterStepBufferService.Spec); err != nil {
+		return ctrl.Result{}, fmt.Errorf("invalid Numaflow ISBService spec: %w", err)
+	}
+
 	_, pauseRequestExists := ppnd.GetPauseModule().GetPauseRequest(isbsvcKey)
 	if !pauseRequestExists {
 		// this is just creating an entry in the map if it doesn't already exist

@@ -356,7 +356,6 @@ func CreateTestMonoVertexOfSpec(
 
 func CreateDefaultISBServiceSpec(jetstreamVersion string) numaflowv1.InterStepBufferServiceSpec {
 	return numaflowv1.InterStepBufferServiceSpec{
-		Redis: &numaflowv1.RedisBufferService{},
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version:     jetstreamVersion,
 			Persistence: nil,
