@@ -149,6 +149,10 @@ There's also a label on the Pipeline to indicate the failure:
 
 The other thing that happens is that the new Pipeline scales down to `scale.min=0,scale.max=0` Pods and the `promoted` one scales back up to the scale min/max defined in the PipelineRollout spec. 
 
+##### What if there was a false failure?
+
+If for some reason, the failure was a false positive, there is a feature called "Force Promotion" for that. You could add a label called `numaplane.numaproj.io/force-promote`: `"true"`, which would cause the promotion to occur despite the failure. This can also be used while the assessment is still in process if the user isn't concerned about the risk. (For the purpose of the remaining steps in this doc working as is, don't do this now.)
+
 #### Cause a Progressive Rollout success
 
 ```shell
@@ -161,7 +165,7 @@ This time change the image path back to one which is valid (`quay.io/numaio/numa
 
 `numaplane.numaproj.io/upgradeState`: `recyclable`
 
-This means that it's marked for deletion; however, Pipelines must be drained before they're deleted to prevent data loss. Given that the Pipeline was not healthy, it is not able to drain by itself, which was the motivation for the feature known as "Force Draining" (link TBD).
+This means that it's marked for deletion; however, Pipelines must be drained before they're deleted to prevent data loss. Given that the Pipeline was not healthy, it is not able to drain by itself, which was the motivation for the feature known as "Force Draining" (see [slides](https://github.com/numaproj/numaplane/blob/main/docs/presentations/ForceDraining_NoDataLeftBehind_.pptx)).
 
 You should see a `my-pipeline-3` get created and pass all assessments. After it succeeds, it will effectively replace `my-pipeline-1` (our `promoted` one) which also gets the label `recyclable` and is then drained and deleted. (Since this one is healthy, it can drain on its own.)
 
