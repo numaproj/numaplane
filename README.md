@@ -14,7 +14,7 @@ The way that Numaplane does this is to have its own set of Kubernetes Resource t
 Numaplane is deployed one-per-cluster and manages Numaflow deployments cluster-wide on any namespace.
 
 There are two strategies which can be used:
-1. The primary strategy is Progressive rollout. This is essentially a single stage Canary rollout - Numaplane deploys the new resource while the original is still running and only promotes it if successful. This strategy applies to the deployment of Pipeline, Monovertex, and InterstepBufferService.
+1. The primary strategy is Progressive rollout. This is essentially a single stage Canary rollout - Numaplane deploys the new resource while the original is still running and only promotes it if successful. This strategy applies to the deployment of Pipeline, Monovertex, and InterstepBufferService. It is used in conjunction with Argo Rollouts. 
 2. The alternative strategy is known as Pause-and-Drain. This strategy applies to Pipeline and not Monovertex. Instead of deploying a second Pipeline in parallel, this simply pauses the Pipeline whenever it, its InterstepBufferService, or the Numaflow Controller in the same namespace are updated. This strategy only concerns itself with the issue of losing data. 
 
 The Progressive Rollout strategy should be preferred in most cases. 
