@@ -2,9 +2,7 @@ apiVersion: numaplane.numaproj.io/v1alpha1
 kind: NumaflowControllerRollout
 metadata:
   name: numaflow-controller
-  #name: numaflow-controller-0 
   namespace: example-namespace
 spec:
   controller:
-    #instanceID: "0" # uncomment for Progressive rollout to set Numaflow Controller instance
     version: "1.5.2"
