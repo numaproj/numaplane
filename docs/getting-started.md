@@ -183,8 +183,22 @@ Note that if you observe the PipelineRollout Status during the assessment, if th
 
 You should be able to adapt the same process above to MonoVertex to cause successful and failed Progressive Rollouts. You can find the sample spec at `config/samples/numaplane.numaproj.io_v1alpha1_monovertexrollout.yaml`. (In this case, of course there is no InterstepBufferService.)
 
+### Deletion of Numaplane resources
 
+When a Numaplane resource is deleted, it's underlying children are deleted. 
 
+Note that proper deletion order should always be done of Numaplane resources. The underlying requirements:
+- Because Pipelines and InterstepBufferServices require a Numaflow Controller to remove their Finalizer field, make sure that Numaflow Controller is still running at the time of deleting PipelineRollouts and ISBServiceRollouts
+- Because Numaflow Controller requires InterstepBufferService deleted after Pipeline, delete all PipelineRollouts prior to deleting corresponding ISBServiceRollout.
+
+```shell
+kubectl delete monovertexrollout --all
+kubectl delete pipelinerollout --all
+kubectl delete isbservicerollout --all
+kubectl delete numaflowcontrollerrollout --all
+```
+
+Note: generally a user should not have a reason to delete the child resource itself, but if they do, this will auto-heal it back. (Same thing if they change the spec of the child resource directly.)
 
 
 
