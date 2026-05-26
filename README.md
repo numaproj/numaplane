@@ -43,6 +43,7 @@ For a more in-depth overview, please see [getting-started.md](https://github.com
 - [Integrating with ArgoCD](https://github.com/numaproj/numaplane/blob/main/docs/argo-cd-integration.md) for a more robust user experience
 - [Templating](https://github.com/numaproj/numaplane/blob/main/docs/templated-specs.md) Numaflow specs 
 - [Deploying resources (Riders)](https://github.com/numaproj/numaplane/blob/main/docs/riders.md) alongside your child resource 
+- [Deploying Numaflow Controller](https://github.com/numaproj/numaplane/blob/main/docs/numaflow-controller-definitions.md)
 
 
 ## How To Release
