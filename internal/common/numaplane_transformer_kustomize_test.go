@@ -32,7 +32,8 @@ import (
 // TestNumaplaneTransformerConfigKustomizeBuild ensures
 // config/kustomize/numaplane-transformer-config.yaml is working with kustomize:
 //   - if user adds a nameSuffix or namePrefix, the AnalysisTemplate references in PipelineRollout and MonoVertexRollout must reflect that
-//   - if an image is renamed, the PipelineRollout / MonoVertexRollout image paths must reflect it.
+//   - if user adds a nameSuffix or namePrefix, ConfigMap/Secret references (including MonoVertexRollout volumes) must reflect that
+//   - if an image is renamed, the PipelineRollout / MonoVertexRollout image paths (including MonoVertexRollout sidecars) must reflect it.
 func TestNumaplaneTransformerConfigKustomizeBuild(t *testing.T) {
 	root := moduleRoot(t)
 	cfgPath := filepath.Join(root, "config", "kustomize", "numaplane-transformer-config.yaml")
@@ -66,6 +67,14 @@ images:
 - name: my-registry/mvtx-src
   newName: other-registry/mvtx-src
   newTag: v2
+- name: my-registry/mvtx-sidecar
+  newName: other-registry/mvtx-sidecar
+  newTag: v2
+
+configMapGenerator:
+- name: mvtx-config
+  literals:
+  - foo=bar
 `
 	if err := os.WriteFile(filepath.Join(tmp, "kustomization.yaml"), []byte(kustomization), 0o644); err != nil {
 		t.Fatal(err)
@@ -91,6 +100,13 @@ spec:
         udsink:
           container:
             image: my-registry/mvtx-src:tag
+      sidecars:
+      - name: sidecar
+        image: my-registry/mvtx-sidecar:tag
+      volumes:
+      - name: cfg
+        configMap:
+          name: mvtx-config
 `
 	if err := os.WriteFile(filepath.Join(tmp, "monovertex-rollout.yaml"), []byte(mvr), 0o644); err != nil {
 		t.Fatal(err)
@@ -164,6 +180,17 @@ spec:
 	}
 	if strings.Count(outputManifest, "image: other-registry/mvtx-src:v2") < 2 {
 		t.Errorf("expected MonoVertexRollout udsource and udsink images rewritten (count >= 2)\n\n%s", outputManifest)
+	}
+	// MonoVertexRollout sidecar image rewrite (spec/monoVertex/spec/sidecars/image)
+	if !strings.Contains(outputManifest, "image: other-registry/mvtx-sidecar:v2") {
+		t.Errorf("expected MonoVertexRollout sidecar image rewrite\n\n%s", outputManifest)
+	}
+
+	// nameReference: MonoVertexRollout configMap volume ref follows the suffixed ConfigMap name
+	// (spec/monoVertex/spec/volumes/configMap/name). configMapGenerator appends a content hash,
+	// so match the prefix plus the nameSuffix.
+	if !strings.Contains(outputManifest, "name: mvtx-config-kusttest-") {
+		t.Errorf("expected MonoVertexRollout configMap volume reference to follow renamed ConfigMap\n\n%s", outputManifest)
 	}
 }
 

@@ -50,6 +50,10 @@ images:
     kind: MonoVertexRollout
     group: numaplane.numaproj.io
     version: v1alpha1
+  - path: spec/monoVertex/spec/sidecars/image
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/namereference.go
 nameReference:
@@ -282,6 +286,38 @@ nameReference:
         group: numaplane.numaproj.io
         version: v1alpha1
       - path: spec/monoVertex/spec/udf/container/envFrom/configMapRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/volumes/configMap/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/volumes/projected/sources/configMap/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/containerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/containerTemplate/envFrom/configMapRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/initContainers/env/valueFrom/configMapKeyRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/initContainers/envFrom/configMapRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/sidecars/env/valueFrom/configMapKeyRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/sidecars/envFrom/configMapRef/name
         kind: MonoVertexRollout
         group: numaplane.numaproj.io
         version: v1alpha1
@@ -524,6 +560,42 @@ nameReference:
         kind: MonoVertexRollout
         group: numaplane.numaproj.io
         version: v1alpha1
+      - path: spec/monoVertex/spec/containerTemplate/env/valueFrom/secretKeyRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/containerTemplate/envFrom/secretRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/initContainers/env/valueFrom/secretKeyRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/initContainers/envFrom/secretRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/sidecars/env/valueFrom/secretKeyRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/sidecars/envFrom/secretRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/volumes/secret/secretName
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/volumes/projected/sources/secret/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/imagePullSecrets/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
   - kind: ServiceAccount
     version: v1
     fieldSpecs:
@@ -560,6 +632,10 @@ nameReference:
     fieldSpecs:
       - path: spec/pipeline/spec/vertices/volumes/persistentVolumeClaim/claimName
         kind: PipelineRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/volumes/persistentVolumeClaim/claimName
+        kind: MonoVertexRollout
         group: numaplane.numaproj.io
         version: v1alpha1
   - kind: PriorityClass
@@ -841,7 +917,7 @@ varReference:
     kind: ISBServiceRollout
     group: numaplane.numaproj.io
     version: v1alpha1
-  - path: spec/monoVertex/spec/interStepBufferService/spec/source/transformer/container/args
+  - path: spec/monoVertex/spec/source/transformer/container/args
     kind: MonoVertexRollout
     group: numaplane.numaproj.io
     version: v1alpha1
@@ -902,6 +978,54 @@ varReference:
     group: numaplane.numaproj.io
     version: v1alpha1
   - path: spec/monoVertex/spec/udf/container/volumeMounts/mountPath
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/source/transformer/container/volumeMounts/mountPath
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/source/udsource/container/volumeMounts/mountPath
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/sink/udsink/container/volumeMounts/mountPath
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/sink/fallback/udsink/container/volumeMounts/mountPath
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/containerTemplate/env/value
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/initContainers/args
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/initContainers/command
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/initContainers/env/value
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/sidecars/args
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/sidecars/command
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/sidecars/env/value
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/sidecars/volumeMounts/mountPath
     kind: MonoVertexRollout
     group: numaplane.numaproj.io
     version: v1alpha1
