@@ -18,6 +18,10 @@ images:
     kind: PipelineRollout
     group: numaplane.numaproj.io
     version: v1alpha1
+  - path: spec/pipeline/spec/vertices/sink/onSuccess/udsink/container/image
+    kind: PipelineRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
   - path: spec/pipeline/spec/vertices/source/transformer/container/image
     kind: PipelineRollout
     group: numaplane.numaproj.io
@@ -46,6 +50,10 @@ images:
     kind: MonoVertexRollout
     group: numaplane.numaproj.io
     version: v1alpha1
+  - path: spec/monoVertex/spec/sink/onSuccess/udsink/container/image
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
   - path: spec/monoVertex/spec/udf/container/image
     kind: MonoVertexRollout
     group: numaplane.numaproj.io
@@ -70,6 +78,24 @@ nameReference:
         kind: MonoVertexRollout
         group: numaplane.numaproj.io
         version: v1alpha1
+  # A PipelineRollout references its ISBServiceRollout by name; interStepBufferServiceName must match the (possibly renamed) ISBServiceRollout name
+  - kind: ISBServiceRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+    fieldSpecs:
+      - path: spec/pipeline/spec/interStepBufferServiceName
+        kind: PipelineRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+  # A VerticalPodAutoscaler targets a MonoVertexRollout by name; targetRef/name must match the (possibly renamed) MonoVertexRollout name
+  - kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+    fieldSpecs:
+      - path: spec/targetRef/name
+        kind: VerticalPodAutoscaler
+        group: autoscaling.k8s.io
+        version: v1
   - kind: ConfigMap
     version: v1
     fieldSpecs:
@@ -142,6 +168,14 @@ nameReference:
         group: numaplane.numaproj.io
         version: v1alpha1
       - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/envFrom/configMapRef/name
+        kind: PipelineRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/pipeline/spec/vertices/sink/onSuccess/udsink/container/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/pipeline/spec/vertices/sink/onSuccess/udsink/container/envFrom/configMapRef/name
         kind: PipelineRollout
         group: numaplane.numaproj.io
         version: v1alpha1
@@ -281,6 +315,14 @@ nameReference:
         kind: MonoVertexRollout
         group: numaplane.numaproj.io
         version: v1alpha1
+      - path: spec/monoVertex/spec/sink/onSuccess/udsink/container/env/valueFrom/configMapKeyRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/sink/onSuccess/udsink/container/envFrom/configMapRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
       - path: spec/monoVertex/spec/udf/container/env/valueFrom/configMapKeyRef/name
         kind: MonoVertexRollout
         group: numaplane.numaproj.io
@@ -393,6 +435,14 @@ nameReference:
         group: numaplane.numaproj.io
         version: v1alpha1
       - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/envFrom/secretRef/name
+        kind: PipelineRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/pipeline/spec/vertices/sink/onSuccess/udsink/container/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/pipeline/spec/vertices/sink/onSuccess/udsink/container/envFrom/secretRef/name
         kind: PipelineRollout
         group: numaplane.numaproj.io
         version: v1alpha1
@@ -549,6 +599,14 @@ nameReference:
         group: numaplane.numaproj.io
         version: v1alpha1
       - path: spec/monoVertex/spec/sink/fallback/udsink/container/envFrom/secretRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/sink/onSuccess/udsink/container/env/valueFrom/secretKeyRef/name
+        kind: MonoVertexRollout
+        group: numaplane.numaproj.io
+        version: v1alpha1
+      - path: spec/monoVertex/spec/sink/onSuccess/udsink/container/envFrom/secretRef/name
         kind: MonoVertexRollout
         group: numaplane.numaproj.io
         version: v1alpha1
@@ -797,6 +855,18 @@ varReference:
     kind: PipelineRollout
     group: numaplane.numaproj.io
     version: v1alpha1
+  - path: spec/pipeline/spec/vertices/sink/onSuccess/udsink/container/args
+    kind: PipelineRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/pipeline/spec/vertices/sink/onSuccess/udsink/container/command
+    kind: PipelineRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/pipeline/spec/vertices/sink/onSuccess/udsink/container/env/value
+    kind: PipelineRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
   - path: spec/pipeline/spec/vertices/source/transformer/container/args
     kind: PipelineRollout
     group: numaplane.numaproj.io
@@ -893,6 +963,10 @@ varReference:
     kind: PipelineRollout
     group: numaplane.numaproj.io
     version: v1alpha1
+  - path: spec/pipeline/spec/vertices/sink/onSuccess/udsink/container/volumeMounts/mountPath
+    kind: PipelineRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
   - path: spec/pipeline/spec/vertices/source/transformer/container/volumeMounts/mountPath
     kind: PipelineRollout
     group: numaplane.numaproj.io
@@ -965,6 +1039,18 @@ varReference:
     kind: MonoVertexRollout
     group: numaplane.numaproj.io
     version: v1alpha1
+  - path: spec/monoVertex/spec/sink/onSuccess/udsink/container/args
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/sink/onSuccess/udsink/container/command
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/sink/onSuccess/udsink/container/env/value
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
   - path: spec/monoVertex/spec/udf/container/args
     kind: MonoVertexRollout
     group: numaplane.numaproj.io
@@ -994,6 +1080,10 @@ varReference:
     group: numaplane.numaproj.io
     version: v1alpha1
   - path: spec/monoVertex/spec/sink/fallback/udsink/container/volumeMounts/mountPath
+    kind: MonoVertexRollout
+    group: numaplane.numaproj.io
+    version: v1alpha1
+  - path: spec/monoVertex/spec/sink/onSuccess/udsink/container/volumeMounts/mountPath
     kind: MonoVertexRollout
     group: numaplane.numaproj.io
     version: v1alpha1
