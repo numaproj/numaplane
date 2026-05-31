@@ -32,7 +32,10 @@ import (
 // TestNumaplaneTransformerConfigKustomizeBuild ensures
 // config/kustomize/numaplane-transformer-config.yaml is working with kustomize:
 //   - if user adds a nameSuffix or namePrefix, the AnalysisTemplate references in PipelineRollout and MonoVertexRollout must reflect that
-//   - if an image is renamed, the PipelineRollout / MonoVertexRollout image paths must reflect it.
+//   - if user adds a nameSuffix or namePrefix, ConfigMap/Secret references (including MonoVertexRollout volumes) must reflect that
+//   - if a referenced ISBServiceRollout is renamed, the PipelineRollout's interStepBufferServiceName must reflect that
+//   - if a targeted MonoVertexRollout is renamed, a VerticalPodAutoscaler's targetRef/name must reflect that
+//   - if an image is renamed, the PipelineRollout / MonoVertexRollout image paths (including MonoVertexRollout sidecars and onSuccess sinks) must reflect it.
 func TestNumaplaneTransformerConfigKustomizeBuild(t *testing.T) {
 	root := moduleRoot(t)
 	cfgPath := filepath.Join(root, "config", "kustomize", "numaplane-transformer-config.yaml")
@@ -58,6 +61,8 @@ resources:
 - monovertex-rollout.yaml
 - pipeline-rollout.yaml
 - analysis-template.yaml
+- isbservice-rollout.yaml
+- vpa.yaml
 
 images:
 - name: my-registry/pipeline-src
@@ -66,6 +71,17 @@ images:
 - name: my-registry/mvtx-src
   newName: other-registry/mvtx-src
   newTag: v2
+- name: my-registry/mvtx-sidecar
+  newName: other-registry/mvtx-sidecar
+  newTag: v2
+- name: my-registry/mvtx-onsuccess
+  newName: other-registry/mvtx-onsuccess
+  newTag: v2
+
+configMapGenerator:
+- name: mvtx-config
+  literals:
+  - foo=bar
 `
 	if err := os.WriteFile(filepath.Join(tmp, "kustomization.yaml"), []byte(kustomization), 0o644); err != nil {
 		t.Fatal(err)
@@ -91,6 +107,17 @@ spec:
         udsink:
           container:
             image: my-registry/mvtx-src:tag
+        onSuccess:
+          udsink:
+            container:
+              image: my-registry/mvtx-onsuccess:tag
+      sidecars:
+      - name: sidecar
+        image: my-registry/mvtx-sidecar:tag
+      volumes:
+      - name: cfg
+        configMap:
+          name: mvtx-config
 `
 	if err := os.WriteFile(filepath.Join(tmp, "monovertex-rollout.yaml"), []byte(mvr), 0o644); err != nil {
 		t.Fatal(err)
@@ -108,6 +135,7 @@ spec:
         clusterScope: false
   pipeline:
     spec:
+      interStepBufferServiceName: shared-isbsvc
       vertices:
       - name: in
         source:
@@ -116,6 +144,34 @@ spec:
               image: my-registry/pipeline-src:tag
 `
 	if err := os.WriteFile(filepath.Join(tmp, "pipeline-rollout.yaml"), []byte(pl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	isb := `apiVersion: numaplane.numaproj.io/v1alpha1
+kind: ISBServiceRollout
+metadata:
+  name: shared-isbsvc
+spec:
+  interStepBufferService:
+    spec:
+      jetstream:
+        version: latest
+`
+	if err := os.WriteFile(filepath.Join(tmp, "isbservice-rollout.yaml"), []byte(isb), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	vpa := `apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: test-vpa
+spec:
+  targetRef:
+    apiVersion: numaplane.numaproj.io/v1alpha1
+    kind: MonoVertexRollout
+    name: test-mvtx
+`
+	if err := os.WriteFile(filepath.Join(tmp, "vpa.yaml"), []byte(vpa), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -146,6 +202,8 @@ spec:
 		"name: test-mvtx-kusttest",
 		"name: test-pipeline-kusttest",
 		"name: shared-analysis-template-kusttest",
+		"name: shared-isbsvc-kusttest",
+		"name: test-vpa-kusttest",
 	} {
 		if !strings.Contains(outputManifest, resourceName) {
 			t.Errorf("expected output to contain %q\n\n%s", resourceName, outputManifest)
@@ -158,12 +216,41 @@ spec:
 		t.Errorf("expected at least two occurrences of %q (MonoVertexRollout + PipelineRollout)\n\n%s", analysisTemplateRef, outputManifest)
 	}
 
+	// nameReference: PipelineRollout's interStepBufferServiceName follows the suffixed ISBServiceRollout name
+	// (spec/pipeline/spec/interStepBufferServiceName)
+	if !strings.Contains(outputManifest, "interStepBufferServiceName: shared-isbsvc-kusttest") {
+		t.Errorf("expected PipelineRollout interStepBufferServiceName to follow renamed ISBServiceRollout\n\n%s", outputManifest)
+	}
+
+	// nameReference: VerticalPodAutoscaler's targetRef/name follows the suffixed MonoVertexRollout name
+	// (spec/targetRef/name on VerticalPodAutoscaler). Match the targetRef block specifically so this
+	// isn't satisfied by the MonoVertexRollout's own (suffixed) metadata.name.
+	const vpaTargetRef = "targetRef:\n    apiVersion: numaplane.numaproj.io/v1alpha1\n    kind: MonoVertexRollout\n    name: test-mvtx-kusttest"
+	if !strings.Contains(outputManifest, vpaTargetRef) {
+		t.Errorf("expected VerticalPodAutoscaler targetRef to follow renamed MonoVertexRollout\n\n%s", outputManifest)
+	}
+
 	// images: transformer config paths for PipelineRollout / MonoVertexRollout
 	if !strings.Contains(outputManifest, "image: other-registry/pipeline-src:v2") {
 		t.Errorf("expected pipeline udsource image rewrite\n\n%s", outputManifest)
 	}
 	if strings.Count(outputManifest, "image: other-registry/mvtx-src:v2") < 2 {
 		t.Errorf("expected MonoVertexRollout udsource and udsink images rewritten (count >= 2)\n\n%s", outputManifest)
+	}
+	// MonoVertexRollout sidecar image rewrite (spec/monoVertex/spec/sidecars/image)
+	if !strings.Contains(outputManifest, "image: other-registry/mvtx-sidecar:v2") {
+		t.Errorf("expected MonoVertexRollout sidecar image rewrite\n\n%s", outputManifest)
+	}
+	// MonoVertexRollout onSuccess sink image rewrite (spec/monoVertex/spec/sink/onSuccess/udsink/container/image)
+	if !strings.Contains(outputManifest, "image: other-registry/mvtx-onsuccess:v2") {
+		t.Errorf("expected MonoVertexRollout onSuccess sink image rewrite\n\n%s", outputManifest)
+	}
+
+	// nameReference: MonoVertexRollout configMap volume ref follows the suffixed ConfigMap name
+	// (spec/monoVertex/spec/volumes/configMap/name). configMapGenerator appends a content hash,
+	// so match the prefix plus the nameSuffix.
+	if !strings.Contains(outputManifest, "name: mvtx-config-kusttest-") {
+		t.Errorf("expected MonoVertexRollout configMap volume reference to follow renamed ConfigMap\n\n%s", outputManifest)
 	}
 }
 
