@@ -512,7 +512,11 @@ func (r *NumaflowControllerReconciler) sync(
 	opts := []gitopsSync.SyncOpt{
 		gitopsSync.WithLogr(*numaLogger.LogrLogger),
 		gitopsSync.WithOperationSettings(false, true, true, false),
-		gitopsSync.WithManifestValidation(true),
+		// Temporary: don't perform per-resource validation by hitting OpenAPI due to authentication issue.
+		// OpenAPI schema validation uses a temp kubeconfig in gitops-engine that can fail to
+		// authenticate to /openapi/v2 even when the controller's rest.Config works (e.g. after
+		// cluster auth changes). Equivalent to kubectl apply --validate=false.
+		gitopsSync.WithManifestValidation(false),
 		gitopsSync.WithPruneLast(false),
 		gitopsSync.WithResourceModificationChecker(true, diffResults),
 		gitopsSync.WithReplace(true),
