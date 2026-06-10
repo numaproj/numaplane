@@ -3,8 +3,8 @@ package kubernetes
 import (
 	"os"
 
-	"github.com/argoproj/gitops-engine/pkg/utils/kube"
-	"github.com/argoproj/gitops-engine/pkg/utils/tracing"
+	"github.com/argoproj/argo-cd/gitops-engine/pkg/utils/kube"
+	"github.com/argoproj/argo-cd/gitops-engine/pkg/utils/tracing"
 
 	"github.com/numaproj/numaplane/internal/util/logger"
 )
