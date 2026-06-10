@@ -313,16 +313,16 @@ func (r *PipelineRolloutReconciler) processQueueKey(ctx context.Context, key str
 	if err != nil {
 		numaLogger.Errorf(err, "PipelineRollout %v reconcile returned error: %v", namespacedName, err)
 		r.Queue.AddRateLimited(key)
-	} else {
-		if result.Requeue {
-			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue", namespacedName)
-			r.Queue.AddRateLimited(key)
-		} else if result.RequeueAfter > 0 {
+	} else if !result.IsZero() {
+		if result.RequeueAfter > 0 {
 			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue after %.0f seconds", namespacedName, result.RequeueAfter.Seconds())
 			r.Queue.AddAfter(key, result.RequeueAfter)
 		} else {
-			numaLogger.Debugf("PipelineRollout %v reconcile complete", namespacedName)
+			numaLogger.Debugf("PipelineRollout %v reconcile requests immediate requeue", namespacedName)
+			r.Queue.AddRateLimited(key)
 		}
+	} else {
+		numaLogger.Debugf("PipelineRollout %v reconcile complete", namespacedName)
 	}
 }
 

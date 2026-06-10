@@ -26,10 +26,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/argoproj/gitops-engine/pkg/diff"
-	gitopsSync "github.com/argoproj/gitops-engine/pkg/sync"
-	gitopsSyncCommon "github.com/argoproj/gitops-engine/pkg/sync/common"
-	kubeUtil "github.com/argoproj/gitops-engine/pkg/utils/kube"
+	"github.com/argoproj/argo-cd/gitops-engine/pkg/diff"
+	gitopsSync "github.com/argoproj/argo-cd/gitops-engine/pkg/sync"
+	gitopsSyncCommon "github.com/argoproj/argo-cd/gitops-engine/pkg/sync/common"
+	kubeUtil "github.com/argoproj/argo-cd/gitops-engine/pkg/utils/kube"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -512,11 +512,7 @@ func (r *NumaflowControllerReconciler) sync(
 	opts := []gitopsSync.SyncOpt{
 		gitopsSync.WithLogr(*numaLogger.LogrLogger),
 		gitopsSync.WithOperationSettings(false, true, true, false),
-		// Temporary: don't perform per-resource validation by hitting OpenAPI due to authentication issue.
-		// OpenAPI schema validation uses a temp kubeconfig in gitops-engine that can fail to
-		// authenticate to /openapi/v2 even when the controller's rest.Config works (e.g. after
-		// cluster auth changes). Equivalent to kubectl apply --validate=false.
-		gitopsSync.WithManifestValidation(false),
+		gitopsSync.WithManifestValidation(true),
 		gitopsSync.WithPruneLast(false),
 		gitopsSync.WithResourceModificationChecker(true, diffResults),
 		gitopsSync.WithReplace(true),
@@ -633,7 +629,7 @@ func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, strin
 	deploymentSpec := deployment.Spec
 	deploymentStatus := deployment.Status
 
-	// Health Check borrowed from argoproj/gitops-engine/pkg/health/health_deployment.go https://github.com/argoproj/gitops-engine/blob/master/pkg/health/health_deployment.go#L27
+	// Health Check borrowed from argoproj/gitops-engine/pkg/health/health_deployment.go https://github.com/argoproj/argo-cd/gitops-engine/blob/master/pkg/health/health_deployment.go#L27
 	if deployment.Generation <= deploymentStatus.ObservedGeneration {
 		cond := getDeploymentCondition(deploymentStatus, appsv1.DeploymentProgressing)
 		if cond != nil && cond.Reason == "ProgressDeadlineExceeded" {

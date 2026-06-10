@@ -61,13 +61,25 @@ func NewFilteredMonoVertexRolloutInformer(client versioned.Interface, namespace 
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.NumaplaneV1alpha1().MonoVertexRollouts(namespace).List(context.TODO(), options)
+				return client.NumaplaneV1alpha1().MonoVertexRollouts(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.NumaplaneV1alpha1().MonoVertexRollouts(namespace).Watch(context.TODO(), options)
+				return client.NumaplaneV1alpha1().MonoVertexRollouts(namespace).Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.NumaplaneV1alpha1().MonoVertexRollouts(namespace).List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.NumaplaneV1alpha1().MonoVertexRollouts(namespace).Watch(ctx, options)
 			},
 		},
 		&apisnumaplanev1alpha1.MonoVertexRollout{},
