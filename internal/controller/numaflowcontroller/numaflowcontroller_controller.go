@@ -512,7 +512,7 @@ func (r *NumaflowControllerReconciler) sync(
 	opts := []gitopsSync.SyncOpt{
 		gitopsSync.WithLogr(*numaLogger.LogrLogger),
 		gitopsSync.WithOperationSettings(false, true, true, false),
-		gitopsSync.WithManifestValidation(true),
+		gitopsSync.WithManifestValidation(false),
 		gitopsSync.WithPruneLast(false),
 		gitopsSync.WithResourceModificationChecker(true, diffResults),
 		gitopsSync.WithReplace(true),
