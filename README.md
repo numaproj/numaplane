@@ -19,6 +19,25 @@ There are two strategies which can be used:
 
 The Progressive Rollout strategy should be preferred in most cases. 
 
+## Caveats
+
+### Pipelines with Reduce Vertex
+
+Numaplane does not have a good solution for seamlessly rolling out Pipelines with a Reduce Vertex. This is because:
+- if Progressive Rollout is used, there's a period of time in which 2 versions of that Pipeline are running concurrently, which means the downstream will receive 2 buckets of the same key/time period and will need to handle that
+- Pause-and-drain also can't be used, since a Pipeline with a Reduce Vertex cannot drain 
+
+### Numaflow CRDs
+
+Numaflow has 2 versions of CRDs that it deploys for each release:
+1. [Full CRDs](https://github.com/numaproj/numaflow/tree/v1.8.1/config/base/crds/full) list each field separately
+2. [Minimal CRDs](https://github.com/numaproj/numaflow/tree/v1.8.1/config/base/crds/minimal) strip out all of the individual fields.
+
+The main intention of the Minimal CRDs is that they can be used across a Kubernetes cluster where there are multiple namespaced Numaflow Controllers of different versions. The fact that the fields aren't defined means you don't need to be concerned that the individual fields change between versions.
+
+Numaplane requires the use of Minimal CRDs as well, although for a different reason. One thing you'll notice if you look at the full CRDs is that they define [default values](https://github.com/numaproj/numaflow/blob/v1.8.1/config/base/crds/full/numaflow.numaproj.io_pipelines.yaml#L119) for some fields. This is a problem for Numaplane because if you leave those fields undefined in your rollout spec but then they get added by default to the numaflow resource, Numaplane will continually notice a difference between the desired spec and the actual spec. Note that the default values aren't required for the CRDs given that Numaflow Controller will use the same default values in the code if they are undefined. An ambitious user could extract these default fields from the CRDs and keep the rest as is, and this should work with Numaplane. 
+
+
 
 ## Getting Started
 
