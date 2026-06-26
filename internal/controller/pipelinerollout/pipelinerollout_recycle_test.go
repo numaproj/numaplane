@@ -846,7 +846,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			expectedError:           false,
 		},
 		{
-			name:                    "requires-drain is true, no expiration - should not delete",
+			name:                    "requires-drain is true, no recyclable start time - should delete by default",
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     "",
@@ -862,7 +862,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			expectedError:           false,
 		},
 		{
-			name:                    "requires-drain is true, expired - should delete",
+			name:                    "requires-drain is true, expired - should delete by default",
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     time.Now().Add(-2 * time.Hour).Format(time.RFC3339), // 2 hours ago, should be expired

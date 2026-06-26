@@ -739,7 +739,11 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 		return false, err
 	}
 	if expired {
-		numaLogger.Info("Pipeline has reached the max recyclable duration and will be deleted now")
+		if config.GetKeepUndrainedPipelines() {
+			numaLogger.Warn("Pipeline has reached the max recyclable duration but keepUndrainedPipelines is enabled - will not delete pipeline - user needs to delete manually")
+			return false, nil
+		}
+		numaLogger.Warn("Pipeline has reached the max recyclable duration and will be deleted now")
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_NeverDrained)
 		return true, nil
 	}
@@ -770,15 +774,12 @@ func (r *PipelineRolloutReconciler) isRecycledPipelineExpired(
 
 		if elapsedMinutes >= maxDurationMinutes {
 			numaLogger.WithValues("recyclableStartTime", recyclableStartTime, "elapsedMinutes", elapsedMinutes, "maxDurationMinutes", maxDurationMinutes).
-				Info("Time expired on force draining: deleting pipeline now")
+				Warn("Time expired on force draining")
 
 			return true, nil
 		}
 	} else {
-		// for backward compatibility:
-		// if the annotation is not set, then it means this Pipeline was marked recyclable prior to the existence of the annotation,
-		// meaning it's quite old and we should delete it
-		numaLogger.Info("Pipeline was marked recyclable prior to the existence of the annotation, meaning it's old and will be deleted now")
+		numaLogger.Error(errors.New("missing recyclable-start-time annotation"), "Pipeline somehow doesn't have recyclable-start-time annotation??")
 		return true, nil
 	}
 
