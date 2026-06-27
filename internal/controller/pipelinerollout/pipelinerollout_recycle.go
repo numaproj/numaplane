@@ -740,6 +740,12 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 	}
 	if expired {
 		if config.GetKeepUndrainedPipelines() {
+			upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, r.client, pipeline)
+			if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclableExpired {
+				if err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclableExpired, upgradeStateReason, pipeline); err != nil {
+					return false, fmt.Errorf("failed to update pipeline %s/%s upgrade state to recyclable-expired: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+				}
+			}
 			numaLogger.Warn("Pipeline has reached the max recyclable duration but keepUndrainedPipelines is enabled - will not delete pipeline - user needs to delete manually")
 			return false, nil
 		}
