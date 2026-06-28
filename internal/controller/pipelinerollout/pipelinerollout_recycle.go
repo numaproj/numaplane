@@ -747,6 +747,11 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 				}
 			}
 			numaLogger.Warn("Pipeline has reached the max recyclable duration but keepUndrainedPipelines is enabled - will not delete pipeline - user needs to delete manually")
+			// make sure it's scaled down completely so it's not consuming resources at least
+			err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, r.client)
+			if err != nil {
+				return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+			}
 			return false, nil
 		}
 		numaLogger.Warn("Pipeline has reached the max recyclable duration and will be deleted now")
