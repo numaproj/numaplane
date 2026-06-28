@@ -2643,7 +2643,6 @@ data:
     permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler;group=policy,kind=PodDisruptionBudget"
     pipeline:
       forceDrainFailureWaitDuration: 15
-      keepUndrainedPipelines: true
       maxRecyclableDurationMinutes: 240 # 4 hours
 kind: ConfigMap
 metadata:
