@@ -16,3 +16,5 @@ progressive:
       schedule: "0,0,0,10"
   analysisRunTimeout: "1200"
 permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=,kind=ConfigMap;group=autoscaling,kind=HorizontalPodAutoscaler;group=policy,kind=PodDisruptionBudget"
+pipeline:
+  keepUndrainedPipelines: true
