@@ -702,6 +702,8 @@ func markPipelineForceDrainStarted(ctx context.Context, c client.Client, pipelin
 	}); err != nil {
 		return err
 	}
+	// just in case a previous drain had a state in which the Pipeline was "failed", we clear that time so we can reuse the annotation from scratch
+	// if we need to
 	return clearDrainFailureStartTimeAnnotation(ctx, c, pipeline)
 }
 

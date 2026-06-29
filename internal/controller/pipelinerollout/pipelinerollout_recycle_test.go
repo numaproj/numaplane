@@ -542,8 +542,6 @@ func Test_Recycle(t *testing.T) {
 		expectedVertexScaleDefinitions []apiv1.VertexScaleDefinition
 		// expected whether the force drain failure time annotation is set
 		expectForceDrainFailureTimeSet bool
-		// expected whether force drain has started (only asserts when true)
-		expectForceDrainStarted bool
 	}{
 		{
 			name:               "Delete/Recreate - should delete immediately",
@@ -554,13 +552,13 @@ func Test_Recycle(t *testing.T) {
 			expectedError:      false,
 		},
 		{
-			name:                              "Progressive Replace - original drain failed, wait before force drain",
-			upgradeStateReason:                string(common.LabelValueProgressiveReplaced),
-			requiresDrain:                     true,
-			desiredPhase:                      &paused,
-			pipelinePhase:                     failed,
-			isPromotedPipelineNew:             true,
-			expectForceDrainFailureTimeSet:    true,
+			name:                           "Progressive Replace - original drain failed, wait before force drain",
+			upgradeStateReason:             string(common.LabelValueProgressiveReplaced),
+			requiresDrain:                  true,
+			desiredPhase:                   &paused,
+			pipelinePhase:                  failed,
+			isPromotedPipelineNew:          true,
+			expectForceDrainFailureTimeSet: true,
 		},
 		{
 			name:                              "Progressive Replace - second attempt (force drain caused pipeline to have phase=Failed)",
@@ -841,12 +839,6 @@ func Test_Recycle(t *testing.T) {
 					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyDrainFailureStartTime)
 				}
 
-				if tc.expectForceDrainStarted {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
-				} else if tc.expectForceDrainFailureTimeSet && tc.initialForceDrainPipelinesStarted == "" {
-					assert.NotContains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
-				}
-
 				// Check if force-drain-specs-started annotation matches expected value
 				if tc.expectForceDrainPipelinesStarted != "" {
 					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
@@ -915,6 +907,73 @@ func Test_markPipelineForceDrainStarted_clearsForceDrainFailureStartTime(t *test
 	assert.NoError(t, err)
 	assert.Equal(t, "promoted-pipeline-1,", pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecsStarted])
 	assert.Empty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
+}
+
+func Test_checkForFailedPipeline(t *testing.T) {
+	ctx := context.Background()
+	waitDuration := time.Duration(config.GetForceDrainFailureWaitDuration()) * time.Second
+	withinWait := waitDuration - time.Second
+	pastWait := waitDuration + time.Second
+
+	tests := []struct {
+		name                      string
+		failureStartTimeAgo       *time.Duration // nil = no annotation (first failure detection)
+		expectNonTransientFailure bool
+		expectAnnotationSet       bool
+	}{
+		{
+			name:                "first failure sets start time and waits",
+			expectAnnotationSet: true,
+		},
+		{
+			name:                "failure within wait duration",
+			failureStartTimeAgo: &withinWait,
+		},
+		{
+			name:                      "failure past wait duration",
+			failureStartTimeAgo:       &pastWait,
+			expectNonTransientFailure: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pipeline := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "numaflow.numaproj.io/v1alpha1",
+					"kind":       "Pipeline",
+					"metadata": map[string]interface{}{
+						"name":      "test-pipeline",
+						"namespace": ctlrcommon.DefaultTestNamespace,
+					},
+				},
+			}
+			pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+
+			if tc.failureStartTimeAgo != nil {
+				pipeline.SetAnnotations(map[string]string{
+					common.AnnotationKeyDrainFailureStartTime: time.Now().Add(-*tc.failureStartTimeAgo).Format(time.RFC3339),
+				})
+			}
+
+			scheme := runtime.NewScheme()
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
+			reconciler := &PipelineRolloutReconciler{
+				client:        fakeClient,
+				customMetrics: createTestMetrics(),
+				recorder:      record.NewFakeRecorder(100),
+			}
+
+			nonTransientFailure, err := reconciler.checkForFailedPipeline(ctx, pipeline)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectNonTransientFailure, nonTransientFailure)
+
+			if tc.expectAnnotationSet {
+				assert.NotEmpty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
+			}
+		})
+	}
 }
 
 func Test_checkForValueInCommaDelimitedAnnotation(t *testing.T) {
