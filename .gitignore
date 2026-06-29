@@ -37,3 +37,7 @@ config/crd/external/
 tests/e2e/output
 
 .qodo
+
+# Local Zscaler build workaround (corporate CA + machine-specific Dockerfile)
+.zscaler-ca.crt
+.Dockerfile.zscaler
