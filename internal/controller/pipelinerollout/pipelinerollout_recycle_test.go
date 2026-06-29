@@ -818,7 +818,8 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		requiresDrainAnnotation string
 		recyclableStartTime     string
 		deletionAnnotation      string
-		expectedResult          bool
+		expectedShouldDelete    bool
+		expectedExpired         bool
 		expectedError           bool
 	}{
 		{
@@ -826,7 +827,8 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			forcePromoteStrategy:    true,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     "",
-			expectedResult:          true,
+			expectedShouldDelete:    true,
+			expectedExpired:         false,
 			expectedError:           false,
 		},
 		{
@@ -834,7 +836,8 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "",
 			recyclableStartTime:     "",
-			expectedResult:          true,
+			expectedShouldDelete:    true,
+			expectedExpired:         false,
 			expectedError:           false,
 		},
 		{
@@ -842,7 +845,8 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "false",
 			recyclableStartTime:     "",
-			expectedResult:          true,
+			expectedShouldDelete:    true,
+			expectedExpired:         false,
 			expectedError:           false,
 		},
 		{
@@ -850,7 +854,8 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     "",
-			expectedResult:          true,
+			expectedShouldDelete:    true,
+			expectedExpired:         true,
 			expectedError:           false,
 		},
 		{
@@ -858,7 +863,8 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     time.Now().Format(time.RFC3339), // just started, not expired
-			expectedResult:          false,
+			expectedShouldDelete:    false,
+			expectedExpired:         false,
 			expectedError:           false,
 		},
 		{
@@ -866,7 +872,8 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     time.Now().Add(-2 * time.Hour).Format(time.RFC3339), // 2 hours ago, should be expired
-			expectedResult:          true,
+			expectedShouldDelete:    true,
+			expectedExpired:         true,
 			expectedError:           false,
 		},
 		{
@@ -874,7 +881,8 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     "invalid-time-format",
-			expectedResult:          false,
+			expectedShouldDelete:    false,
+			expectedExpired:         false,
 			expectedError:           true,
 		},
 		{
@@ -883,7 +891,8 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			requiresDrainAnnotation: "false",
 			recyclableStartTime:     "",
 			deletionAnnotation:      "true",
-			expectedResult:          true,
+			expectedShouldDelete:    true,
+			expectedExpired:         false,
 			expectedError:           false,
 		},
 	}
@@ -942,13 +951,14 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 				recorder:      record.NewFakeRecorder(100),
 			}
 
-			result, err := reconciler.shouldDeleteRecyclablePipeline(ctx, pipelineRollout, pipeline)
+			shouldDelete, expired, err := reconciler.shouldDeleteRecyclablePipeline(ctx, pipelineRollout, pipeline)
 
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedResult, result)
+				assert.Equal(t, tc.expectedShouldDelete, shouldDelete)
+				assert.Equal(t, tc.expectedExpired, expired)
 			}
 		})
 	}
