@@ -542,6 +542,8 @@ func Test_Recycle(t *testing.T) {
 		expectedVertexScaleDefinitions []apiv1.VertexScaleDefinition
 		// expected whether the force drain failure time annotation is set
 		expectForceDrainFailureTimeSet bool
+		// expected whether force drain has started (only asserts when true)
+		expectForceDrainStarted bool
 	}{
 		{
 			name:               "Delete/Recreate - should delete immediately",
@@ -550,6 +552,15 @@ func Test_Recycle(t *testing.T) {
 			pipelinePhase:      numaflowv1.PipelinePhaseRunning,
 			expectedDeleted:    true, // Delete recreate should delete immediately
 			expectedError:      false,
+		},
+		{
+			name:                              "Progressive Replace - original drain failed, wait before force drain",
+			upgradeStateReason:                string(common.LabelValueProgressiveReplaced),
+			requiresDrain:                     true,
+			desiredPhase:                      &paused,
+			pipelinePhase:                     failed,
+			isPromotedPipelineNew:             true,
+			expectForceDrainFailureTimeSet:    true,
 		},
 		{
 			name:                              "Progressive Replace - second attempt (force drain caused pipeline to have phase=Failed)",
@@ -827,7 +838,13 @@ func Test_Recycle(t *testing.T) {
 
 				// Verify if the force drain failure time annotation is set
 				if tc.expectForceDrainFailureTimeSet {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainFailureStartTime)
+					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyDrainFailureStartTime)
+				}
+
+				if tc.expectForceDrainStarted {
+					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
+				} else if tc.expectForceDrainFailureTimeSet && tc.initialForceDrainPipelinesStarted == "" {
+					assert.NotContains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
 				}
 
 				// Check if force-drain-specs-started annotation matches expected value
@@ -871,6 +888,33 @@ func Test_Recycle(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_markPipelineForceDrainStarted_clearsForceDrainFailureStartTime(t *testing.T) {
+	ctx := context.Background()
+
+	pipeline := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "numaflow.numaproj.io/v1alpha1",
+			"kind":       "Pipeline",
+			"metadata": map[string]interface{}{
+				"name":      "test-pipeline",
+				"namespace": ctlrcommon.DefaultTestNamespace,
+			},
+		},
+	}
+	pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+	pipeline.SetAnnotations(map[string]string{
+		common.AnnotationKeyDrainFailureStartTime: time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
+	})
+
+	scheme := runtime.NewScheme()
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
+
+	err := markPipelineForceDrainStarted(ctx, fakeClient, pipeline, "promoted-pipeline-1")
+	assert.NoError(t, err)
+	assert.Equal(t, "promoted-pipeline-1,", pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecsStarted])
+	assert.Empty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
 }
 
 func Test_checkForValueInCommaDelimitedAnnotation(t *testing.T) {
