@@ -940,9 +940,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 				}
 			}
 
-			var pipeline *unstructured.Unstructured
-
-			pipeline = &unstructured.Unstructured{
+			pipeline := &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "numaflow.numaproj.io/v1alpha1",
 					"kind":       "Pipeline",
