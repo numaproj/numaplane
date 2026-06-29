@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -814,6 +815,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 
 	tests := []struct {
 		name                    string
+		deleteExpiredPipelines  bool
 		forcePromoteStrategy    bool
 		requiresDrainAnnotation string
 		recyclableStartTime     string
@@ -824,6 +826,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 	}{
 		{
 			name:                    "ForcePromote Strategy is set - should delete",
+			deleteExpiredPipelines:  true,
 			forcePromoteStrategy:    true,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     "",
@@ -833,6 +836,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		},
 		{
 			name:                    "No requires-drain annotation - should delete",
+			deleteExpiredPipelines:  true,
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "",
 			recyclableStartTime:     "",
@@ -842,6 +846,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		},
 		{
 			name:                    "requires-drain is false - should delete",
+			deleteExpiredPipelines:  true,
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "false",
 			recyclableStartTime:     "",
@@ -851,6 +856,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		},
 		{
 			name:                    "requires-drain is true, no recyclable start time - should delete by default",
+			deleteExpiredPipelines:  true,
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     "",
@@ -860,6 +866,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		},
 		{
 			name:                    "requires-drain is true, not yet expired - should not delete",
+			deleteExpiredPipelines:  true,
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     time.Now().Format(time.RFC3339), // just started, not expired
@@ -869,6 +876,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		},
 		{
 			name:                    "requires-drain is true, expired - should delete by default",
+			deleteExpiredPipelines:  true,
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     time.Now().Add(-2 * time.Hour).Format(time.RFC3339), // 2 hours ago, should be expired
@@ -878,6 +886,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		},
 		{
 			name:                    "requires-drain is true, invalid time format - should return error",
+			deleteExpiredPipelines:  true,
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "true",
 			recyclableStartTime:     "invalid-time-format",
@@ -887,6 +896,7 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		},
 		{
 			name:                    "has deletion annotation",
+			deleteExpiredPipelines:  true,
 			forcePromoteStrategy:    false,
 			requiresDrainAnnotation: "false",
 			recyclableStartTime:     "",
@@ -895,15 +905,25 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			expectedExpired:         false,
 			expectedError:           false,
 		},
+		{
+			name:                    "expired recyclable pipeline is kept when deleteExpiredPipelines is false",
+			deleteExpiredPipelines:  false,
+			requiresDrainAnnotation: "true",
+			recyclableStartTime:     time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
+			expectedShouldDelete:    false,
+			expectedExpired:         true,
+			expectedError:           false,
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create pipeline rollout
+			loadPipelineTestConfig(t, tc.deleteExpiredPipelines)
+
 			pipelineRollout := &apiv1.PipelineRollout{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pipeline",
-					Namespace: "test-namespace",
+					Namespace: ctlrcommon.DefaultTestNamespace,
 				},
 				Spec: apiv1.PipelineRolloutSpec{},
 			}
@@ -920,17 +940,22 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 				}
 			}
 
-			// Create pipeline
-			pipeline := &unstructured.Unstructured{
+			var pipeline *unstructured.Unstructured
+
+			pipeline = &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "numaflow.numaproj.io/v1alpha1",
 					"kind":       "Pipeline",
 					"metadata": map[string]interface{}{
 						"name":      "test-pipeline-5",
-						"namespace": "test-namespace",
+						"namespace": ctlrcommon.DefaultTestNamespace,
 					},
 				},
 			}
+			pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+			pipeline.SetLabels(map[string]string{
+				common.LabelKeyUpgradeState: string(common.LabelValueUpgradeRecyclable),
+			})
 
 			annotations := map[string]string{}
 			if tc.requiresDrainAnnotation != "" {
@@ -946,7 +971,11 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 				pipeline.SetAnnotations(annotations)
 			}
 
+			scheme := runtime.NewScheme()
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
+
 			reconciler := &PipelineRolloutReconciler{
+				client:        fakeClient,
 				customMetrics: createTestMetrics(),
 				recorder:      record.NewFakeRecorder(100),
 			}
@@ -960,8 +989,27 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 				assert.Equal(t, tc.expectedShouldDelete, shouldDelete)
 				assert.Equal(t, tc.expectedExpired, expired)
 			}
+
+			if expired && !shouldDelete {
+				assert.Equal(t, string(common.LabelValueUpgradeRecyclableExpired), pipeline.GetLabels()[common.LabelKeyUpgradeState])
+			}
 		})
 	}
+}
+
+func loadPipelineTestConfig(t *testing.T, deleteExpiredPipelines bool) {
+	t.Helper()
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configFile := "testconfig_keep_undrained"
+	if deleteExpiredPipelines {
+		configFile = "testconfig"
+	}
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName(configFile))
+	assert.NoError(t, err)
+	assert.Equal(t, !deleteExpiredPipelines, config.GetKeepUndrainedPipelines())
 }
 
 func getDesiredPhase(pipeline *numaflowv1.Pipeline) numaflowv1.PipelinePhase {

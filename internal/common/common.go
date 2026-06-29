@@ -130,7 +130,7 @@ const (
 	// after an upgrade.
 	LabelValueUpgradeRecyclable UpgradeState = "recyclable"
 
-	// LabelValueUpgradeRecyclable is the label value indicating that the resource managed by a NumaRollout was recyclable
+	// LabelValueUpgradeRecyclableExpired is the label value indicating that the resource managed by a NumaRollout was recyclable
 	// after an upgrade but did not drain fully in the time allowed.
 	LabelValueUpgradeRecyclableExpired UpgradeState = "recyclable-expired"
 
