@@ -340,22 +340,41 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 	}
 }
 
+// getForceAppliedSpec returns a copy of newPipeline with the transformations needed for force draining:
+// source vertices scaled to zero, ISBService name preserved from currentPipeline, and desiredPhase set to Running.
+func getForceAppliedSpec(ctx context.Context, currentPipeline, newPipelineSpec *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	forceAppliedPipelineSpec := newPipelineSpec.DeepCopy()
+
+	err := numaflowtypes.ScalePipelineDefSourceVerticesToZero(ctx, forceAppliedPipelineSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	// Preserve the current pipeline's ISBService name so we don't change it during force drain (a Pipeline cannot have its ISBService changed or it won't work)
+	currentISBSvcName, err := numaflowtypes.GetPipelineISBSVCName(currentPipeline)
+	if err != nil {
+		return nil, err
+	}
+	if err := numaflowtypes.PipelineWithISBServiceName(forceAppliedPipelineSpec, currentISBSvcName); err != nil {
+		return nil, err
+	}
+
+	// Set the desiredPhase to Running just in case it isn't (we need to take it out of Paused state if it's in it to give it a chance to pause again)
+	err = unstructured.SetNestedField(forceAppliedPipelineSpec.Object, string(numaflowv1.PipelinePhaseRunning), "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return nil, err
+	}
+
+	return forceAppliedPipelineSpec, nil
+}
+
 // Update the pipeline to the new spec with min=max=0 initially and set to desiredPhase=Running
 // (it will be set to Paused later)
 // currentPipeline: the pipeline that will be updated
 // newPipeline: spec from the new pipeline which will be applied
 func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, newPipeline *unstructured.Unstructured, c client.Client) error {
 	numaLogger := logger.FromContext(ctx)
-	// take the newPipeline Spec, make a copy, and set any sources to min=max=0
-	newPipelineCopy := newPipeline.DeepCopy()
-	err := numaflowtypes.ScalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
-	if err != nil {
-		return err
-	}
-
-	// Set the desiredPhase to Running just in case it isn't (we need to make to take it out of Paused state if it's in it to give it a chance to pause again)
-	// and set the "overridden-spec" annotation to indicate that we've applied over top the original
-	err = unstructured.SetNestedField(newPipelineCopy.Object, string(numaflowv1.PipelinePhaseRunning), "spec", "lifecycle", "desiredPhase")
+	forceAppliedPipeline, err := getForceAppliedSpec(ctx, currentPipeline, newPipeline)
 	if err != nil {
 		return err
 	}
@@ -365,7 +384,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 	// Create a strategic merge patch by comparing the current pipeline with the new pipeline copy
 	// We need to extract just the fields we want to update: spec, metadata.annotations
 	patchData := map[string]interface{}{
-		"spec": newPipelineCopy.Object["spec"], // we assume we're the only ones who write to the Spec; therefore it's okay to copy the entire thing and use it knowing that nobody else has changed it
+		"spec": forceAppliedPipeline.Object["spec"], // we assume we're the only ones who write to the Spec; therefore it's okay to copy the entire thing and use it knowing that nobody else has changed it
 	}
 
 	// Convert patch data to JSON

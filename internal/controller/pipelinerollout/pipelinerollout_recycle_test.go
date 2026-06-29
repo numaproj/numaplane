@@ -36,6 +36,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -297,6 +298,154 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_getForceAppliedSpec(t *testing.T) {
+	ctx := context.Background()
+
+	zero := int32(0)
+
+	tests := []struct {
+		name                  string
+		currentPipelineISBSvc string
+		newPipelineISBSvc     string
+		newPipelineLifecycle  *numaflowv1.Lifecycle
+		expectError           bool
+		expectedISBSvcName    string
+	}{
+		{
+			name:                  "preserves current pipeline ISBService name",
+			currentPipelineISBSvc: "current-isbsvc",
+			newPipelineISBSvc:     "new-isbsvc",
+			newPipelineLifecycle:  &numaflowv1.Lifecycle{DesiredPhase: numaflowv1.PipelinePhasePaused},
+			expectedISBSvcName:    "current-isbsvc",
+		},
+		{
+			name:                  "uses default ISBService name when current pipeline has none set",
+			currentPipelineISBSvc: "",
+			newPipelineISBSvc:     "new-isbsvc",
+			newPipelineLifecycle:  &numaflowv1.Lifecycle{DesiredPhase: numaflowv1.PipelinePhaseRunning},
+			expectedISBSvcName:    "default",
+		},
+		{
+			name:                  "sets desiredPhase to Running when new pipeline lifecycle is unset",
+			currentPipelineISBSvc: "current-isbsvc",
+			newPipelineISBSvc:     "new-isbsvc",
+			newPipelineLifecycle:  nil,
+			expectedISBSvcName:    "current-isbsvc",
+		},
+		{
+			name:                  "sets desiredPhase to Running when new pipeline is already Running",
+			currentPipelineISBSvc: "shared-isbsvc",
+			newPipelineISBSvc:     "shared-isbsvc",
+			newPipelineLifecycle:  &numaflowv1.Lifecycle{DesiredPhase: numaflowv1.PipelinePhaseRunning},
+			expectedISBSvcName:    "shared-isbsvc",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			currentPipeline := pipelineUnstructuredForForceAppliedSpecTest(
+				"current", tc.currentPipelineISBSvc, &numaflowv1.Lifecycle{DesiredPhase: numaflowv1.PipelinePhasePaused},
+			)
+			newPipeline := pipelineUnstructuredForForceAppliedSpecTest(
+				"new", tc.newPipelineISBSvc, tc.newPipelineLifecycle,
+			)
+			newPipelineBefore := newPipeline.DeepCopy()
+
+			result, err := getForceAppliedSpec(ctx, currentPipeline, newPipeline)
+			if tc.expectError {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			isbsvcName, err := numaflowtypes.GetPipelineISBSVCName(result)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedISBSvcName, isbsvcName)
+
+			desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(result)
+			assert.NoError(t, err)
+			assert.Equal(t, string(numaflowv1.PipelinePhaseRunning), desiredPhase)
+
+			var pipelineSpec numaflowv1.Pipeline
+			err = runtime.DefaultUnstructuredConverter.FromUnstructured(result.Object, &pipelineSpec)
+			assert.NoError(t, err)
+
+			for _, vertex := range pipelineSpec.Spec.Vertices {
+				if vertex.Source != nil {
+					assert.NotNil(t, vertex.Scale.Min)
+					assert.NotNil(t, vertex.Scale.Max)
+					assert.Equal(t, zero, *vertex.Scale.Min)
+					assert.Equal(t, zero, *vertex.Scale.Max)
+				}
+			}
+
+			for _, vertex := range pipelineSpec.Spec.Vertices {
+				if vertex.Sink != nil {
+					assert.NotNil(t, vertex.Scale.Min)
+					assert.NotNil(t, vertex.Scale.Max)
+					assert.Equal(t, int32(2), *vertex.Scale.Min)
+					assert.Equal(t, int32(5), *vertex.Scale.Max)
+				}
+			}
+
+			assert.Equal(t, newPipelineBefore.Object, newPipeline.Object)
+		})
+	}
+}
+
+func pipelineUnstructuredForForceAppliedSpecTest(name, isbsvcName string, lifecycle *numaflowv1.Lifecycle) *unstructured.Unstructured {
+	vertices := []numaflowv1.AbstractVertex{
+		{
+			Name: "in",
+			Source: &numaflowv1.Source{
+				Generator: &numaflowv1.GeneratorSource{},
+			},
+			Scale: numaflowv1.Scale{
+				Min: int32Ptr(3),
+				Max: int32Ptr(6),
+			},
+		},
+		{
+			Name: "out",
+			Sink: &numaflowv1.Sink{
+				AbstractSink: numaflowv1.AbstractSink{
+					Log: &numaflowv1.Log{},
+				},
+			},
+			Scale: numaflowv1.Scale{
+				Min: int32Ptr(2),
+				Max: int32Ptr(5),
+			},
+		},
+	}
+
+	spec := numaflowv1.PipelineSpec{
+		InterStepBufferServiceName: isbsvcName,
+		Vertices:                   vertices,
+	}
+	if lifecycle != nil {
+		spec.Lifecycle = *lifecycle
+	}
+
+	pipeline := &numaflowv1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ctlrcommon.DefaultTestNamespace,
+		},
+		Spec: spec,
+	}
+
+	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pipeline)
+	if err != nil {
+		panic(err)
+	}
+	return &unstructured.Unstructured{Object: obj}
+}
+
+func int32Ptr(i int32) *int32 {
+	return &i
 }
 
 // Test_Recycle tests the Recycle function with various input scenarios
