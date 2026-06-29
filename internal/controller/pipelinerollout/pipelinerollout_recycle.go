@@ -83,7 +83,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		return true, err
 	}
 
-	shouldDelete, err := r.shouldDeleteRecyclablePipeline(ctx, pipelineRollout, pipeline)
+	shouldDelete, expired, err := r.shouldDeleteRecyclablePipeline(ctx, pipelineRollout, pipeline)
 	if err != nil {
 		return false, err
 	}
@@ -91,6 +91,9 @@ func (r *PipelineRolloutReconciler) Recycle(
 		numaLogger.Info("Pipeline will be deleted now")
 		err = kubernetes.DeleteResource(ctx, r.client, pipeline)
 		return true, err
+	}
+	if expired {
+		return false, nil
 	}
 
 	// Get live Pipeline here
@@ -706,45 +709,62 @@ func isPipelineSpecOriginal(pipeline *unstructured.Unstructured) bool {
 }
 
 // shouldDeleteRecyclablePipeline determines if a recyclable pipeline should be deleted immediately
-// without going through the drain process. Returns true if the pipeline should be deleted.
+// without going through the drain process.
+// Returns shouldDelete (true if the pipeline should be deleted) and expired (true if max recyclable duration was exceeded).
 func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
-	pipeline *unstructured.Unstructured) (bool, error) {
+	pipeline *unstructured.Unstructured) (shouldDelete bool, expired bool, err error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// if recyclable pipeline has deletion annotation then just delete it
 	if pipeline.GetAnnotations() != nil && pipeline.GetAnnotations()[common.AnnotationKeyMarkedForDeletion] == "true" {
 		numaLogger.Debug("Pipeline is recyclable and marked for deletion, will be deleted now")
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
-		return true, nil
+		return true, false, nil
 	}
 
 	if pipelineRollout.Spec.Strategy != nil && pipelineRollout.Spec.Strategy.Progressive.ForcePromote {
 		// this is a case in which user likely doesn't care about data loss (and also we have no idea if the "promoted" pipeline is any good), so we can just delete the pipeline without draining
 		numaLogger.Debug("PipelineRollout strategy implies no concern for data loss so Pipeline will be deleted without draining")
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
-		return true, nil
+		return true, false, nil
 	}
 
 	// if pipeline doesn't require drain then just delete it
 	if pipeline.GetAnnotations() == nil || pipeline.GetAnnotations()[common.AnnotationKeyRequiresDrain] != "true" {
 		numaLogger.Debug("Pipeline does not require drain and will be deleted now")
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
-		return true, nil
+		return true, false, nil
 	}
 
-	expired, err := r.isRecycledPipelineExpired(ctx, pipeline)
+	expired, err = r.isRecycledPipelineExpired(ctx, pipeline)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	if expired {
-		numaLogger.Info("Pipeline has reached the max recyclable duration and will be deleted now")
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_NeverDrained)
-		return true, nil
+		if config.GetKeepUndrainedPipelines() {
+			// mark it as recyclable-expired
+			upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, r.client, pipeline)
+			if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclableExpired {
+				if err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclableExpired, upgradeStateReason, pipeline); err != nil {
+					return false, true, fmt.Errorf("failed to update pipeline %s/%s upgrade state to recyclable-expired: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+				}
+			}
+			numaLogger.Warn("Pipeline has reached the max recyclable duration but keepUndrainedPipelines is enabled - will not delete pipeline - user needs to delete manually")
+			// make sure it's scaled down completely so it's not consuming resources at least
+			err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, r.client)
+			if err != nil {
+				return false, true, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+			}
+			return false, true, nil
+		}
+		numaLogger.Warn("Pipeline has reached the max recyclable duration and will be deleted now")
+		return true, true, nil
 	}
 
-	return false, nil
+	return false, false, nil
 }
 
 // isRecycledPipelineExpired checks if the max recyclable duration has been exceeded.
@@ -770,15 +790,12 @@ func (r *PipelineRolloutReconciler) isRecycledPipelineExpired(
 
 		if elapsedMinutes >= maxDurationMinutes {
 			numaLogger.WithValues("recyclableStartTime", recyclableStartTime, "elapsedMinutes", elapsedMinutes, "maxDurationMinutes", maxDurationMinutes).
-				Info("Time expired on force draining: deleting pipeline now")
+				Warn("Time expired on force draining")
 
 			return true, nil
 		}
 	} else {
-		// for backward compatibility:
-		// if the annotation is not set, then it means this Pipeline was marked recyclable prior to the existence of the annotation,
-		// meaning it's quite old and we should delete it
-		numaLogger.Info("Pipeline was marked recyclable prior to the existence of the annotation, meaning it's old and will be deleted now")
+		numaLogger.Error(errors.New("missing recyclable-start-time annotation"), "Pipeline somehow doesn't have recyclable-start-time annotation??")
 		return true, nil
 	}
 

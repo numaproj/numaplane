@@ -123,6 +123,10 @@ type PipelineConfig struct {
 	// ForceDrainFailureWaitDuration is the duration to wait after a force drain failure before deleting.
 	// If not defined, default to 15 seconds
 	ForceDrainFailureWaitDuration *int32 `json:"forceDrainFailureWaitDuration,omitempty"`
+
+	// KeepUndrainedPipelines controls whether pipelines that could not be drained are kept
+	// after maxRecyclableDurationMinutes has elapsed rather than deleted.
+	KeepUndrainedPipelines bool `json:"keepUndrainedPipelines"`
 }
 
 type ProgressiveConfig struct {
@@ -424,4 +428,9 @@ func GetForceDrainFailureWaitDuration() int32 {
 		return *globalConfig.Pipeline.ForceDrainFailureWaitDuration
 	}
 	return 15
+}
+
+func GetKeepUndrainedPipelines() bool {
+	globalConfig, _ := GetConfigManagerInstance().GetConfig()
+	return globalConfig.Pipeline.KeepUndrainedPipelines
 }
