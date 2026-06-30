@@ -174,7 +174,10 @@ func MarkRecyclable(ctx context.Context, c client.Client, upgradeStateReason *co
 	if err != nil {
 		return err
 	}
-	// patch the annotation to mark the time when the resource was marked as recyclable
+
+	if childObject.GetAnnotations()[common.AnnotationKeyRecyclableStartTime] != "" {
+		return nil
+	}
 	return kubernetes.SetAndPatchAnnotations(ctx, c, childObject, map[string]string{
 		common.AnnotationKeyRecyclableStartTime: time.Now().Format(time.RFC3339),
 	})
