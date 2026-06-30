@@ -311,7 +311,7 @@ func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, 
 	// check if we've waited long enough
 	startTime, err := time.Parse(time.RFC3339, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
 	if err != nil {
-		return false, fmt.Errorf("failed to parse drain failure start time annotation %q on pipeline %s/%s: %w", startTime, pipeline.GetNamespace(), pipeline.GetName(), err)
+		return false, fmt.Errorf("failed to parse drain failure start time annotation %q on pipeline %s/%s: %w", pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime], pipeline.GetNamespace(), pipeline.GetName(), err)
 	}
 	waitDurationSeconds := config.GetForceDrainFailureWaitDuration()
 	if int32(currentTime.Sub(startTime).Seconds()) < waitDurationSeconds {

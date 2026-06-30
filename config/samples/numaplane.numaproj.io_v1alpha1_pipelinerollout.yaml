@@ -33,7 +33,7 @@ spec:
           source:
             # A self data generating source
             generator:
-              rpu: 500
+              rpu: 5000
               duration: 1s
         - name: cat
           scale: 

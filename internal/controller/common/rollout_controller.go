@@ -174,7 +174,13 @@ func MarkRecyclable(ctx context.Context, c client.Client, upgradeStateReason *co
 	if err != nil {
 		return err
 	}
-	// patch the annotation to mark the time when the resource was marked as recyclable
+	// patch the annotation to mark the time when the resource was first marked as recyclable
+	// only set it if it's not already present: this function may be called on every reconciliation for an
+	// already-recyclable child (e.g. a pipeline whose isbsvc is recyclable), and re-stamping would reset the
+	// expiration clock used by isRecycledPipelineExpired, so the resource could never expire.
+	if childObject.GetAnnotations()[common.AnnotationKeyRecyclableStartTime] != "" {
+		return nil
+	}
 	return kubernetes.SetAndPatchAnnotations(ctx, c, childObject, map[string]string{
 		common.AnnotationKeyRecyclableStartTime: time.Now().Format(time.RFC3339),
 	})

@@ -616,6 +616,37 @@ func VerifyISBServiceDeletion(isbsvcName string) {
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("The InterstepBufferService %s/%s should have been deleted but it was found.", Namespace, isbsvcName))
 }
 
+// VerifyISBServiceUpgradeState verifies that an InterstepBufferService has the expected upgrade state label and optionally the upgrade state reason label
+func VerifyISBServiceUpgradeState(namespace, isbsvcName, upgradeState string, upgradeStateReason *string) {
+	CheckEventually(fmt.Sprintf("verifying InterstepBufferService %s has upgrade state %s", isbsvcName, upgradeState), func() bool {
+		isbsvc, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(namespace).Get(ctx, isbsvcName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+
+		labels := isbsvc.GetLabels()
+		if labels == nil {
+			return false
+		}
+
+		// Check upgrade state label
+		actualUpgradeState, found := labels[common.LabelKeyUpgradeState]
+		if !found || actualUpgradeState != upgradeState {
+			return false
+		}
+
+		// If upgradeStateReason is provided, check it as well
+		if upgradeStateReason != nil {
+			actualUpgradeStateReason, found := labels[common.LabelKeyUpgradeStateReason]
+			if !found || actualUpgradeStateReason != *upgradeStateReason {
+				return false
+			}
+		}
+
+		return true
+	}).Should(BeTrue())
+}
+
 func VerifyISBServiceProgressiveFailure(isbsvcRolloutName string, promotedISBSvcName string, upgradingISBSvcName string) {
 	VerifyISBServiceRolloutProgressiveStatus(isbsvcRolloutName, promotedISBSvcName, upgradingISBSvcName, apiv1.AssessmentResultFailure)
 	VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName, metav1.ConditionFalse)
