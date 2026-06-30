@@ -191,9 +191,9 @@ const (
 	// (this only applies for recyclable pipelines)
 	AnnotationKeyMarkedForDeletion = KeyNumaplanePrefix + "marked-for-deletion"
 
-	// AnnotationKeyForceDrainFailureStartTime is annotated on a pipeline when it is marked as failed due to force drain
+	// AnnotationKeyDrainFailureStartTime is annotated on a recyclable pipeline when it is marked as failed while draining
 	// This is used to check for transient vs persistent failures to know if we can stop trying to drain
-	AnnotationKeyForceDrainFailureStartTime = KeyNumaplanePrefix + "force-drain-failure-start-time"
+	AnnotationKeyDrainFailureStartTime = KeyNumaplanePrefix + "drain-failure-start-time"
 
 	// AnnotationKeyRecyclableStartTime is annotated on a pipeline when it is marked as recyclable
 	AnnotationKeyRecyclableStartTime = KeyNumaplanePrefix + "recyclable-start-time"

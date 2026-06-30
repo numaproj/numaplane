@@ -36,6 +36,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -299,6 +300,154 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 	}
 }
 
+func Test_getForceAppliedSpec(t *testing.T) {
+	ctx := context.Background()
+
+	zero := int32(0)
+
+	tests := []struct {
+		name                  string
+		currentPipelineISBSvc string
+		newPipelineISBSvc     string
+		newPipelineLifecycle  *numaflowv1.Lifecycle
+		expectError           bool
+		expectedISBSvcName    string
+	}{
+		{
+			name:                  "preserves current pipeline ISBService name",
+			currentPipelineISBSvc: "current-isbsvc",
+			newPipelineISBSvc:     "new-isbsvc",
+			newPipelineLifecycle:  &numaflowv1.Lifecycle{DesiredPhase: numaflowv1.PipelinePhasePaused},
+			expectedISBSvcName:    "current-isbsvc",
+		},
+		{
+			name:                  "uses default ISBService name when current pipeline has none set",
+			currentPipelineISBSvc: "",
+			newPipelineISBSvc:     "new-isbsvc",
+			newPipelineLifecycle:  &numaflowv1.Lifecycle{DesiredPhase: numaflowv1.PipelinePhaseRunning},
+			expectedISBSvcName:    "default",
+		},
+		{
+			name:                  "sets desiredPhase to Running when new pipeline lifecycle is unset",
+			currentPipelineISBSvc: "current-isbsvc",
+			newPipelineISBSvc:     "new-isbsvc",
+			newPipelineLifecycle:  nil,
+			expectedISBSvcName:    "current-isbsvc",
+		},
+		{
+			name:                  "sets desiredPhase to Running when new pipeline is already Running",
+			currentPipelineISBSvc: "shared-isbsvc",
+			newPipelineISBSvc:     "shared-isbsvc",
+			newPipelineLifecycle:  &numaflowv1.Lifecycle{DesiredPhase: numaflowv1.PipelinePhaseRunning},
+			expectedISBSvcName:    "shared-isbsvc",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			currentPipeline := pipelineUnstructuredForForceAppliedSpecTest(
+				"current", tc.currentPipelineISBSvc, &numaflowv1.Lifecycle{DesiredPhase: numaflowv1.PipelinePhasePaused},
+			)
+			newPipeline := pipelineUnstructuredForForceAppliedSpecTest(
+				"new", tc.newPipelineISBSvc, tc.newPipelineLifecycle,
+			)
+			newPipelineBefore := newPipeline.DeepCopy()
+
+			result, err := getForceAppliedSpec(ctx, currentPipeline, newPipeline)
+			if tc.expectError {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			isbsvcName, err := numaflowtypes.GetPipelineISBSVCName(result)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedISBSvcName, isbsvcName)
+
+			desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(result)
+			assert.NoError(t, err)
+			assert.Equal(t, string(numaflowv1.PipelinePhaseRunning), desiredPhase)
+
+			var pipelineSpec numaflowv1.Pipeline
+			err = runtime.DefaultUnstructuredConverter.FromUnstructured(result.Object, &pipelineSpec)
+			assert.NoError(t, err)
+
+			for _, vertex := range pipelineSpec.Spec.Vertices {
+				if vertex.Source != nil {
+					assert.NotNil(t, vertex.Scale.Min)
+					assert.NotNil(t, vertex.Scale.Max)
+					assert.Equal(t, zero, *vertex.Scale.Min)
+					assert.Equal(t, zero, *vertex.Scale.Max)
+				}
+			}
+
+			for _, vertex := range pipelineSpec.Spec.Vertices {
+				if vertex.Sink != nil {
+					assert.NotNil(t, vertex.Scale.Min)
+					assert.NotNil(t, vertex.Scale.Max)
+					assert.Equal(t, int32(2), *vertex.Scale.Min)
+					assert.Equal(t, int32(5), *vertex.Scale.Max)
+				}
+			}
+
+			assert.Equal(t, newPipelineBefore.Object, newPipeline.Object)
+		})
+	}
+}
+
+func pipelineUnstructuredForForceAppliedSpecTest(name, isbsvcName string, lifecycle *numaflowv1.Lifecycle) *unstructured.Unstructured {
+	vertices := []numaflowv1.AbstractVertex{
+		{
+			Name: "in",
+			Source: &numaflowv1.Source{
+				Generator: &numaflowv1.GeneratorSource{},
+			},
+			Scale: numaflowv1.Scale{
+				Min: int32Ptr(3),
+				Max: int32Ptr(6),
+			},
+		},
+		{
+			Name: "out",
+			Sink: &numaflowv1.Sink{
+				AbstractSink: numaflowv1.AbstractSink{
+					Log: &numaflowv1.Log{},
+				},
+			},
+			Scale: numaflowv1.Scale{
+				Min: int32Ptr(2),
+				Max: int32Ptr(5),
+			},
+		},
+	}
+
+	spec := numaflowv1.PipelineSpec{
+		InterStepBufferServiceName: isbsvcName,
+		Vertices:                   vertices,
+	}
+	if lifecycle != nil {
+		spec.Lifecycle = *lifecycle
+	}
+
+	pipeline := &numaflowv1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ctlrcommon.DefaultTestNamespace,
+		},
+		Spec: spec,
+	}
+
+	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pipeline)
+	if err != nil {
+		panic(err)
+	}
+	return &unstructured.Unstructured{Object: obj}
+}
+
+func int32Ptr(i int32) *int32 {
+	return &i
+}
+
 // Test_Recycle tests the Recycle function with various input scenarios
 func Test_Recycle(t *testing.T) {
 
@@ -401,6 +550,15 @@ func Test_Recycle(t *testing.T) {
 			pipelinePhase:      numaflowv1.PipelinePhaseRunning,
 			expectedDeleted:    true, // Delete recreate should delete immediately
 			expectedError:      false,
+		},
+		{
+			name:                           "Progressive Replace - original drain failed, wait before force drain",
+			upgradeStateReason:             string(common.LabelValueProgressiveReplaced),
+			requiresDrain:                  true,
+			desiredPhase:                   &paused,
+			pipelinePhase:                  failed,
+			isPromotedPipelineNew:          true,
+			expectForceDrainFailureTimeSet: true,
 		},
 		{
 			name:                              "Progressive Replace - second attempt (force drain caused pipeline to have phase=Failed)",
@@ -678,7 +836,7 @@ func Test_Recycle(t *testing.T) {
 
 				// Verify if the force drain failure time annotation is set
 				if tc.expectForceDrainFailureTimeSet {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainFailureStartTime)
+					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyDrainFailureStartTime)
 				}
 
 				// Check if force-drain-specs-started annotation matches expected value
@@ -719,6 +877,100 @@ func Test_Recycle(t *testing.T) {
 						}
 					}
 				}
+			}
+		})
+	}
+}
+
+func Test_markPipelineForceDrainStarted_clearsForceDrainFailureStartTime(t *testing.T) {
+	ctx := context.Background()
+
+	pipeline := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "numaflow.numaproj.io/v1alpha1",
+			"kind":       "Pipeline",
+			"metadata": map[string]interface{}{
+				"name":      "test-pipeline",
+				"namespace": ctlrcommon.DefaultTestNamespace,
+			},
+		},
+	}
+	pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+	pipeline.SetAnnotations(map[string]string{
+		common.AnnotationKeyDrainFailureStartTime: time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
+	})
+
+	scheme := runtime.NewScheme()
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
+
+	err := markPipelineForceDrainStarted(ctx, fakeClient, pipeline, "promoted-pipeline-1")
+	assert.NoError(t, err)
+	assert.Equal(t, "promoted-pipeline-1,", pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecsStarted])
+	assert.Empty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
+}
+
+func Test_checkForFailedPipeline(t *testing.T) {
+	ctx := context.Background()
+	waitDuration := time.Duration(config.GetForceDrainFailureWaitDuration()) * time.Second
+	withinWait := waitDuration - time.Second
+	pastWait := waitDuration + time.Second
+
+	tests := []struct {
+		name                      string
+		failureStartTimeAgo       *time.Duration // nil = no annotation (first failure detection)
+		expectNonTransientFailure bool
+		expectAnnotationSet       bool
+	}{
+		{
+			name:                "first failure sets start time and waits",
+			expectAnnotationSet: true,
+		},
+		{
+			name:                "failure within wait duration",
+			failureStartTimeAgo: &withinWait,
+		},
+		{
+			name:                      "failure past wait duration",
+			failureStartTimeAgo:       &pastWait,
+			expectNonTransientFailure: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pipeline := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "numaflow.numaproj.io/v1alpha1",
+					"kind":       "Pipeline",
+					"metadata": map[string]interface{}{
+						"name":      "test-pipeline",
+						"namespace": ctlrcommon.DefaultTestNamespace,
+					},
+				},
+			}
+			pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+
+			if tc.failureStartTimeAgo != nil {
+				pipeline.SetAnnotations(map[string]string{
+					common.AnnotationKeyDrainFailureStartTime: time.Now().Add(-*tc.failureStartTimeAgo).Format(time.RFC3339),
+				})
+			}
+
+			scheme := runtime.NewScheme()
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
+			reconciler := &PipelineRolloutReconciler{
+				client:        fakeClient,
+				customMetrics: createTestMetrics(),
+				recorder:      record.NewFakeRecorder(100),
+			}
+
+			nonTransientFailure, err := reconciler.checkForFailedPipeline(ctx, pipeline)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectNonTransientFailure, nonTransientFailure)
+
+			if tc.expectAnnotationSet {
+				assert.NotEmpty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
 			}
 		})
 	}

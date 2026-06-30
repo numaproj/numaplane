@@ -136,7 +136,15 @@ func (r *PipelineRolloutReconciler) Recycle(
 			} // else implicitly fall through to force draining
 
 		} else if failed {
-			numaLogger.Debug("Pipeline is in Failed phase; will force drain") // fall through to force draining
+			nonTransientFailure, err := r.checkForFailedPipeline(ctx, pipeline)
+			if err != nil {
+				return false, fmt.Errorf("failed to check for failed pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+			}
+			if !nonTransientFailure {
+				numaLogger.Debug("Pipeline is in Failed phase; waiting before force drain")
+				return false, nil
+			}
+			numaLogger.Debug("Pipeline has been in Failed phase for a period of time; will force drain") // fall through to force draining
 		} else {
 			return false, nil
 		}
@@ -274,8 +282,6 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 			currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsCompleted)
 			err := kubernetes.SetAndPatchAnnotations(ctx, r.client, pipeline, map[string]string{
 				common.AnnotationKeyForceDrainSpecsCompleted: currentVal + promotedPipeline.GetName() + ",",
-				// reset this so we won't try to look at it on the next force drain attempt
-				common.AnnotationKeyForceDrainFailureStartTime: "",
 			})
 			return false, err
 		}
@@ -285,7 +291,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 }
 
 // check if the Pipeline has been in Failed state for long enough to consider it a permanent failure
-// if so, delete it; otherwise, return false to indicate we haven't deleted it yet.
+// if so, return true; otherwise, return false to indicate we should keep waiting.
 // decision: just use original failure start time in the case of Pipeline switching Failed->Running->Failed
 func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
 
@@ -293,26 +299,26 @@ func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, 
 	currentTime := time.Now()
 
 	// the first time we detect failure, mark the time
-	if pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime] == "" {
+	if pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime] == "" {
 		if err := kubernetes.SetAndPatchAnnotations(ctx, r.client, pipeline, map[string]string{
-			common.AnnotationKeyForceDrainFailureStartTime: currentTime.Format(time.RFC3339),
+			common.AnnotationKeyDrainFailureStartTime: currentTime.Format(time.RFC3339),
 		}); err != nil {
-			return false, fmt.Errorf("failed to set force drain failure start time annotation on pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+			return false, fmt.Errorf("failed to set drain failure start time annotation on pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
 		return false, nil
 	}
 
 	// check if we've waited long enough
-	startTime, err := time.Parse(time.RFC3339, pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime])
+	startTime, err := time.Parse(time.RFC3339, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
 	if err != nil {
-		return false, fmt.Errorf("failed to parse force drain failure start time annotation %q on pipeline %s/%s: %w", startTime, pipeline.GetNamespace(), pipeline.GetName(), err)
+		return false, fmt.Errorf("failed to parse drain failure start time annotation %q on pipeline %s/%s: %w", pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime], pipeline.GetNamespace(), pipeline.GetName(), err)
 	}
 	waitDurationSeconds := config.GetForceDrainFailureWaitDuration()
 	if int32(currentTime.Sub(startTime).Seconds()) < waitDurationSeconds {
-		numaLogger.WithValues("startTime", startTime, "currentTime", currentTime, "waitDuration", waitDurationSeconds).Debug("waiting longer before deleting failed pipeline during force drain")
+		numaLogger.WithValues("startTime", startTime, "currentTime", currentTime, "waitDuration", waitDurationSeconds).Debug("waiting longer before giving up on drain due to failed pipeline")
 		return false, nil
 	} else {
-		numaLogger.Infof("Pipeline has the promoted pipeline's spec and has failed, drain attempt is complete, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
+		numaLogger.Infof("Pipeline has failed for long enough, giving up on current drain attempt, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
 		return true, err
 	}
 }
@@ -340,22 +346,41 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 	}
 }
 
+// getForceAppliedSpec returns a copy of newPipeline with the transformations needed for force draining:
+// source vertices scaled to zero, ISBService name preserved from currentPipeline, and desiredPhase set to Running.
+func getForceAppliedSpec(ctx context.Context, currentPipeline, newPipelineSpec *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	forceAppliedPipelineSpec := newPipelineSpec.DeepCopy()
+
+	err := numaflowtypes.ScalePipelineDefSourceVerticesToZero(ctx, forceAppliedPipelineSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	// Preserve the current pipeline's ISBService name so we don't change it during force drain (a Pipeline cannot have its ISBService changed or it won't work)
+	currentISBSvcName, err := numaflowtypes.GetPipelineISBSVCName(currentPipeline)
+	if err != nil {
+		return nil, err
+	}
+	if err := numaflowtypes.PipelineWithISBServiceName(forceAppliedPipelineSpec, currentISBSvcName); err != nil {
+		return nil, err
+	}
+
+	// Set the desiredPhase to Running just in case it isn't (we need to take it out of Paused state if it's in it to give it a chance to pause again)
+	err = unstructured.SetNestedField(forceAppliedPipelineSpec.Object, string(numaflowv1.PipelinePhaseRunning), "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return nil, err
+	}
+
+	return forceAppliedPipelineSpec, nil
+}
+
 // Update the pipeline to the new spec with min=max=0 initially and set to desiredPhase=Running
 // (it will be set to Paused later)
 // currentPipeline: the pipeline that will be updated
 // newPipeline: spec from the new pipeline which will be applied
 func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, newPipeline *unstructured.Unstructured, c client.Client) error {
 	numaLogger := logger.FromContext(ctx)
-	// take the newPipeline Spec, make a copy, and set any sources to min=max=0
-	newPipelineCopy := newPipeline.DeepCopy()
-	err := numaflowtypes.ScalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
-	if err != nil {
-		return err
-	}
-
-	// Set the desiredPhase to Running just in case it isn't (we need to make to take it out of Paused state if it's in it to give it a chance to pause again)
-	// and set the "overridden-spec" annotation to indicate that we've applied over top the original
-	err = unstructured.SetNestedField(newPipelineCopy.Object, string(numaflowv1.PipelinePhaseRunning), "spec", "lifecycle", "desiredPhase")
+	forceAppliedPipeline, err := getForceAppliedSpec(ctx, currentPipeline, newPipeline)
 	if err != nil {
 		return err
 	}
@@ -365,7 +390,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 	// Create a strategic merge patch by comparing the current pipeline with the new pipeline copy
 	// We need to extract just the fields we want to update: spec, metadata.annotations
 	patchData := map[string]interface{}{
-		"spec": newPipelineCopy.Object["spec"], // we assume we're the only ones who write to the Spec; therefore it's okay to copy the entire thing and use it knowing that nobody else has changed it
+		"spec": forceAppliedPipeline.Object["spec"], // we assume we're the only ones who write to the Spec; therefore it's okay to copy the entire thing and use it knowing that nobody else has changed it
 	}
 
 	// Convert patch data to JSON
@@ -653,6 +678,16 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 	return false, nil
 }
 
+// clearDrainFailureStartTimeAnnotation resets the failure timer when starting a new force drain attempt, just in case it's set
+func clearDrainFailureStartTimeAnnotation(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) error {
+	if pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime] == "" {
+		return nil
+	}
+	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
+		common.AnnotationKeyDrainFailureStartTime: "",
+	})
+}
+
 // update the Pipeline's annotation to mark that a new pipeline's spec has been used to update the pipeline
 func markPipelineForceDrainStarted(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) error {
 	// first check if it's already marked in which case we'll skip this
@@ -662,9 +697,14 @@ func markPipelineForceDrainStarted(ctx context.Context, c client.Client, pipelin
 	currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsStarted)
 
 	// Patch in Kubernetes
-	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
+	if err := kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
 		common.AnnotationKeyForceDrainSpecsStarted: currentVal + forceDrainSpecPipeline + ",",
-	})
+	}); err != nil {
+		return err
+	}
+	// just in case a previous drain had a state in which the Pipeline was "failed", we clear that time so we can reuse the annotation from scratch
+	// if we need to
+	return clearDrainFailureStartTimeAnnotation(ctx, c, pipeline)
 }
 
 // update the Pipeline's annotation to mark that a new pipeline's spec has been used to update the pipeline

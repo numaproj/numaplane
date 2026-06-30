@@ -262,16 +262,22 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		// Verify ISBServiceRollout Progressive Status
 		VerifyISBServiceProgressiveFailure(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 4))
 
-		// Now put the isbsvc spec back to what it was before; this will cause the isbsvc and pipeline to both go back to just the "promoted" one
+		// Now put the isbsvc spec back to what it was before; this discontinues the progressive upgrade, so the
+		// "upgrading" isbsvc and pipeline both become "recyclable".
+		// Note: in this scenario the "upgrading" pipeline is permanently Failed (it's pinned to the failed "upgrading"
+		// isbsvc, which is stuck on the invalid Jetstream version), so it can never drain. Therefore it isn't deleted
+		// promptly; it remains "recyclable" until the maxRecyclableDurationMinutes expiry, which is well beyond this
+		// test's timeout. The "upgrading" isbsvc likewise can't be deleted while the pipeline still uses it. So rather
+		// than verify deletion, we verify both settle into the "recyclable" state.
 		UpdateISBService(isbServiceRolloutName, initialISBServiceSpec)
-		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))     // the "Upgrading" one
-		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 4)) // the "Upgrading" one
-		CheckConsistently("verifying just the original promoted Pipeline remains", func() bool {
+		VerifyPipelineUpgradeState(Namespace, GetInstanceName(pipelineRolloutName, 1), string(common.LabelValueUpgradeRecyclable), nil)     // the "Upgrading" one
+		VerifyISBServiceUpgradeState(Namespace, GetInstanceName(isbServiceRolloutName, 4), string(common.LabelValueUpgradeRecyclable), nil) // the "Upgrading" one
+		CheckConsistently("verifying trial Pipeline recycled", func() bool {
 			pipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
 			return GetNumberOfNonRecyclableChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName) == 1 && pipelineName == promotedPipelineName
 		}).Should(BeTrue())
 
-		CheckConsistently("verifying just the original promoted InterstepBufferService remains", func() bool {
+		CheckConsistently("verifying trial InterstepBufferService recycled", func() bool {
 			isbsvcName, _ := GetPromotedISBServiceName(Namespace, isbServiceRolloutName)
 			return GetNumberOfNonRecyclableChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName) == 1 && isbsvcName == promotedISBSvc.GetName()
 		}).Should(BeTrue())
