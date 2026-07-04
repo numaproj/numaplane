@@ -105,7 +105,8 @@ type RecyclablePipelineStatus struct {
 	// Name of the recyclable Pipeline
 	Name string `json:"name,omitempty"`
 
-	// DrainAttempts represents the attempts to drain the Pipeline that were done
+	// DrainAttempts represents the attempts to drain the Pipeline that were done.
+	// Entries are stored in chronological order (oldest first, newest last).
 	DrainAttempts []DrainAttempt `json:"drainAttempts,omitempty"`
 }
 
@@ -119,6 +120,19 @@ func (status *PipelineProgressiveStatus) GetRecyclablePipelineStatus(pipelineNam
 	return nil
 }
 
+// GetOrCreateRecyclablePipelineStatus returns the RecyclablePipelineStatus for the given pipeline name,
+// appending a new entry if one does not already exist.
+func (status *PipelineProgressiveStatus) GetOrCreateRecyclablePipelineStatus(pipelineName string) *RecyclablePipelineStatus {
+	if recyclablePipelineStatus := status.GetRecyclablePipelineStatus(pipelineName); recyclablePipelineStatus != nil {
+		return recyclablePipelineStatus
+	}
+	status.RecyclablePipelinesStatus = append(status.RecyclablePipelinesStatus, RecyclablePipelineStatus{
+		Name:          pipelineName,
+		DrainAttempts: []DrainAttempt{},
+	})
+	return status.GetRecyclablePipelineStatus(pipelineName)
+}
+
 // GetDrainAttempt returns the DrainAttempt that used the given source pipeline's spec, or nil if not found.
 func (status *RecyclablePipelineStatus) GetDrainAttempt(sourcePipelineName string) *DrainAttempt {
 	for i := range status.DrainAttempts {
@@ -127,6 +141,15 @@ func (status *RecyclablePipelineStatus) GetDrainAttempt(sourcePipelineName strin
 		}
 	}
 	return nil
+}
+
+// GetLastDrainAttempt returns the most recent DrainAttempt, or nil if there are none.
+// DrainAttempts must be kept in chronological order (oldest first, newest last).
+func (status *RecyclablePipelineStatus) GetLastDrainAttempt() *DrainAttempt {
+	if len(status.DrainAttempts) == 0 {
+		return nil
+	}
+	return &status.DrainAttempts[len(status.DrainAttempts)-1]
 }
 
 // DrainCompletionReason describes why a drain attempt ended.

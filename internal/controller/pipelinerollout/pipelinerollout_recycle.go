@@ -38,6 +38,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	ctx = logger.WithLogger(ctx, numaLogger)
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	recyclablePipelineStatus := pipelineRollout.Status.ProgressiveStatus.GetOrCreateRecyclablePipelineStatus(pipeline.GetName())
 
 	// Need to determine how to delete the pipeline
 	// Use the "upgrade-strategy-reason" Label to determine how
@@ -73,7 +74,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		}
 	}
 
-	numaLogger.WithValues("reason", upgradeStateReason).Debug("Recycling Pipeline")
+	numaLogger.WithValues("reason", upgradeStateReason, "drainAttemptCount", len(recyclablePipelineStatus.DrainAttempts)).Debug("Recycling Pipeline")
 
 	if !requiresPause {
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
@@ -105,6 +106,11 @@ func (r *PipelineRolloutReconciler) Recycle(
 	if pauseDesired {
 		numaLogger.Debug("Pipeline is not supposed to run, per definition: will not drain it yet")
 		return false, nil
+	}
+
+	lastDrainAttempt := recyclablePipelineStatus.GetLastDrainAttempt()
+	if lastDrainAttempt != nil {
+		numaLogger = numaLogger.WithValues("lastDrainAttemptSource", lastDrainAttempt.SourcePipelineSpec)
 	}
 
 	// Is the pipeline still defined with its original spec or have we overridden it with that of the "promoted" pipeline?

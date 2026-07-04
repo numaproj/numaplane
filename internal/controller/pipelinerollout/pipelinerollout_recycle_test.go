@@ -1062,6 +1062,37 @@ func Test_checkForValueInCommaDelimitedAnnotation(t *testing.T) {
 	}
 }
 
+func Test_GetOrCreateRecyclablePipelineStatus(t *testing.T) {
+	t.Run("returns existing entry", func(t *testing.T) {
+		status := &apiv1.PipelineProgressiveStatus{
+			RecyclablePipelinesStatus: []apiv1.RecyclablePipelineStatus{
+				{
+					Name: "pipeline-1",
+					DrainAttempts: []apiv1.DrainAttempt{
+						{SourcePipelineSpec: "pipeline-1"},
+					},
+				},
+			},
+		}
+
+		recyclablePipelineStatus := status.GetOrCreateRecyclablePipelineStatus("pipeline-1")
+		assert.NotNil(t, recyclablePipelineStatus)
+		assert.Equal(t, "pipeline-1", recyclablePipelineStatus.Name)
+		assert.Len(t, recyclablePipelineStatus.DrainAttempts, 1)
+		assert.Len(t, status.RecyclablePipelinesStatus, 1)
+	})
+
+	t.Run("creates new entry when missing", func(t *testing.T) {
+		status := &apiv1.PipelineProgressiveStatus{}
+
+		recyclablePipelineStatus := status.GetOrCreateRecyclablePipelineStatus("pipeline-2")
+		assert.NotNil(t, recyclablePipelineStatus)
+		assert.Equal(t, "pipeline-2", recyclablePipelineStatus.Name)
+		assert.Equal(t, []apiv1.DrainAttempt{}, recyclablePipelineStatus.DrainAttempts)
+		assert.Len(t, status.RecyclablePipelinesStatus, 1)
+	})
+}
+
 func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
 	reconciler := &PipelineRolloutReconciler{}
 
