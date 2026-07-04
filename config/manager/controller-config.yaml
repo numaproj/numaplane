@@ -6,20 +6,48 @@ data:
   config.yaml: |
     # Supported log levels are: VERBOSE, DEBUG, INFO, WARN. ERROR, FATAL will be printed regardless of the log level
     logLevel: INFO
+
+    # Resources which are deployable through gitops-engine (the ones belonging to Numaflow Controller deployment)
     includedResources: "group=apps,kind=Deployment;\
     group=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\
     group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
+
+    # Use 'progressive rollout strategy' by default
     defaultUpgradeStrategy: "progressive"
+
     progressive:
+      # Schedule for Progressive Rollout - comma-delimited values represent (all in seconds): 
+      # 1. delay before first check 
+      # 2. number of seconds provided overall
+      # 3. required consecutive success period - every check in this window must be success
+      # 4. check interval
       defaultAssessmentSchedule:
         - kind: Pipeline
-          schedule: "10,200,60,10"
+          schedule: "60,360,60,10"
         - kind: MonoVertex
-          schedule: "10,200,60,10"
+          schedule: "60,360,60,10"
         - kind: InterstepBufferService
           schedule: "0,0,0,10"
+
+      # We will stop waiting if any AnalysisRun is still Running after this number of seconds
       analysisRunTimeout: 1200
+    
+    # types of Resources which may be configured as Riders to "ride along" with the child resource
     permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler;group=policy,kind=PodDisruptionBudget"
+    
     pipeline:
-      forceDrainFailureWaitDuration: 15
-      maxRecyclableDurationMinutes: 240 # 4 hours
+      # The following fields are related to recycling Pipelines:
+      
+      # percentile of original number of pods running applied to recyclable pipelines while draining
+      recycleScaleFactor: 33
+
+      # if a recyclable Pipeline is in "Failed" phase for some reason, this is the number of seconds we will wait for it to get out of that 
+      # state before we stop trying to drain it
+      forceDrainFailureWaitDuration: 180
+
+      # number of minutes for which we will go through force drain attempts
+      # after this period of time, depending on value of 'keepUndrainedPipelines', we either delete the pipeline or mark it "recyclable-expired" 
+      maxRecyclableDurationMinutes: 720 # 12 hours
+
+      # after 'maxRecyclableDurationMinutes', if this is false: delete the pipeline; else mark it "recyclable-expired" 
+      keepUndrainedPipelines: false  
