@@ -878,6 +878,16 @@ func Test_Recycle(t *testing.T) {
 							}
 						}
 					}
+
+					if tc.desiredPhase != nil && *tc.desiredPhase != numaflowv1.PipelinePhasePaused {
+						drainAttemptSourcePipelineName := recyclablePipelineName
+						if tc.expectForceDrainPipelinesStarted != "" {
+							drainAttemptSourcePipelineName = firstCommaDelimitedValue(tc.expectForceDrainPipelinesStarted)
+						}
+						drainAttempt := recyclablePipelineStatus.GetDrainAttempt(drainAttemptSourcePipelineName)
+						require.NotNil(t, drainAttempt, "expected drain attempt for %s", drainAttemptSourcePipelineName)
+						assert.Equal(t, vertexReplicaCountsFromScaleDefinitions(tc.expectedVertexScaleDefinitions), drainAttempt.VertexReplicaCount)
+					}
 				}
 			}
 		})
@@ -1165,6 +1175,33 @@ func Test_RecyclablePipelineStatusDrainAttemptHelpers(t *testing.T) {
 		status.StartDrainAttempt("promoted-a")
 		require.Len(t, status.DrainAttempts, 1)
 		assert.Equal(t, firstStartTime, status.DrainAttempts[0].StartTime)
+	})
+
+	t.Run("SetDrainAttemptVertexReplicaCount", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+
+		status.SetDrainAttemptVertexReplicaCount("promoted-a", []apiv1.VertexScaleDefinition{
+			{
+				VertexName: "in",
+				ScaleDefinition: &apiv1.ScaleDefinition{
+					Min: int64Ptr(0),
+					Max: int64Ptr(0),
+				},
+			},
+			{
+				VertexName: "out",
+				ScaleDefinition: &apiv1.ScaleDefinition{
+					Min: int64Ptr(2),
+					Max: int64Ptr(2),
+				},
+			},
+		})
+
+		assert.Equal(t, []apiv1.VertexReplicaCount{
+			{Name: "in", Replicas: 0},
+			{Name: "out", Replicas: 2},
+		}, status.GetDrainAttempt("promoted-a").VertexReplicaCount)
 	})
 }
 
@@ -1496,6 +1533,17 @@ func getDesiredPhase(pipeline *numaflowv1.Pipeline) numaflowv1.PipelinePhase {
 // Helper function to create int64 pointer
 func int64Ptr(i int64) *int64 {
 	return &i
+}
+
+func vertexReplicaCountsFromScaleDefinitions(vertexScaleDefinitions []apiv1.VertexScaleDefinition) []apiv1.VertexReplicaCount {
+	vertexReplicaCounts := make([]apiv1.VertexReplicaCount, len(vertexScaleDefinitions))
+	for i, scaleDef := range vertexScaleDefinitions {
+		vertexReplicaCounts[i] = apiv1.VertexReplicaCount{
+			Name:     scaleDef.VertexName,
+			Replicas: int32(scaleDef.Min()),
+		}
+	}
+	return vertexReplicaCounts
 }
 
 func createPipelineForRecycleTest(pipelineRolloutName, pipelineName string, desiredPhase *numaflowv1.PipelinePhase, phase numaflowv1.PipelinePhase, upgradeState, upgradeStateReason, sinkImagePath string,

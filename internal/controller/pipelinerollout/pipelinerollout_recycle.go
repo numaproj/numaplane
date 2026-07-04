@@ -128,7 +128,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 			recyclablePipelineStatus.StartDrainAttempt(pipeline.GetName())
 		}
 
-		paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, r.client)
+		paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, r.client, recyclablePipelineStatus, pipeline.GetName())
 		if err != nil {
 			return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
@@ -262,7 +262,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	}
 
 	// perform the drain
-	paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, r.client)
+	paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, r.client, recyclablePipelineStatus, promotedPipeline.GetName())
 	if err != nil {
 		return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 	}
@@ -435,6 +435,8 @@ func drainRecyclablePipeline(
 	pipeline *unstructured.Unstructured,
 	pipelineRollout *apiv1.PipelineRollout,
 	c client.Client,
+	recyclablePipelineStatus *apiv1.RecyclablePipelineStatus,
+	drainAttemptSourcePipelineName string,
 ) (bool, bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
@@ -461,6 +463,7 @@ func drainRecyclablePipeline(
 		if err != nil {
 			return false, false, false, err
 		}
+		recyclablePipelineStatus.SetDrainAttemptVertexReplicaCount(drainAttemptSourcePipelineName, newVertexScaleDefinitions)
 
 		// Make sure Numaflow reconciles the scale values before we set desiredPhase=Paused
 		// (this is essential to make sure Numaflow will scale vertices > 0 if they were previously at 0)

@@ -184,6 +184,23 @@ func (status *RecyclablePipelineStatus) StartDrainAttempt(sourcePipelineName str
 	})
 }
 
+// SetDrainAttemptVertexReplicaCount records the per-vertex replica counts applied when pausing during a drain attempt.
+func (status *RecyclablePipelineStatus) SetDrainAttemptVertexReplicaCount(sourcePipelineName string, vertexScaleDefinitions []VertexScaleDefinition) {
+	// get a reference to the DrainAttempt and we can modify it
+	drainAttempt := status.GetDrainAttempt(sourcePipelineName)
+	if drainAttempt == nil {
+		return
+	}
+	vertexReplicaCounts := make([]VertexReplicaCount, len(vertexScaleDefinitions))
+	for i, scaleDef := range vertexScaleDefinitions {
+		vertexReplicaCounts[i] = VertexReplicaCount{
+			Name:     scaleDef.VertexName,
+			Replicas: int32(scaleDef.Min()),
+		}
+	}
+	drainAttempt.VertexReplicaCount = vertexReplicaCounts
+}
+
 // CompleteDrainAttempt marks the drain attempt for the given source pipeline spec as ended.
 // Idempotent: already-complete attempts are not modified.
 func (status *RecyclablePipelineStatus) CompleteDrainAttempt(sourcePipelineName string, reason DrainCompletionReason) {
