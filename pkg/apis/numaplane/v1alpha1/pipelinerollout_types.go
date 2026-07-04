@@ -102,8 +102,31 @@ type PipelineProgressiveStatus struct {
 }
 
 type RecyclablePipelineStatus struct {
+	// Name of the recyclable Pipeline
+	Name string `json:"name,omitempty"`
+
 	// DrainAttempts represents the attempts to drain the Pipeline that were done
 	DrainAttempts []DrainAttempt `json:"drainAttempts,omitempty"`
+}
+
+// GetRecyclablePipelineStatus returns the RecyclablePipelineStatus for the given pipeline name, or nil if not found.
+func (status *PipelineProgressiveStatus) GetRecyclablePipelineStatus(pipelineName string) *RecyclablePipelineStatus {
+	for i := range status.RecyclablePipelinesStatus {
+		if status.RecyclablePipelinesStatus[i].Name == pipelineName {
+			return &status.RecyclablePipelinesStatus[i]
+		}
+	}
+	return nil
+}
+
+// GetDrainAttempt returns the DrainAttempt that used the given source pipeline's spec, or nil if not found.
+func (status *RecyclablePipelineStatus) GetDrainAttempt(sourcePipelineName string) *DrainAttempt {
+	for i := range status.DrainAttempts {
+		if status.DrainAttempts[i].SourcePipelineSpec == sourcePipelineName {
+			return &status.DrainAttempts[i]
+		}
+	}
+	return nil
 }
 
 // DrainCompletionReason describes why a drain attempt ended.
