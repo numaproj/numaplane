@@ -458,7 +458,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
 
 	// clean up recyclable pipelines
-	allDeleted, err := r.garbageCollectChildren(ctx, pipelineRollout)
+	allDeleted, _, err := r.garbageCollectChildren(ctx, pipelineRollout)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -1284,24 +1284,25 @@ func (r *PipelineRolloutReconciler) ErrorHandler(ctx context.Context, pipelineRo
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
-// return true if there are still more pipelines that need to be deleted
+// return true if there are still more pipelines that need to be deleted,
+// along with the recyclable pipelines that were processed.
 func (r *PipelineRolloutReconciler) garbageCollectChildren(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
-) (bool, error) {
+) (bool, unstructured.UnstructuredList, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// first check to see if there are any isbservices that are marked "recyclable"
 	// our pipelines need to be marked "recyclable" if they are using one of those
 	recyclableISBServices, err := r.getISBServicesByUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradeRecyclable)
 	if err != nil {
-		return false, fmt.Errorf("error getting isbservices of type recyclable: %s", err.Error())
+		return false, unstructured.UnstructuredList{}, fmt.Errorf("error getting isbservices of type recyclable: %s", err.Error())
 	}
 	numaLogger.WithValues("recyclable isbservices", recyclableISBServices).Debug("locating recyclable isbservices")
 
 	allPipelines, err := numaflowtypes.GetPipelinesForRollout(ctx, r.client, pipelineRollout, false)
 	if err != nil {
-		return false, fmt.Errorf("error getting all pipelines (in order to mark recyclable): %s", err.Error())
+		return false, unstructured.UnstructuredList{}, fmt.Errorf("error getting all pipelines (in order to mark recyclable): %s", err.Error())
 	}
 
 	// for each recyclable isbsvc:
@@ -1310,7 +1311,7 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 		for _, pipeline := range allPipelines.Items {
 			pipelineISBSvcName, err := numaflowtypes.GetPipelineISBSVCName(&pipeline)
 			if err != nil {
-				return false, err
+				return false, unstructured.UnstructuredList{}, err
 			}
 			if pipelineISBSvcName == isbsvc.GetName() {
 				recyclableReason := isbsvc.GetLabels()[common.LabelKeyUpgradeStateReason]
@@ -1318,7 +1319,7 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 				upgradeStateReason := common.UpgradeStateReason(recyclableReason)
 				err = ctlrcommon.MarkRecyclable(ctx, r.client, &upgradeStateReason, &pipeline)
 				if err != nil {
-					return false, fmt.Errorf("failed to mark pipeline %s 'recyclable': %s/%s", pipeline.GetNamespace(), pipeline.GetName(), err.Error())
+					return false, unstructured.UnstructuredList{}, fmt.Errorf("failed to mark pipeline %s 'recyclable': %s/%s", pipeline.GetNamespace(), pipeline.GetName(), err.Error())
 				}
 			}
 		}

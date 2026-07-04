@@ -97,6 +97,57 @@ type PipelineProgressiveStatus struct {
 	PromotedPipelineStatus *PromotedPipelineStatus `json:"promotedPipelineStatus,omitempty"`
 	// HistoricalPodCount keeps track of per-vertex pod count from the last "promoted" pipeline
 	HistoricalPodCount map[string]int `json:"historicalPodCount,omitempty"`
+	// RecyclablePipelinesStatus provides status of the current Pipelines marked "recyclable"
+	RecyclablePipelinesStatus []RecyclablePipelineStatus `json:"recyclablePipelinesStatus,omitempty"`
+}
+
+type RecyclablePipelineStatus struct {
+	// DrainAttempts represents the attempts to drain the Pipeline that were done
+	DrainAttempts []DrainAttempt `json:"drainAttempts,omitempty"`
+}
+
+// DrainCompletionReason describes why a drain attempt ended.
+type DrainCompletionReason string
+
+const (
+	// DrainCompletionReasonDrainComplete indicates the Pipeline fully drained during the pause.
+	DrainCompletionReasonDrainComplete DrainCompletionReason = "DrainComplete"
+	// DrainCompletionReasonPipelineFailed indicates the Pipeline entered Failed phase and that caused the drain attempt to stop.
+	DrainCompletionReasonPipelineFailed DrainCompletionReason = "PipelineFailed"
+	// DrainCompletionReasonMaxPauseTime indicates the pause grace period expired before the Pipeline fully drained.
+	DrainCompletionReasonMaxPauseTime DrainCompletionReason = "MaxPauseTime"
+)
+
+// DrainAttempt describes a single attempt to drain a recyclable Pipeline.
+type DrainAttempt struct {
+	// SourcePipelineSpec is the name of the Pipeline whose spec was used for this drain attempt.
+	// For an original-spec drain, this is the recyclable Pipeline's own name.
+	SourcePipelineSpec string `json:"sourcePipelineSpec,omitempty"`
+
+	// StartTime is when this drain attempt began.
+	StartTime metav1.Time `json:"startTime,omitempty"`
+
+	// EndTime is when this drain attempt ended. Unset while the attempt is still in progress.
+	EndTime *metav1.Time `json:"endTime,omitempty"`
+
+	// DrainCompletionReason indicates why this drain attempt ended. Unset while the attempt is still in progress.
+	DrainCompletionReason DrainCompletionReason `json:"drainCompletionReason,omitempty"`
+
+	// FailedPhaseStartTime is when the Pipeline first entered Failed phase during this drain attempt.
+	// Used for determining ephemeral vs persistent Failure
+	FailedPhaseStartTime *metav1.Time `json:"failedPhaseStartTime,omitempty"`
+
+	// FailedPhaseEndTime is when the Pipeline left Failed phase during this drain attempt, if applicable.
+	FailedPhaseEndTime *metav1.Time `json:"failedPhaseEndTime,omitempty"`
+
+	// VertexReplicaCount captures the replica count per Vertex for this drain attempt.
+	VertexReplicaCount []VertexReplicaCount `json:"vertexReplicaCount,omitempty"`
+}
+
+// VertexReplicaCount records the replica count for a single Vertex during a drain attempt.
+type VertexReplicaCount struct {
+	Name     string `json:"name"`
+	Replicas int32  `json:"replicas"`
 }
 
 // UpgradingPipelineStatus describes the status of an upgrading child

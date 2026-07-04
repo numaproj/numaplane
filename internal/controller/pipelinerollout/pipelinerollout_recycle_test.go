@@ -814,7 +814,7 @@ func Test_Recycle(t *testing.T) {
 				recorder:      record.NewFakeRecorder(100),
 			}
 
-			deleted, err := reconciler.Recycle(ctx, &pipelineUnstructured)
+			deleted, err := reconciler.Recycle(ctx, pipelineRollout, &pipelineUnstructured)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedDeleted, deleted)
 

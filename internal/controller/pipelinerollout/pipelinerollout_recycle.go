@@ -30,16 +30,14 @@ import (
 // And if the Pipeline can't drain by itself (in the case it's unhealthy), we "force drain" it by applying a new spec over top it.
 func (r *PipelineRolloutReconciler) Recycle(
 	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
 	pipeline *unstructured.Unstructured,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", fmt.Sprintf("%s/%s", pipeline.GetNamespace(), pipeline.GetName()))
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
 
-	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, r.client, pipeline)
-	if err != nil {
-		return false, fmt.Errorf("failed to get rollout for pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
-	}
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 
 	// Need to determine how to delete the pipeline
 	// Use the "upgrade-strategy-reason" Label to determine how
@@ -79,7 +77,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	if !requiresPause {
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
-		err = kubernetes.DeleteResource(ctx, r.client, pipeline)
+		err := kubernetes.DeleteResource(ctx, r.client, pipeline)
 		return true, err
 	}
 

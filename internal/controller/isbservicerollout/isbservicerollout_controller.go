@@ -317,7 +317,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
 
 	// clean up recyclable interstepbufferservices
-	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	allDeleted, _, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
 	}
@@ -1052,7 +1052,7 @@ func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, r
 
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
-func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured) (bool, error) {
+func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, _ ctlrcommon.RolloutObject, isbsvc *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("isbsvc", fmt.Sprintf("%s/%s", isbsvc.GetNamespace(), isbsvc.GetName()))
 
 	// For InterstepBufferService, the main thing is that we don't want to delete it until we can be sure there are no

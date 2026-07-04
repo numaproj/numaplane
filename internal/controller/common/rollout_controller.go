@@ -22,7 +22,7 @@ type RolloutController interface {
 	IncrementChildCount(ctx context.Context, rolloutObject RolloutObject) (int32, error)
 
 	// Recycle deletes child; returns true if it was in fact deleted
-	Recycle(ctx context.Context, childObject *unstructured.Unstructured) (bool, error)
+	Recycle(ctx context.Context, rolloutObject RolloutObject, childObject *unstructured.Unstructured) (bool, error)
 
 	// GetDesiredRiders gets the list of Riders as specified in the RolloutObject, templated for the specific child name and
 	// based on the child definition.
@@ -42,32 +42,33 @@ type RolloutController interface {
 	GetTemplateArguments(child *unstructured.Unstructured) map[string]interface{}
 }
 
-// Garbage Collect all recyclable children; return true if we've deleted all that are recyclable
+// Garbage Collect all recyclable children; return true if we've deleted all that are recyclable,
+// along with the list of recyclable children that were processed.
 func GarbageCollectChildren(
 	ctx context.Context,
 	rolloutObject RolloutObject,
 	controller RolloutController,
 	c client.Client,
-) (bool, error) {
+) (bool, unstructured.UnstructuredList, error) {
 	numaLogger := logger.FromContext(ctx)
 	recyclableObjects, err := getRecyclableObjects(ctx, rolloutObject, c)
 	if err != nil {
-		return false, err
+		return false, unstructured.UnstructuredList{}, err
 	}
 
 	numaLogger.WithValues("recylableObjects", recyclableObjects).Debug("recycling")
 
 	allDeleted := true
 	for _, recyclableChild := range recyclableObjects.Items {
-		deleted, err := controller.Recycle(ctx, &recyclableChild)
+		deleted, err := controller.Recycle(ctx, rolloutObject, &recyclableChild)
 		if err != nil {
-			return false, err
+			return false, recyclableObjects, err
 		}
 		if !deleted {
 			allDeleted = false
 		}
 	}
-	return allDeleted, nil
+	return allDeleted, recyclableObjects, nil
 }
 func getRecyclableObjects(
 	ctx context.Context,
