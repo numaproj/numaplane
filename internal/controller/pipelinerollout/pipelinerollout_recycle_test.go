@@ -942,6 +942,21 @@ func Test_startForceDrainAttempt_clearsForceDrainFailureStartTime(t *testing.T) 
 	assert.Empty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
 }
 
+func Test_startForceDrainAttempt_supersedesInProgressForceDrainAttempts(t *testing.T) {
+	ctx := context.Background()
+	pipeline := &unstructured.Unstructured{}
+	pipeline.SetName("recyclable-pipeline")
+
+	status := &apiv1.RecyclablePipelineStatus{Name: "recyclable-pipeline"}
+	status.StartDrainAttempt("promoted-pipeline-1")
+
+	err := startForceDrainAttempt(ctx, fake.NewClientBuilder().Build(), status, pipeline, "promoted-pipeline-2")
+	assert.NoError(t, err)
+	assert.True(t, status.IsDrainAttemptComplete("promoted-pipeline-1"))
+	assert.Equal(t, apiv1.DrainCompletionReasonSuperseded, status.GetDrainAttempt("promoted-pipeline-1").DrainCompletionReason)
+	assert.True(t, status.HasDrainAttempt("promoted-pipeline-2"))
+}
+
 func Test_checkForFailedPipeline(t *testing.T) {
 	ctx := context.Background()
 	waitDuration := time.Duration(config.GetForceDrainFailureWaitDuration()) * time.Second
@@ -1202,6 +1217,27 @@ func Test_RecyclablePipelineStatusDrainAttemptHelpers(t *testing.T) {
 			{Name: "in", Replicas: 0},
 			{Name: "out", Replicas: 2},
 		}, status.GetDrainAttempt("promoted-a").VertexReplicaCount)
+	})
+
+	t.Run("StartDrainAttempt supersedes incomplete last attempt", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+		status.StartDrainAttempt("promoted-b")
+
+		assert.True(t, status.GetDrainAttempt("promoted-a").DrainAttemptComplete)
+		assert.Equal(t, apiv1.DrainCompletionReasonSuperseded, status.GetDrainAttempt("promoted-a").DrainCompletionReason)
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").EndTime)
+		assert.False(t, status.GetDrainAttempt("promoted-b").DrainAttemptComplete)
+	})
+
+	t.Run("StartDrainAttempt does not supersede completed last attempt", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+		status.CompleteDrainAttempt("promoted-a", apiv1.DrainCompletionReasonMaxPauseTime)
+		status.StartDrainAttempt("promoted-b")
+
+		assert.Equal(t, apiv1.DrainCompletionReasonMaxPauseTime, status.GetDrainAttempt("promoted-a").DrainCompletionReason)
+		assert.False(t, status.GetDrainAttempt("promoted-b").DrainAttemptComplete)
 	})
 }
 

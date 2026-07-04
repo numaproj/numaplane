@@ -174,9 +174,13 @@ func (status *RecyclablePipelineStatus) HasForceDrainStarted(recyclablePipelineN
 }
 
 // StartDrainAttempt appends a new in-progress drain attempt if one does not already exist for the source pipeline spec.
+// If the most recent drain attempt is still in progress, it is marked Superseded before the new attempt is started.
 func (status *RecyclablePipelineStatus) StartDrainAttempt(sourcePipelineName string) {
 	if status.HasDrainAttempt(sourcePipelineName) {
 		return
+	}
+	if lastDrainAttempt := status.GetLastDrainAttempt(); lastDrainAttempt != nil && !lastDrainAttempt.DrainAttemptComplete {
+		status.CompleteDrainAttempt(lastDrainAttempt.SourcePipelineSpec, DrainCompletionReasonSuperseded)
 	}
 	status.DrainAttempts = append(status.DrainAttempts, DrainAttempt{
 		SourcePipelineSpec: sourcePipelineName,
@@ -224,6 +228,8 @@ const (
 	DrainCompletionReasonPipelineFailed DrainCompletionReason = "PipelineFailed"
 	// DrainCompletionReasonMaxPauseTime indicates the pause grace period expired before the Pipeline fully drained.
 	DrainCompletionReasonMaxPauseTime DrainCompletionReason = "MaxPauseTime"
+	// DrainCompletionReasonSuperseded indicates the drain attempt was abandoned because a newer promoted pipeline spec was used instead.
+	DrainCompletionReasonSuperseded DrainCompletionReason = "Superseded"
 )
 
 // DrainAttempt describes a single attempt to drain a recyclable Pipeline.
