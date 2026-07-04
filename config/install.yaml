@@ -1688,6 +1688,79 @@ spec:
                     required:
                     - name
                     type: object
+                  recyclablePipelinesStatus:
+                    description: RecyclablePipelinesStatus provides status of the
+                      current Pipelines marked "recyclable"
+                    items:
+                      properties:
+                        drainAttempts:
+                          description: |-
+                            DrainAttempts represents the attempts to drain the Pipeline that were done.
+                            Entries are stored in chronological order (oldest first, newest last).
+                          items:
+                            description: DrainAttempt describes a single attempt to
+                              drain a recyclable Pipeline.
+                            properties:
+                              drainAttemptComplete:
+                                description: DrainAttemptComplete represents if the
+                                  drain has stopped
+                                type: boolean
+                              drainCompletionReason:
+                                description: DrainCompletionReason indicates why this
+                                  drain attempt ended. Unset while the attempt is
+                                  still in progress.
+                                type: string
+                              endTime:
+                                description: EndTime is when this drain attempt ended.
+                                  Unset while the attempt is still in progress.
+                                format: date-time
+                                type: string
+                              failedPhaseEndTime:
+                                description: FailedPhaseEndTime is when the Pipeline
+                                  left Failed phase during this drain attempt, if
+                                  applicable.
+                                format: date-time
+                                type: string
+                              failedPhaseStartTime:
+                                description: |-
+                                  FailedPhaseStartTime is when the Pipeline first entered Failed phase during this drain attempt.
+                                  Used for determining ephemeral vs persistent Failure
+                                format: date-time
+                                type: string
+                              sourcePipelineSpec:
+                                description: |-
+                                  SourcePipelineSpec is the name of the Pipeline whose spec was used for this drain attempt.
+                                  For an original-spec drain, this is the recyclable Pipeline's own name.
+                                type: string
+                              startTime:
+                                description: StartTime is when this drain attempt
+                                  began.
+                                format: date-time
+                                type: string
+                              vertexReplicaCount:
+                                description: VertexReplicaCount captures the replica
+                                  count per Vertex for this drain attempt.
+                                items:
+                                  description: VertexReplicaCount records the replica
+                                    count for a single Vertex during a drain attempt.
+                                  properties:
+                                    name:
+                                      type: string
+                                    replicas:
+                                      format: int32
+                                      type: integer
+                                  required:
+                                  - name
+                                  - replicas
+                                  type: object
+                                type: array
+                            type: object
+                          type: array
+                        name:
+                          description: Name of the recyclable Pipeline
+                          type: string
+                      type: object
+                    type: array
                   upgradingPipelineStatus:
                     description: UpgradingPipelineStatus represents either the current
                       or otherwise the most recent "upgrading" pipeline
@@ -2648,7 +2721,7 @@ data:
     we either delete the pipeline or mark it \"recyclable-expired\" \n  maxRecyclableDurationMinutes:
     720 # 12 hours\n\n  # after 'maxRecyclableDurationMinutes', if this is false:
     delete the pipeline; else mark it \"recyclable-expired\" \n  keepUndrainedPipelines:
-    false  "
+    false  \n"
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config
