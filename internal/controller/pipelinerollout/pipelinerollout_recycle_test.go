@@ -1062,6 +1062,124 @@ func Test_checkForValueInCommaDelimitedAnnotation(t *testing.T) {
 	}
 }
 
+func Test_migrateForceDrainAnnotationsToDrainAttempts(t *testing.T) {
+	pipelineName := "recyclable-pipeline"
+	existingStart := metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	existingDrainAttempts := []apiv1.DrainAttempt{
+		{
+			SourcePipelineSpec:   "promoted-a",
+			StartTime:            existingStart,
+			DrainAttemptComplete: true,
+		},
+	}
+
+	newPipeline := func(annotations map[string]string) *unstructured.Unstructured {
+		pipeline := &unstructured.Unstructured{}
+		pipeline.SetName(pipelineName)
+		pipeline.SetAnnotations(annotations)
+		return pipeline
+	}
+
+	tests := []struct {
+		name                      string
+		annotations               map[string]string
+		initialDrainAttempts      []apiv1.DrainAttempt
+		requiresPauseOriginalSpec bool
+		callTwice                 bool
+		expectedDrainAttempts     []apiv1.DrainAttempt
+	}{
+		{
+			name:                      "no annotations leaves status unchanged",
+			requiresPauseOriginalSpec: true,
+			expectedDrainAttempts:     []apiv1.DrainAttempt{},
+		},
+		{
+			name: "empty force drain annotations leaves status unchanged",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted:   "",
+				common.AnnotationKeyForceDrainSpecsCompleted: "",
+			},
+			requiresPauseOriginalSpec: true,
+			expectedDrainAttempts:     []apiv1.DrainAttempt{},
+		},
+		{
+			name: "force-drain-specs-completed sets DrainAttemptComplete",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted:   "promoted-a,promoted-b,",
+				common.AnnotationKeyForceDrainSpecsCompleted: "promoted-a,",
+			},
+			requiresPauseOriginalSpec: true,
+			expectedDrainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: pipelineName, DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-a", DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-b"},
+			},
+		},
+		{
+			name: "idempotent when called twice",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted:   "promoted-a,",
+				common.AnnotationKeyForceDrainSpecsCompleted: "promoted-a,",
+			},
+			requiresPauseOriginalSpec: true,
+			callTwice:                 true,
+			expectedDrainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: pipelineName, DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-a", DrainAttemptComplete: true},
+			},
+		},
+		{
+			name: "skips migration when DrainAttempts already set",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted: "promoted-a,",
+			},
+			initialDrainAttempts:      existingDrainAttempts,
+			requiresPauseOriginalSpec: true,
+			expectedDrainAttempts:     existingDrainAttempts,
+		},
+		{
+			name: "does not prepend original when requiresPauseOriginalSpec is false",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted:   "promoted-a,promoted-b,",
+				common.AnnotationKeyForceDrainSpecsCompleted: "promoted-a,",
+			},
+			requiresPauseOriginalSpec: false,
+			expectedDrainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: "promoted-a", DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-b"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			status := &apiv1.RecyclablePipelineStatus{
+				Name:          pipelineName,
+				DrainAttempts: append([]apiv1.DrainAttempt(nil), tc.initialDrainAttempts...),
+			}
+			pipeline := newPipeline(tc.annotations)
+
+			err := migrateForceDrainAnnotationsToDrainAttempts(status, pipeline, tc.requiresPauseOriginalSpec)
+			assert.NoError(t, err)
+
+			if tc.callTwice {
+				firstSnapshot := append([]apiv1.DrainAttempt(nil), status.DrainAttempts...)
+				err = migrateForceDrainAnnotationsToDrainAttempts(status, pipeline, tc.requiresPauseOriginalSpec)
+				assert.NoError(t, err)
+				assert.Equal(t, firstSnapshot, status.DrainAttempts)
+				return
+			}
+
+			if len(tc.expectedDrainAttempts) == 0 {
+				assert.Empty(t, status.DrainAttempts)
+				return
+			}
+
+			assert.Equal(t, tc.expectedDrainAttempts, status.DrainAttempts)
+		})
+	}
+}
+
 func Test_GetOrCreateRecyclablePipelineStatus(t *testing.T) {
 	t.Run("returns existing entry", func(t *testing.T) {
 		status := &apiv1.PipelineProgressiveStatus{

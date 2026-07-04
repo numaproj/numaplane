@@ -95,6 +95,10 @@ func (r *PipelineRolloutReconciler) Recycle(
 		return false, nil
 	}
 
+	if err := migrateForceDrainAnnotationsToDrainAttempts(recyclablePipelineStatus, pipeline, requiresPauseOriginalSpec); err != nil {
+		return false, fmt.Errorf("failed to migrate force drain annotations to drain attempts status: %w", err)
+	}
+
 	// Get live Pipeline here
 
 	// First check if the PipelineRollout is configured to run
@@ -723,6 +727,97 @@ func markPipelineForceDrainCompleted(ctx context.Context, c client.Client, pipel
 	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
 		common.AnnotationKeyForceDrainSpecsCompleted: currentVal + forceDrainSpecPipeline + ",",
 	})
+}
+
+// TODO: this is Temporary code to remove later.
+// migrateForceDrainAnnotationsToDrainAttempts copies force-drain-specs-started and
+// force-drain-specs-completed annotations into RecyclablePipelineStatus.DrainAttempts
+// for backward compatibility.
+// Idempotent: existing DrainAttempts are not duplicated; DrainCompleted is only set to true from annotations.
+func migrateForceDrainAnnotationsToDrainAttempts(
+	recyclablePipelineStatus *apiv1.RecyclablePipelineStatus,
+	pipeline *unstructured.Unstructured,
+	requiresPauseOriginalSpec bool,
+) error {
+	if recyclablePipelineStatus == nil {
+		return nil
+	}
+
+	// only migrate if the annotations are set and DrainAttempts is not set
+	annotations := pipeline.GetAnnotations()
+	if annotations[common.AnnotationKeyForceDrainSpecsStarted] == "" {
+		return nil
+	}
+	if len(recyclablePipelineStatus.DrainAttempts) > 0 {
+		return nil
+	}
+
+	forceDrainStarted := parseCommaDelimitedAnnotationValues(annotations, common.AnnotationKeyForceDrainSpecsStarted)
+	forceDrainCompleted := parseCommaDelimitedAnnotationValues(annotations, common.AnnotationKeyForceDrainSpecsCompleted)
+	if len(forceDrainStarted) == 0 && len(forceDrainCompleted) == 0 {
+		return nil
+	}
+
+	existingBySource := make(map[string]apiv1.DrainAttempt, len(recyclablePipelineStatus.DrainAttempts))
+	for _, drainAttempt := range recyclablePipelineStatus.DrainAttempts {
+		existingBySource[drainAttempt.SourcePipelineSpec] = drainAttempt
+	}
+
+	completedSet := make(map[string]struct{}, len(forceDrainCompleted))
+	for _, sourcePipelineName := range forceDrainCompleted {
+		completedSet[sourcePipelineName] = struct{}{}
+	}
+
+	// Create DrainAttempts array in the same order as they're listed in the AnnotationKeyForceDrainSpecsStarted
+	drainAttempts := make([]apiv1.DrainAttempt, 0, len(forceDrainStarted))
+	seen := make(map[string]struct{}, len(forceDrainStarted))
+	for _, sourcePipelineName := range forceDrainStarted {
+		if _, alreadyAdded := seen[sourcePipelineName]; alreadyAdded {
+			continue
+		}
+		seen[sourcePipelineName] = struct{}{}
+
+		drainAttempt, exists := existingBySource[sourcePipelineName]
+		if !exists {
+			drainAttempt = apiv1.DrainAttempt{SourcePipelineSpec: sourcePipelineName}
+		}
+		drainAttempts = append(drainAttempts, drainAttempt)
+	}
+
+	// if they're in the AnnotationKeyForceDrainSpecsCompleted annotation, we mark them as DrainComplete
+	for i := range drainAttempts {
+		if _, completed := completedSet[drainAttempts[i].SourcePipelineSpec]; completed {
+			drainAttempts[i].DrainAttemptComplete = true
+		}
+	}
+
+	// as long as we have at least one DrainAttempt and assuming that we should've tried to drain with the original, then we assume that we should also add a DrainAttempt for the original drain
+	if len(drainAttempts) > 0 && requiresPauseOriginalSpec {
+		originalAttempt, exists := existingBySource[pipeline.GetName()]
+		if !exists {
+			originalAttempt = apiv1.DrainAttempt{SourcePipelineSpec: pipeline.GetName()}
+		}
+		originalAttempt.DrainAttemptComplete = true
+		drainAttempts = append([]apiv1.DrainAttempt{originalAttempt}, drainAttempts...)
+	}
+
+	recyclablePipelineStatus.DrainAttempts = drainAttempts
+	return nil
+}
+
+func parseCommaDelimitedAnnotationValues(annotations map[string]string, annotationKey string) []string {
+	value, exists := annotations[annotationKey]
+	if !exists || value == "" {
+		return nil
+	}
+
+	var values []string
+	for _, part := range strings.Split(value, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	return values
 }
 
 // annotation is comma delimited: check if the value is present

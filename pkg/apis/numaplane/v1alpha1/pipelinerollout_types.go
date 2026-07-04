@@ -176,6 +176,9 @@ type DrainAttempt struct {
 	// EndTime is when this drain attempt ended. Unset while the attempt is still in progress.
 	EndTime *metav1.Time `json:"endTime,omitempty"`
 
+	// DrainAttemptComplete represents if the drain has stopped
+	DrainAttemptComplete bool `json:"drainAttemptComplete,omitempty"`
+
 	// DrainCompletionReason indicates why this drain attempt ended. Unset while the attempt is still in progress.
 	DrainCompletionReason DrainCompletionReason `json:"drainCompletionReason,omitempty"`
 
