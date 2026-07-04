@@ -152,14 +152,49 @@ func (status *RecyclablePipelineStatus) GetLastDrainAttempt() *DrainAttempt {
 	return &status.DrainAttempts[len(status.DrainAttempts)-1]
 }
 
-// GetCurrentDrainAttempt returns the in-progress DrainAttempt, or nil if the most recent attempt is complete or there are none.
-// DrainAttempts must be kept in chronological order (oldest first, newest last).
-func (status *RecyclablePipelineStatus) GetCurrentDrainAttempt() *DrainAttempt {
-	lastDrainAttempt := status.GetLastDrainAttempt()
-	if lastDrainAttempt == nil || lastDrainAttempt.DrainAttemptComplete {
-		return nil
+// HasDrainAttempt reports whether a drain attempt exists for the given source pipeline spec.
+func (status *RecyclablePipelineStatus) HasDrainAttempt(sourcePipelineName string) bool {
+	return status.GetDrainAttempt(sourcePipelineName) != nil
+}
+
+// IsDrainAttemptComplete reports whether the drain attempt for the given source pipeline spec has ended.
+func (status *RecyclablePipelineStatus) IsDrainAttemptComplete(sourcePipelineName string) bool {
+	drainAttempt := status.GetDrainAttempt(sourcePipelineName)
+	return drainAttempt != nil && drainAttempt.DrainAttemptComplete
+}
+
+// HasForceDrainStarted reports whether any force-drain attempt has started for the recyclable pipeline.
+func (status *RecyclablePipelineStatus) HasForceDrainStarted(recyclablePipelineName string) bool {
+	for _, drainAttempt := range status.DrainAttempts {
+		if drainAttempt.SourcePipelineSpec != recyclablePipelineName {
+			return true
+		}
 	}
-	return lastDrainAttempt
+	return false
+}
+
+// StartDrainAttempt appends a new in-progress drain attempt if one does not already exist for the source pipeline spec.
+func (status *RecyclablePipelineStatus) StartDrainAttempt(sourcePipelineName string) {
+	if status.HasDrainAttempt(sourcePipelineName) {
+		return
+	}
+	status.DrainAttempts = append(status.DrainAttempts, DrainAttempt{
+		SourcePipelineSpec: sourcePipelineName,
+		StartTime:          metav1.Now(),
+	})
+}
+
+// CompleteDrainAttempt marks the drain attempt for the given source pipeline spec as ended.
+// Idempotent: already-complete attempts are not modified.
+func (status *RecyclablePipelineStatus) CompleteDrainAttempt(sourcePipelineName string, reason DrainCompletionReason) {
+	drainAttempt := status.GetDrainAttempt(sourcePipelineName)
+	if drainAttempt == nil || drainAttempt.DrainAttemptComplete {
+		return
+	}
+	endTime := metav1.Now()
+	drainAttempt.DrainAttemptComplete = true
+	drainAttempt.EndTime = &endTime
+	drainAttempt.DrainCompletionReason = reason
 }
 
 // DrainCompletionReason describes why a drain attempt ended.

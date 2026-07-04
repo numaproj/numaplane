@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -840,18 +841,18 @@ func Test_Recycle(t *testing.T) {
 					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyDrainFailureStartTime)
 				}
 
-				// Check if force-drain-specs-started annotation matches expected value
+				// Check drain attempt status on the PipelineRollout
+				recyclablePipelineStatus := pipelineRollout.Status.ProgressiveStatus.GetRecyclablePipelineStatus(recyclablePipelineName)
+				require.NotNil(t, recyclablePipelineStatus)
 				if tc.expectForceDrainPipelinesStarted != "" {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
-					assert.Equal(t, tc.expectForceDrainPipelinesStarted, updatedPipeline.Annotations[common.AnnotationKeyForceDrainSpecsStarted],
-						"force-drain-specs-started annotation mismatch")
+					sourcePipelineSpec := firstCommaDelimitedValue(tc.expectForceDrainPipelinesStarted)
+					assert.True(t, recyclablePipelineStatus.HasDrainAttempt(sourcePipelineSpec),
+						"expected drain attempt to be started for %s", sourcePipelineSpec)
 				}
-
-				// Check if force-drain-specs-completed annotation matches expected value
 				if tc.expectedForceDrainPipelinesCompleted != "" {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsCompleted)
-					assert.Equal(t, tc.expectedForceDrainPipelinesCompleted, updatedPipeline.Annotations[common.AnnotationKeyForceDrainSpecsCompleted],
-						"force-drain-specs-completed annotation mismatch")
+					sourcePipelineSpec := firstCommaDelimitedValue(tc.expectedForceDrainPipelinesCompleted)
+					assert.True(t, recyclablePipelineStatus.IsDrainAttemptComplete(sourcePipelineSpec),
+						"expected drain attempt to be complete for %s", sourcePipelineSpec)
 				}
 
 				if len(tc.expectedVertexScaleDefinitions) > 0 {
@@ -883,7 +884,27 @@ func Test_Recycle(t *testing.T) {
 	}
 }
 
-func Test_markPipelineForceDrainStarted_clearsForceDrainFailureStartTime(t *testing.T) {
+func firstCommaDelimitedValue(value string) string {
+	for _, part := range strings.Split(value, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func assertMigrationDrainAttempts(t *testing.T, expected, actual []apiv1.DrainAttempt) {
+	t.Helper()
+	require.Len(t, actual, len(expected))
+	for i, exp := range expected {
+		assert.Equal(t, exp.SourcePipelineSpec, actual[i].SourcePipelineSpec)
+		assert.Equal(t, exp.DrainAttemptComplete, actual[i].DrainAttemptComplete)
+		assert.Nil(t, actual[i].EndTime)
+		assert.Empty(t, actual[i].DrainCompletionReason)
+	}
+}
+
+func Test_startForceDrainAttempt_clearsForceDrainFailureStartTime(t *testing.T) {
 	ctx := context.Background()
 
 	pipeline := &unstructured.Unstructured{
@@ -904,9 +925,10 @@ func Test_markPipelineForceDrainStarted_clearsForceDrainFailureStartTime(t *test
 	scheme := runtime.NewScheme()
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
 
-	err := markPipelineForceDrainStarted(ctx, fakeClient, pipeline, "promoted-pipeline-1")
+	recyclablePipelineStatus := &apiv1.RecyclablePipelineStatus{Name: "test-pipeline"}
+	err := startForceDrainAttempt(ctx, fakeClient, recyclablePipelineStatus, pipeline, "promoted-pipeline-1")
 	assert.NoError(t, err)
-	assert.Equal(t, "promoted-pipeline-1,", pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecsStarted])
+	assert.True(t, recyclablePipelineStatus.HasDrainAttempt("promoted-pipeline-1"))
 	assert.Empty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
 }
 
@@ -973,92 +995,6 @@ func Test_checkForFailedPipeline(t *testing.T) {
 			if tc.expectAnnotationSet {
 				assert.NotEmpty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
 			}
-		})
-	}
-}
-
-func Test_checkForValueInCommaDelimitedAnnotation(t *testing.T) {
-	testAnnotationKey := "test-annotation-key"
-
-	tests := []struct {
-		name           string
-		annotations    map[string]string
-		value          string
-		annotationKey  string
-		expectedResult bool
-	}{
-		{
-			name:           "nil annotations",
-			annotations:    nil,
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
-		},
-		{
-			name:           "annotation key not present",
-			annotations:    map[string]string{"other-key": "value"},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
-		},
-		{
-			name:           "empty annotation value",
-			annotations:    map[string]string{testAnnotationKey: ""},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
-		},
-		{
-			name:           "value found - single value in annotation",
-			annotations:    map[string]string{testAnnotationKey: "abc,"},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: true,
-		},
-		{
-			name:           "value found - first of multiple values",
-			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: true,
-		},
-		{
-			name:           "value found - middle of multiple values",
-			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
-			value:          "def",
-			annotationKey:  testAnnotationKey,
-			expectedResult: true,
-		},
-		{
-			name:           "value found - last of multiple values",
-			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
-			value:          "ghi",
-			annotationKey:  testAnnotationKey,
-			expectedResult: true,
-		},
-		{
-			name:           "value not found",
-			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
-			value:          "xyz",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
-		},
-		{
-			name:           "partial match should not match",
-			annotations:    map[string]string{testAnnotationKey: "abcdef,"},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			pipeline := &unstructured.Unstructured{}
-			pipeline.SetAnnotations(tc.annotations)
-
-			result := checkForValueInCommaDelimitedAnnotation(pipeline, tc.value, tc.annotationKey)
-			assert.Equal(t, tc.expectedResult, result)
 		})
 	}
 }
@@ -1181,52 +1117,55 @@ func Test_migrateForceDrainAnnotationsToDrainAttempts(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, tc.expectedDrainAttempts, status.DrainAttempts)
+			if tc.name == "skips migration when DrainAttempts already set" {
+				assert.Equal(t, tc.expectedDrainAttempts, status.DrainAttempts)
+				return
+			}
+
+			assertMigrationDrainAttempts(t, tc.expectedDrainAttempts, status.DrainAttempts)
 		})
 	}
 }
 
-func Test_GetCurrentDrainAttempt(t *testing.T) {
-	tests := []struct {
-		name           string
-		drainAttempts  []apiv1.DrainAttempt
-		expectedSource string
-	}{
-		{
-			name:           "returns nil when there are no drain attempts",
-			drainAttempts:  nil,
-			expectedSource: "",
-		},
-		{
-			name: "returns in-progress last drain attempt",
-			drainAttempts: []apiv1.DrainAttempt{
-				{SourcePipelineSpec: "pipeline-1", DrainAttemptComplete: true},
-				{SourcePipelineSpec: "promoted-a"},
-			},
-			expectedSource: "promoted-a",
-		},
-		{
-			name: "returns nil when last drain attempt is complete",
-			drainAttempts: []apiv1.DrainAttempt{
-				{SourcePipelineSpec: "pipeline-1", DrainAttemptComplete: true},
-				{SourcePipelineSpec: "promoted-a", DrainAttemptComplete: true},
-			},
-			expectedSource: "",
-		},
-	}
+func Test_RecyclablePipelineStatusDrainAttemptHelpers(t *testing.T) {
+	pipelineName := "recyclable-pipeline"
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			status := &apiv1.RecyclablePipelineStatus{DrainAttempts: tc.drainAttempts}
-			currentDrainAttempt := status.GetCurrentDrainAttempt()
-			if tc.expectedSource == "" {
-				assert.Nil(t, currentDrainAttempt)
-				return
-			}
-			require.NotNil(t, currentDrainAttempt)
-			assert.Equal(t, tc.expectedSource, currentDrainAttempt.SourcePipelineSpec)
-		})
-	}
+	t.Run("StartDrainAttempt and CompleteDrainAttempt", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		beforeStart := time.Now()
+		status.StartDrainAttempt("promoted-a")
+		require.True(t, status.HasDrainAttempt("promoted-a"))
+		assert.False(t, status.IsDrainAttemptComplete("promoted-a"))
+		assert.False(t, status.GetDrainAttempt("promoted-a").StartTime.Time.Before(beforeStart))
+
+		beforeComplete := time.Now()
+		status.CompleteDrainAttempt("promoted-a", apiv1.DrainCompletionReasonDrainComplete)
+		assert.True(t, status.IsDrainAttemptComplete("promoted-a"))
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").EndTime)
+		assert.False(t, status.GetDrainAttempt("promoted-a").EndTime.Time.Before(beforeComplete))
+		assert.Equal(t, apiv1.DrainCompletionReasonDrainComplete, status.GetDrainAttempt("promoted-a").DrainCompletionReason)
+	})
+
+	t.Run("HasForceDrainStarted", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{
+			DrainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: pipelineName},
+			},
+		}
+		assert.False(t, status.HasForceDrainStarted(pipelineName))
+
+		status.StartDrainAttempt("promoted-a")
+		assert.True(t, status.HasForceDrainStarted(pipelineName))
+	})
+
+	t.Run("StartDrainAttempt is idempotent", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+		firstStartTime := status.DrainAttempts[0].StartTime
+		status.StartDrainAttempt("promoted-a")
+		require.Len(t, status.DrainAttempts, 1)
+		assert.Equal(t, firstStartTime, status.DrainAttempts[0].StartTime)
+	})
 }
 
 func Test_GetOrCreateRecyclablePipelineStatus(t *testing.T) {
