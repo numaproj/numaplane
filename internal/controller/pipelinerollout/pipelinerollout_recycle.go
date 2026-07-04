@@ -112,9 +112,9 @@ func (r *PipelineRolloutReconciler) Recycle(
 		return false, nil
 	}
 
-	lastDrainAttempt := recyclablePipelineStatus.GetLastDrainAttempt()
-	if lastDrainAttempt != nil {
-		numaLogger = numaLogger.WithValues("lastDrainAttemptSource", lastDrainAttempt.SourcePipelineSpec)
+	currentDrainAttempt := recyclablePipelineStatus.GetCurrentDrainAttempt()
+	if currentDrainAttempt != nil {
+		numaLogger = numaLogger.WithValues("currentDrainAttemptSource", currentDrainAttempt.SourcePipelineSpec)
 	}
 
 	// Is the pipeline still defined with its original spec or have we overridden it with that of the "promoted" pipeline?

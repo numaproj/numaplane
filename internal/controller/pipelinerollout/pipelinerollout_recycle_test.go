@@ -27,6 +27,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1067,6 +1068,11 @@ func Test_migrateForceDrainAnnotationsToDrainAttempts(t *testing.T) {
 	existingStart := metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	existingDrainAttempts := []apiv1.DrainAttempt{
 		{
+			SourcePipelineSpec:   pipelineName,
+			StartTime:            existingStart,
+			DrainAttemptComplete: true,
+		},
+		{
 			SourcePipelineSpec:   "promoted-a",
 			StartTime:            existingStart,
 			DrainAttemptComplete: true,
@@ -1176,6 +1182,49 @@ func Test_migrateForceDrainAnnotationsToDrainAttempts(t *testing.T) {
 			}
 
 			assert.Equal(t, tc.expectedDrainAttempts, status.DrainAttempts)
+		})
+	}
+}
+
+func Test_GetCurrentDrainAttempt(t *testing.T) {
+	tests := []struct {
+		name           string
+		drainAttempts  []apiv1.DrainAttempt
+		expectedSource string
+	}{
+		{
+			name:           "returns nil when there are no drain attempts",
+			drainAttempts:  nil,
+			expectedSource: "",
+		},
+		{
+			name: "returns in-progress last drain attempt",
+			drainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: "pipeline-1", DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-a"},
+			},
+			expectedSource: "promoted-a",
+		},
+		{
+			name: "returns nil when last drain attempt is complete",
+			drainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: "pipeline-1", DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-a", DrainAttemptComplete: true},
+			},
+			expectedSource: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			status := &apiv1.RecyclablePipelineStatus{DrainAttempts: tc.drainAttempts}
+			currentDrainAttempt := status.GetCurrentDrainAttempt()
+			if tc.expectedSource == "" {
+				assert.Nil(t, currentDrainAttempt)
+				return
+			}
+			require.NotNil(t, currentDrainAttempt)
+			assert.Equal(t, tc.expectedSource, currentDrainAttempt.SourcePipelineSpec)
 		})
 	}
 }

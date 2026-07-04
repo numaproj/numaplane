@@ -152,6 +152,16 @@ func (status *RecyclablePipelineStatus) GetLastDrainAttempt() *DrainAttempt {
 	return &status.DrainAttempts[len(status.DrainAttempts)-1]
 }
 
+// GetCurrentDrainAttempt returns the in-progress DrainAttempt, or nil if the most recent attempt is complete or there are none.
+// DrainAttempts must be kept in chronological order (oldest first, newest last).
+func (status *RecyclablePipelineStatus) GetCurrentDrainAttempt() *DrainAttempt {
+	lastDrainAttempt := status.GetLastDrainAttempt()
+	if lastDrainAttempt == nil || lastDrainAttempt.DrainAttemptComplete {
+		return nil
+	}
+	return lastDrainAttempt
+}
+
 // DrainCompletionReason describes why a drain attempt ended.
 type DrainCompletionReason string
 
