@@ -1062,6 +1062,93 @@ func Test_checkForValueInCommaDelimitedAnnotation(t *testing.T) {
 	}
 }
 
+func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
+	reconciler := &PipelineRolloutReconciler{}
+
+	tests := []struct {
+		name                  string
+		recyclableObjectNames []string
+		initialStatus         []apiv1.RecyclablePipelineStatus
+		expectedStatus        []apiv1.RecyclablePipelineStatus
+	}{
+		{
+			name:                  "keeps only status entries present in recyclableObjects",
+			recyclableObjectNames: []string{"pipeline-1"},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+			},
+		},
+		{
+			name:                  "keeps all matching status entries",
+			recyclableObjectNames: []string{"pipeline-1", "pipeline-2"},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+			},
+		},
+		{
+			name:                  "clears all status when recyclableObjects is empty",
+			recyclableObjectNames: []string{},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{},
+		},
+		{
+			name:                  "preserves nested drain attempt data for kept entries",
+			recyclableObjectNames: []string{"pipeline-1"},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{
+					Name: "pipeline-1",
+					DrainAttempts: []apiv1.DrainAttempt{
+						{SourcePipelineSpec: "pipeline-1"},
+					},
+				},
+				{Name: "pipeline-2"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{
+					Name: "pipeline-1",
+					DrainAttempts: []apiv1.DrainAttempt{
+						{SourcePipelineSpec: "pipeline-1"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pipelineRollout := &apiv1.PipelineRollout{
+				Status: apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						RecyclablePipelinesStatus: tc.initialStatus,
+					},
+				},
+			}
+
+			recyclableObjects := unstructured.UnstructuredList{}
+			for _, name := range tc.recyclableObjectNames {
+				obj := unstructured.Unstructured{}
+				obj.SetName(name)
+				recyclableObjects.Items = append(recyclableObjects.Items, obj)
+			}
+
+			err := reconciler.pruneRecyclablePipelinesStatus(pipelineRollout, recyclableObjects)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedStatus, pipelineRollout.Status.ProgressiveStatus.RecyclablePipelinesStatus)
+		})
+	}
+}
+
 func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 	ctx := context.Background()
 
