@@ -53,6 +53,8 @@ var (
 	}
 
 	pipelineSpecSourceRPU      = int64(1000)
+	progressiveAlternateSourceRPU = int64(500)
+	finalPromotionSourceRPU       = int64(501)
 	pipelineSpecSourceDuration = metav1.Duration{Duration: time.Second}
 	pullPolicyAlways           = corev1.PullAlways
 	onePod                     = int32(1)
@@ -101,15 +103,18 @@ var (
 		Edges: []numaflowv1.Edge{{From: "in", To: "cat"}, {From: "cat", To: "out"}},
 	}
 
-	updatedPipelineSpec *numaflowv1.PipelineSpec
+	progressiveAlternatePipelineSpec *numaflowv1.PipelineSpec
+	finalPromotionPipelineSpec       *numaflowv1.PipelineSpec
 )
 
 func init() {
-	updatedPipelineSpec = initialPipelineSpec.DeepCopy()
-	updatedPipelineSpec.Vertices[2] = numaflowv1.AbstractVertex{
-		Name: "out",
-		Sink: &numaflowv1.Sink{AbstractSink: numaflowv1.AbstractSink{Blackhole: &numaflowv1.Blackhole{}}},
-	}
+	// log/blackhole sink changes use UpgradeStrategyApply (in-place), not Progressive.
+	// Use generator RPU changes so createRecyclablePipelineViaDiscontinue creates a new Pipeline child.
+	progressiveAlternatePipelineSpec = initialPipelineSpec.DeepCopy()
+	progressiveAlternatePipelineSpec.Vertices[0].Source.Generator.RPU = &progressiveAlternateSourceRPU
+
+	finalPromotionPipelineSpec = initialPipelineSpec.DeepCopy()
+	finalPromotionPipelineSpec.Vertices[0].Source.Generator.RPU = &finalPromotionSourceRPU
 }
 
 func TestForceDrainBackwardCompatibilityE2E(t *testing.T) {
@@ -177,7 +182,7 @@ var _ = Describe("Force drain backward compatibility e2e", Serial, func() {
 		})
 
 		verifyPipelineScaledToZero(2)
-		updatePipeline(updatedPipelineSpec)
+		updatePipeline(finalPromotionPipelineSpec)
 
 		VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
 			return status.ProgressiveStatus.PromotedPipelineStatus != nil &&
@@ -195,11 +200,12 @@ var _ = Describe("Force drain backward compatibility e2e", Serial, func() {
 })
 
 // createRecyclablePipelineViaDiscontinue performs a quick A->B->A progressive update so the upgrading
-// Pipeline is marked recyclable without running a failed assessment path.
+// Pipeline is marked recyclable without running a failed assessment path. Spec B must use a field that
+// triggers UpgradeStrategyProgressive (e.g. generator RPU); log/blackhole sink changes apply in-place.
 func createRecyclablePipelineViaDiscontinue(recyclableIndex int) {
 	recyclablePipelineName := GetInstanceName(pipelineRolloutName, recyclableIndex)
 
-	updatePipeline(updatedPipelineSpec)
+	updatePipeline(progressiveAlternatePipelineSpec)
 	VerifyPipelineExists(Namespace, recyclablePipelineName)
 
 	updatePipeline(&initialPipelineSpec)

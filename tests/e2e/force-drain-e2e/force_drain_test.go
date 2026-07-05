@@ -29,6 +29,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
@@ -377,20 +378,16 @@ func pipelinePausingDuringForceDrain(retrievedPipelineSpec numaflowv1.PipelineSp
 }
 
 func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
-
-	pausingWithCorrectSpec := map[int]bool{}
-
 	for _, pipelineIndex := range pipelineIndices {
-		pausingWithCorrectSpec[pipelineIndex] = false
-	}
-
-	CheckEventually(fmt.Sprintf("Verifying that the failed Pipeline(s) (%v) have spec overridden", pipelineIndices), func() bool {
-		// if at any point the pipeline is pausing with its spec overridden, update the value in the forceAppliedSpecPausing array
-		for _, pipelineIndex := range pipelineIndices {
-			pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+		pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+		CheckEventually(fmt.Sprintf("Verifying Pipeline %s pausing with valid spec or deleted", pipelineName), func() bool {
 			pipeline, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
+			if errors.IsNotFound(err) {
+				// A faster pipeline may already be drained and deleted while we wait on others.
+				return true
+			}
 			if err != nil {
-				continue
+				return false
 			}
 
 			annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
@@ -398,29 +395,11 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 				return false
 			}
 
-			if !pausingWithCorrectSpec[pipelineIndex] && pipelinePausingWithValidSpec(retrievedPipelineSpec, retrievedPipelineStatus) {
-				pausingWithCorrectSpec[pipelineIndex] = true
-				By(fmt.Sprintf("setting pausingWithCorrectSpec for index %d\n", pipelineIndex))
-			}
+			return pipelinePausingWithValidSpec(retrievedPipelineSpec, retrievedPipelineStatus)
+		}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 
-		}
-
-		// check if all Pipelines have met the criteria
-		for _, pipelineIndex := range pipelineIndices {
-			if !pausingWithCorrectSpec[pipelineIndex] {
-				return false
-			}
-		}
-
-		return true
-
-	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", pausingWithCorrectSpec))
-
-	// verify that pipelines are deleted
-	for _, pipelineIndex := range pipelineIndices {
-		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, pipelineIndex))
+		VerifyPipelineDeletion(pipelineName)
 	}
-
 }
 
 func updatePipeline(pipelineSpec *numaflowv1.PipelineSpec) {
