@@ -133,20 +133,9 @@ func (r *PipelineRolloutReconciler) Recycle(
 			return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
 		numaLogger.WithValues("paused", paused, "drained", drained).Debug("checking drain of Pipeline using original spec")
-		if paused {
-			if drained {
-				recyclablePipelineStatus.CompleteDrainAttempt(pipeline.GetName(), apiv1.DrainCompletionReasonDrainComplete)
-				numaLogger.Info("Pipeline has been drained and will be deleted now")
-				err = kubernetes.DeleteResource(ctx, r.client, pipeline)
-				r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, true, metrics.LabelValueDrainResult_StandardDrain)
-
-				return true, err
-			}
-			recyclablePipelineStatus.CompleteDrainAttempt(pipeline.GetName(), apiv1.DrainCompletionReasonMaxPauseTime)
-			// else implicitly fall through to force draining
-
-		} else if failed {
-			nonTransientFailure, err := r.checkForFailedPipeline(ctx, pipeline)
+		if failed {
+			recyclablePipelineStatus.SetDrainAttemptFailure(pipeline.GetName())
+			nonTransientFailure, err := r.checkForFailedPipeline(ctx, recyclablePipelineStatus, pipeline.GetName())
 			if err != nil {
 				return false, fmt.Errorf("failed to check for failed pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 			}
@@ -157,7 +146,23 @@ func (r *PipelineRolloutReconciler) Recycle(
 			recyclablePipelineStatus.CompleteDrainAttempt(pipeline.GetName(), apiv1.DrainCompletionReasonPipelineFailed)
 			numaLogger.Debug("Pipeline has been in Failed phase for a period of time; will force drain") // fall through to force draining
 		} else {
-			return false, nil
+			recyclablePipelineStatus.UnsetDrainAttemptFailure(pipeline.GetName())
+
+			if paused {
+				if drained {
+					recyclablePipelineStatus.CompleteDrainAttempt(pipeline.GetName(), apiv1.DrainCompletionReasonDrainComplete)
+					numaLogger.Info("Pipeline has been drained and will be deleted now")
+					err = kubernetes.DeleteResource(ctx, r.client, pipeline)
+					r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, true, metrics.LabelValueDrainResult_StandardDrain)
+
+					return true, err
+				} else {
+					recyclablePipelineStatus.CompleteDrainAttempt(pipeline.GetName(), apiv1.DrainCompletionReasonMaxPauseTime)
+				}
+				// else implicitly fall through to force draining
+			} else {
+				return false, nil
+			}
 		}
 	}
 
@@ -268,27 +273,29 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	}
 	numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Debug("checking drain of Pipeline using latest promoted pipeline's spec")
 
-	// check if it fully drained or if it went to the maximum pause time
-	if paused {
-		if drained {
-			recyclablePipelineStatus.CompleteDrainAttempt(promotedPipeline.GetName(), apiv1.DrainCompletionReasonDrainComplete)
-			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Infof("Pipeline has the promoted pipeline's spec and has fully drained, now deleting it")
-			err = kubernetes.DeleteResource(ctx, r.client, pipeline)
-			r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, true, metrics.LabelValueDrainResult_ForceDrain)
-			return true, err
-		} else {
-			recyclablePipelineStatus.CompleteDrainAttempt(promotedPipeline.GetName(), apiv1.DrainCompletionReasonMaxPauseTime)
-			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Infof("Pipeline has the promoted pipeline's spec but was not able to drain")
-		}
-	}
-	// If the Pipeline failed during force drain, we need to wait some time before deleting it, as there may be transient failures.
 	if failed {
-		nonTransientFailure, err := r.checkForFailedPipeline(ctx, pipeline)
+		recyclablePipelineStatus.SetDrainAttemptFailure(promotedPipeline.GetName())
+		// If the Pipeline failed during force drain, we need to wait some time before deleting it, as there may be transient failures.
+		nonTransientFailure, err := r.checkForFailedPipeline(ctx, recyclablePipelineStatus, promotedPipeline.GetName())
 		if err != nil {
 			return false, fmt.Errorf("failed to check for failed pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
 		if nonTransientFailure {
 			recyclablePipelineStatus.CompleteDrainAttempt(promotedPipeline.GetName(), apiv1.DrainCompletionReasonPipelineFailed)
+		}
+	} else {
+		recyclablePipelineStatus.UnsetDrainAttemptFailure(promotedPipeline.GetName())
+
+		if paused {
+			if drained {
+				recyclablePipelineStatus.CompleteDrainAttempt(promotedPipeline.GetName(), apiv1.DrainCompletionReasonDrainComplete)
+				numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Infof("Pipeline has the promoted pipeline's spec and has fully drained, now deleting it")
+				err = kubernetes.DeleteResource(ctx, r.client, pipeline)
+				r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, true, metrics.LabelValueDrainResult_ForceDrain)
+				return true, err
+			}
+			recyclablePipelineStatus.CompleteDrainAttempt(promotedPipeline.GetName(), apiv1.DrainCompletionReasonMaxPauseTime)
+			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Infof("Pipeline has the promoted pipeline's spec but was not able to drain")
 		}
 	}
 
@@ -297,35 +304,23 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 
 // check if the Pipeline has been in Failed state for long enough to consider it a permanent failure
 // if so, return true; otherwise, return false to indicate we should keep waiting.
-// decision: just use original failure start time in the case of Pipeline switching Failed->Running->Failed
-func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
-
+func (r *PipelineRolloutReconciler) checkForFailedPipeline(
+	ctx context.Context,
+	recyclablePipelineStatus *apiv1.RecyclablePipelineStatus,
+	drainAttemptSourcePipelineName string,
+) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	currentTime := time.Now()
 
-	// the first time we detect failure, mark the time
-	if pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime] == "" {
-		if err := kubernetes.SetAndPatchAnnotations(ctx, r.client, pipeline, map[string]string{
-			common.AnnotationKeyDrainFailureStartTime: currentTime.Format(time.RFC3339),
-		}); err != nil {
-			return false, fmt.Errorf("failed to set drain failure start time annotation on pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
-		}
-		return false, nil
-	}
-
-	// check if we've waited long enough
-	startTime, err := time.Parse(time.RFC3339, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
-	if err != nil {
-		return false, fmt.Errorf("failed to parse drain failure start time annotation %q on pipeline %s/%s: %w", pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime], pipeline.GetNamespace(), pipeline.GetName(), err)
-	}
+	drainAttempt := recyclablePipelineStatus.GetDrainAttempt(drainAttemptSourcePipelineName)
 	waitDurationSeconds := config.GetForceDrainFailureWaitDuration()
-	if int32(currentTime.Sub(startTime).Seconds()) < waitDurationSeconds {
-		numaLogger.WithValues("startTime", startTime, "currentTime", currentTime, "waitDuration", waitDurationSeconds).Debug("waiting longer before giving up on drain due to failed pipeline")
-		return false, nil
-	} else {
-		numaLogger.Infof("Pipeline has failed for long enough, giving up on current drain attempt, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
-		return true, err
+	if drainAttempt != nil && drainAttempt.FailedPhaseStartTime != nil &&
+		int32(time.Since(drainAttempt.FailedPhaseStartTime.Time).Seconds()) >= waitDurationSeconds {
+		numaLogger.Infof("Pipeline has failed for long enough, giving up on current drain attempt")
+		return true, nil
 	}
+
+	numaLogger.Debug("Pipeline is in Failed phase; waiting before giving up on current drain attempt")
+	return false, nil
 }
 
 // if there's a Promoted Pipeline we can use for force drain, return it; otherwise return nil
@@ -412,10 +407,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 		return fmt.Errorf("failed to apply patch to pipeline %s: %w", currentPipeline.GetName(), err)
 	}
 
-	err = startForceDrainAttempt(ctx, c, recyclablePipelineStatus, currentPipeline, newPipeline.GetName())
-	if err != nil {
-		return err
-	}
+	startForceDrainAttempt(recyclablePipelineStatus, newPipeline.GetName())
 
 	numaLogger.WithValues("currentPipeline", currentPipeline.GetName()).Debug("successfully applied patch to pipeline")
 	return nil
@@ -685,25 +677,12 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 	return false, nil
 }
 
-// clearDrainFailureStartTimeAnnotation resets the failure timer when starting a new force drain attempt, just in case it's set
-func clearDrainFailureStartTimeAnnotation(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) error {
-	if pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime] == "" {
-		return nil
-	}
-	return kubernetes.SetAndPatchAnnotations(ctx, c, pipeline, map[string]string{
-		common.AnnotationKeyDrainFailureStartTime: "",
-	})
-}
-
-// startForceDrainAttempt records that a force drain attempt has started and clears any prior drain failure timer.
-func startForceDrainAttempt(ctx context.Context, c client.Client, recyclablePipelineStatus *apiv1.RecyclablePipelineStatus, pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) error {
+// startForceDrainAttempt records that a force drain attempt has started.
+func startForceDrainAttempt(recyclablePipelineStatus *apiv1.RecyclablePipelineStatus, forceDrainSpecPipeline string) {
 	if recyclablePipelineStatus.HasDrainAttempt(forceDrainSpecPipeline) {
-		return nil
+		return
 	}
 	recyclablePipelineStatus.StartDrainAttempt(forceDrainSpecPipeline)
-	// just in case a previous drain had a state in which the Pipeline was "failed", we clear that time so we can reuse the annotation from scratch
-	// if we need to
-	return clearDrainFailureStartTimeAnnotation(ctx, c, pipeline)
 }
 
 // TODO: this is Temporary code to remove later.

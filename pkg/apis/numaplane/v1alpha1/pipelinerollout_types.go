@@ -174,11 +174,11 @@ func (status *RecyclablePipelineStatus) HasForceDrainStarted(recyclablePipelineN
 }
 
 // StartDrainAttempt appends a new in-progress drain attempt if one does not already exist for the source pipeline spec.
-// If the most recent drain attempt is still in progress, it is marked Superseded before the new attempt is started.
 func (status *RecyclablePipelineStatus) StartDrainAttempt(sourcePipelineName string) {
 	if status.HasDrainAttempt(sourcePipelineName) {
 		return
 	}
+	// If the most recent drain attempt is still in progress, it is marked Superseded before the new attempt is started.
 	if lastDrainAttempt := status.GetLastDrainAttempt(); lastDrainAttempt != nil && !lastDrainAttempt.DrainAttemptComplete {
 		status.CompleteDrainAttempt(lastDrainAttempt.SourcePipelineSpec, DrainCompletionReasonSuperseded)
 	}
@@ -205,6 +205,28 @@ func (status *RecyclablePipelineStatus) SetDrainAttemptVertexReplicaCount(source
 	drainAttempt.VertexReplicaCount = vertexReplicaCounts
 }
 
+// SetDrainAttemptFailure records that the Pipeline is currently in Failed phase for the given drain attempt.
+// If the Pipeline is not already in a failed-phase episode, FailedPhaseStartTime is set.
+func (status *RecyclablePipelineStatus) SetDrainAttemptFailure(sourcePipelineName string) {
+	drainAttempt := status.GetDrainAttempt(sourcePipelineName)
+	if drainAttempt == nil || drainAttempt.DrainAttemptComplete {
+		return
+	}
+	if drainAttempt.FailedPhaseStartTime == nil {
+		now := metav1.Now()
+		drainAttempt.FailedPhaseStartTime = &now
+	}
+}
+
+// UnsetDrainAttemptFailure clears an in-progress failed-phase episode so a later failure starts a new timer.
+func (status *RecyclablePipelineStatus) UnsetDrainAttemptFailure(sourcePipelineName string) {
+	drainAttempt := status.GetDrainAttempt(sourcePipelineName)
+	if drainAttempt == nil || drainAttempt.DrainAttemptComplete {
+		return
+	}
+	drainAttempt.FailedPhaseStartTime = nil
+}
+
 // CompleteDrainAttempt marks the drain attempt for the given source pipeline spec as ended.
 // Idempotent: already-complete attempts are not modified.
 func (status *RecyclablePipelineStatus) CompleteDrainAttempt(sourcePipelineName string, reason DrainCompletionReason) {
@@ -216,6 +238,9 @@ func (status *RecyclablePipelineStatus) CompleteDrainAttempt(sourcePipelineName 
 	drainAttempt.DrainAttemptComplete = true
 	drainAttempt.EndTime = &endTime
 	drainAttempt.DrainCompletionReason = reason
+	if reason == DrainCompletionReasonPipelineFailed && drainAttempt.FailedPhaseStartTime != nil {
+		drainAttempt.FailedPhaseEndTime = &endTime
+	}
 }
 
 // DrainCompletionReason describes why a drain attempt ended.
@@ -250,11 +275,11 @@ type DrainAttempt struct {
 	// DrainCompletionReason indicates why this drain attempt ended. Unset while the attempt is still in progress.
 	DrainCompletionReason DrainCompletionReason `json:"drainCompletionReason,omitempty"`
 
-	// FailedPhaseStartTime is when the Pipeline first entered Failed phase during this drain attempt.
-	// Used for determining ephemeral vs persistent Failure
+	// FailedPhaseStartTime is when the Pipeline entered Failed phase during the current failed-phase episode of this drain attempt.
+	// Cleared when the Pipeline leaves Failed phase so a later failure starts a new timer.
 	FailedPhaseStartTime *metav1.Time `json:"failedPhaseStartTime,omitempty"`
 
-	// FailedPhaseEndTime is when the Pipeline left Failed phase during this drain attempt, if applicable.
+	// FailedPhaseEndTime is when a persistent Pipeline failure caused this drain attempt to end.
 	FailedPhaseEndTime *metav1.Time `json:"failedPhaseEndTime,omitempty"`
 
 	// VertexReplicaCount captures the replica count per Vertex for this drain attempt.

@@ -836,14 +836,19 @@ func Test_Recycle(t *testing.T) {
 					assert.Equal(t, int64(120), *updatedPipeline.Spec.Lifecycle.PauseGracePeriodSeconds)
 				}
 
-				// Verify if the force drain failure time annotation is set
-				if tc.expectForceDrainFailureTimeSet {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyDrainFailureStartTime)
-				}
-
-				// Check drain attempt status on the PipelineRollout
 				recyclablePipelineStatus := pipelineRollout.Status.ProgressiveStatus.GetRecyclablePipelineStatus(recyclablePipelineName)
 				require.NotNil(t, recyclablePipelineStatus)
+
+				// Verify failed-phase tracking on the current drain attempt
+				if tc.expectForceDrainFailureTimeSet {
+					drainAttemptSource := recyclablePipelineName
+					if tc.expectForceDrainPipelinesStarted != "" {
+						drainAttemptSource = firstCommaDelimitedValue(tc.expectForceDrainPipelinesStarted)
+					}
+					drainAttempt := recyclablePipelineStatus.GetDrainAttempt(drainAttemptSource)
+					require.NotNil(t, drainAttempt)
+					require.NotNil(t, drainAttempt.FailedPhaseStartTime)
+				}
 				if tc.expectForceDrainPipelinesStarted != "" {
 					sourcePipelineSpec := firstCommaDelimitedValue(tc.expectForceDrainPipelinesStarted)
 					assert.True(t, recyclablePipelineStatus.HasDrainAttempt(sourcePipelineSpec),
@@ -914,44 +919,20 @@ func assertMigrationDrainAttempts(t *testing.T, expected, actual []apiv1.DrainAt
 	}
 }
 
-func Test_startForceDrainAttempt_clearsForceDrainFailureStartTime(t *testing.T) {
-	ctx := context.Background()
-
-	pipeline := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "numaflow.numaproj.io/v1alpha1",
-			"kind":       "Pipeline",
-			"metadata": map[string]interface{}{
-				"name":      "test-pipeline",
-				"namespace": ctlrcommon.DefaultTestNamespace,
-			},
-		},
-	}
-	pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
-	pipeline.SetAnnotations(map[string]string{
-		common.AnnotationKeyDrainFailureStartTime: time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
-	})
-
-	scheme := runtime.NewScheme()
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
-
-	recyclablePipelineStatus := &apiv1.RecyclablePipelineStatus{Name: "test-pipeline"}
-	err := startForceDrainAttempt(ctx, fakeClient, recyclablePipelineStatus, pipeline, "promoted-pipeline-1")
-	assert.NoError(t, err)
-	assert.True(t, recyclablePipelineStatus.HasDrainAttempt("promoted-pipeline-1"))
-	assert.Empty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
+func Test_startForceDrainAttempt_startsDrainAttempt(t *testing.T) {
+	status := &apiv1.RecyclablePipelineStatus{Name: "test-pipeline"}
+	startForceDrainAttempt(status, "promoted-pipeline-1")
+	assert.True(t, status.HasDrainAttempt("promoted-pipeline-1"))
 }
 
 func Test_startForceDrainAttempt_supersedesInProgressForceDrainAttempts(t *testing.T) {
-	ctx := context.Background()
 	pipeline := &unstructured.Unstructured{}
 	pipeline.SetName("recyclable-pipeline")
 
 	status := &apiv1.RecyclablePipelineStatus{Name: "recyclable-pipeline"}
 	status.StartDrainAttempt("promoted-pipeline-1")
 
-	err := startForceDrainAttempt(ctx, fake.NewClientBuilder().Build(), status, pipeline, "promoted-pipeline-2")
-	assert.NoError(t, err)
+	startForceDrainAttempt(status, "promoted-pipeline-2")
 	assert.True(t, status.IsDrainAttemptComplete("promoted-pipeline-1"))
 	assert.Equal(t, apiv1.DrainCompletionReasonSuperseded, status.GetDrainAttempt("promoted-pipeline-1").DrainCompletionReason)
 	assert.True(t, status.HasDrainAttempt("promoted-pipeline-2"))
@@ -962,64 +943,45 @@ func Test_checkForFailedPipeline(t *testing.T) {
 	waitDuration := time.Duration(config.GetForceDrainFailureWaitDuration()) * time.Second
 	withinWait := waitDuration - time.Second
 	pastWait := waitDuration + time.Second
+	pipelineName := "test-pipeline"
 
 	tests := []struct {
 		name                      string
-		failureStartTimeAgo       *time.Duration // nil = no annotation (first failure detection)
+		failedPhaseStartTimeAgo   *time.Duration // nil = no failed phase episode in progress
 		expectNonTransientFailure bool
-		expectAnnotationSet       bool
 	}{
 		{
-			name:                "first failure sets start time and waits",
-			expectAnnotationSet: true,
+			name: "no failed phase episode in progress",
 		},
 		{
-			name:                "failure within wait duration",
-			failureStartTimeAgo: &withinWait,
+			name:                    "failure within wait duration",
+			failedPhaseStartTimeAgo: &withinWait,
 		},
 		{
 			name:                      "failure past wait duration",
-			failureStartTimeAgo:       &pastWait,
+			failedPhaseStartTimeAgo:   &pastWait,
 			expectNonTransientFailure: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			pipeline := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": "numaflow.numaproj.io/v1alpha1",
-					"kind":       "Pipeline",
-					"metadata": map[string]interface{}{
-						"name":      "test-pipeline",
-						"namespace": ctlrcommon.DefaultTestNamespace,
-					},
-				},
-			}
-			pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
-
-			if tc.failureStartTimeAgo != nil {
-				pipeline.SetAnnotations(map[string]string{
-					common.AnnotationKeyDrainFailureStartTime: time.Now().Add(-*tc.failureStartTimeAgo).Format(time.RFC3339),
-				})
+			status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+			status.StartDrainAttempt(pipelineName)
+			if tc.failedPhaseStartTimeAgo != nil {
+				startTime := metav1.NewTime(time.Now().Add(-*tc.failedPhaseStartTimeAgo))
+				status.GetDrainAttempt(pipelineName).FailedPhaseStartTime = &startTime
 			}
 
-			scheme := runtime.NewScheme()
-			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
 			reconciler := &PipelineRolloutReconciler{
-				client:        fakeClient,
 				customMetrics: createTestMetrics(),
 				recorder:      record.NewFakeRecorder(100),
 			}
 
-			nonTransientFailure, err := reconciler.checkForFailedPipeline(ctx, pipeline)
+			nonTransientFailure, err := reconciler.checkForFailedPipeline(ctx, status, pipelineName)
 
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectNonTransientFailure, nonTransientFailure)
-
-			if tc.expectAnnotationSet {
-				assert.NotEmpty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
-			}
 		})
 	}
 }
@@ -1238,6 +1200,34 @@ func Test_RecyclablePipelineStatusDrainAttemptHelpers(t *testing.T) {
 
 		assert.Equal(t, apiv1.DrainCompletionReasonMaxPauseTime, status.GetDrainAttempt("promoted-a").DrainCompletionReason)
 		assert.False(t, status.GetDrainAttempt("promoted-b").DrainAttemptComplete)
+	})
+
+	t.Run("SetDrainAttemptFailure and UnsetDrainAttemptFailure", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+
+		status.SetDrainAttemptFailure("promoted-a")
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").FailedPhaseStartTime)
+		assert.Nil(t, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
+
+		status.UnsetDrainAttemptFailure("promoted-a")
+		assert.Nil(t, status.GetDrainAttempt("promoted-a").FailedPhaseStartTime)
+		assert.Nil(t, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
+
+		status.SetDrainAttemptFailure("promoted-a")
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").FailedPhaseStartTime)
+		assert.Nil(t, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
+	})
+
+	t.Run("CompleteDrainAttempt sets FailedPhaseEndTime for persistent pipeline failure", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+		status.SetDrainAttemptFailure("promoted-a")
+
+		status.CompleteDrainAttempt("promoted-a", apiv1.DrainCompletionReasonPipelineFailed)
+
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
+		assert.Equal(t, status.GetDrainAttempt("promoted-a").EndTime, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
 	})
 }
 
