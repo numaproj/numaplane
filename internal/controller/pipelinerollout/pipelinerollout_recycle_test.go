@@ -948,6 +948,7 @@ func Test_checkForFailedPipeline(t *testing.T) {
 	tests := []struct {
 		name                      string
 		failedPhaseStartTimeAgo   *time.Duration // nil = no failed phase episode in progress
+		drainAttemptComplete      bool
 		expectNonTransientFailure bool
 	}{
 		{
@@ -962,6 +963,12 @@ func Test_checkForFailedPipeline(t *testing.T) {
 			failedPhaseStartTimeAgo:   &pastWait,
 			expectNonTransientFailure: true,
 		},
+		{
+			name:                      "completed drain attempt ignores stale failure start time",
+			failedPhaseStartTimeAgo:   &pastWait,
+			drainAttemptComplete:      true,
+			expectNonTransientFailure: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -971,6 +978,9 @@ func Test_checkForFailedPipeline(t *testing.T) {
 			if tc.failedPhaseStartTimeAgo != nil {
 				startTime := metav1.NewTime(time.Now().Add(-*tc.failedPhaseStartTimeAgo))
 				status.GetDrainAttempt(pipelineName).FailedPhaseStartTime = &startTime
+			}
+			if tc.drainAttemptComplete {
+				status.CompleteDrainAttempt(pipelineName, apiv1.DrainCompletionReasonPipelineFailed)
 			}
 
 			reconciler := &PipelineRolloutReconciler{

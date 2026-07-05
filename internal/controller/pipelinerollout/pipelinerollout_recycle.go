@@ -122,8 +122,8 @@ func (r *PipelineRolloutReconciler) Recycle(
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// if the recycling strategy requires pausing with the original spec and we still have the original spec, then
-	// make sure we pause it and check on it
-	if requiresPauseOriginalSpec && originalSpec {
+	// make sure we pause it and check on it (skip once that drain attempt has already completed)
+	if requiresPauseOriginalSpec && originalSpec && !recyclablePipelineStatus.IsDrainAttemptComplete(pipeline.GetName()) {
 		if !recyclablePipelineStatus.HasDrainAttempt(pipeline.GetName()) {
 			recyclablePipelineStatus.StartDrainAttempt(pipeline.GetName())
 		}
@@ -312,6 +312,10 @@ func (r *PipelineRolloutReconciler) checkForFailedPipeline(
 	numaLogger := logger.FromContext(ctx)
 
 	drainAttempt := recyclablePipelineStatus.GetDrainAttempt(drainAttemptSourcePipelineName)
+	if drainAttempt == nil || drainAttempt.DrainAttemptComplete {
+		return false, nil
+	}
+
 	waitDurationSeconds := config.GetForceDrainFailureWaitDuration()
 	if drainAttempt != nil && drainAttempt.FailedPhaseStartTime != nil &&
 		int32(time.Since(drainAttempt.FailedPhaseStartTime.Time).Seconds()) >= waitDurationSeconds {
