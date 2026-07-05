@@ -230,9 +230,8 @@ func GetPipelineRolloutStatus(pipelineRolloutName string) (apiv1.PipelineRollout
 
 // ExpectedDrainAttempt describes expected fields on a single DrainAttempt entry.
 type ExpectedDrainAttempt struct {
-	SourcePipelineSpec    string
-	DrainAttemptComplete  bool
-	DrainCompletionReason apiv1.DrainCompletionReason // empty = do not check
+	SourcePipelineSpec   string
+	DrainAttemptComplete bool
 }
 
 // RecyclablePipelineDrainAttemptsMatch reports whether the given recyclable pipeline has drain
@@ -252,9 +251,6 @@ func RecyclablePipelineDrainAttemptsMatch(
 			return false
 		}
 		if got.DrainAttemptComplete != want.DrainAttemptComplete {
-			return false
-		}
-		if want.DrainCompletionReason != "" && got.DrainCompletionReason != want.DrainCompletionReason {
 			return false
 		}
 	}

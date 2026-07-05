@@ -158,6 +158,8 @@ jobs:
            - strategy: "progressive"
              case: "force-drain"
            - strategy: "progressive"
+             case: "force-drain-backward-compatibility"
+           - strategy: "progressive"
              case: "no-drain"
            - strategy: "progressive"
              case: "skip-progressive"

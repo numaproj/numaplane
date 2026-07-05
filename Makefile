@@ -156,6 +156,7 @@ test-pipeline-rider-e2e:
 test-monovertex-rider-e2e:
 test-rollback-e2e:
 test-force-drain-e2e:
+test-force-drain-backward-compatibility-e2e:
 test-no-drain-e2e:
 test-hpa-monovertex-e2e:
 test-%: envtest ## Run e2e tests. Note we may need to increase the timeout in the future.

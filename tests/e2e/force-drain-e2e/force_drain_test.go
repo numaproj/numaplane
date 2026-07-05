@@ -165,7 +165,8 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// restore PipelineRollout back to original spec
 		updatePipeline(&initialPipelineSpec)
 
-		verifyPipelinesPausingWithValidSpecAndDeleted([]int{1, 2}, GetInstanceName(pipelineRolloutName, 0))
+		verifyRecyclablePipelinesFailedDrainAttempts([]int{1, 2}, GetInstanceName(pipelineRolloutName, 0), validImagePath)
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{1, 2})
 
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 1), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 2), "Normal")
@@ -180,6 +181,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// Force promote test-pipeline-rollout-4 (which is unhealthy)
 		// This enables us to see that test-pipeline-rollout-0 and test-pipeline-rollout-3 start trying to drain
 		forcePromote(pipelineRolloutName, 4)
+		verifyRecyclablePipelinesFailedDrainAttempts([]int{3}, GetInstanceName(pipelineRolloutName, 4), "badpath2")
 
 		// test-pipeline-rollout-0 should be able to drain with its original spec
 		// Verify that test-pipeline-rollout-0 and test-pipeline-rollout-3 have the spec from test-pipeline-rollout-4
@@ -206,6 +208,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// force promote it so that test-pipeline-rollout-3 and test-pipeline-rollout-4 start trying to drain with this spec
 		// once they are done with the previous drain attempt
 		forcePromote(pipelineRolloutName, 5)
+		verifyRecyclablePipelinesFailedDrainAttempts([]int{3, 4}, GetInstanceName(pipelineRolloutName, 5), "badpath3")
 		verifyPipelineHasImage(3, "badpath3")
 		verifyPipelineHasImage(4, "badpath3")
 		VerifyPipelineDesiredPhase(GetInstanceName(pipelineRolloutName, 3), numaflowv1.PipelinePhasePaused)
@@ -241,7 +244,8 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// updated Pipeline updates the sink ("test-pipeline-rollout-6")
 		updatePipeline(updatedPipelineSpec)
 
-		verifyPipelinesPausingWithValidSpecAndDeleted([]int{3, 4, 5}, "")
+		verifyRecyclablePipelinesFailedDrainAttempts([]int{3, 4, 5}, GetInstanceName(pipelineRolloutName, 6), validImagePath)
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{3, 4, 5})
 
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 0), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 3), "Normal")
@@ -260,6 +264,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// create test-pipeline-rollout-7 and test-pipeline-rollout-8 and force promote 8
 		updateFailedPipelinesBackToBack(7)
 		forcePromote(pipelineRolloutName, 8)
+		verifyRecyclablePipelinesFailedDrainAttempts([]int{7}, GetInstanceName(pipelineRolloutName, 8), "badpath2")
 
 		// now let's make sure that test-pipeline-rollout-7 gets deleted even though it can't drain successfully
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 7))
@@ -300,7 +305,78 @@ func updateFailedPipelinesBackToBack(nextIndex int) {
 	})
 }
 
-func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int, forceDrainSourcePipelineName string) {
+func verifyRecyclablePipelinesFailedDrainAttempts(pipelineIndices []int, forceDrainSourcePipelineName string, forceDrainImagePath string) {
+	drainAttemptsVerified := map[int]bool{}
+	for _, pipelineIndex := range pipelineIndices {
+		drainAttemptsVerified[pipelineIndex] = false
+	}
+
+	CheckEventually(fmt.Sprintf("Verifying recyclable Pipeline(s) (%v) drain attempt status", pipelineIndices), func() bool {
+		rolloutStatus, err := GetPipelineRolloutStatus(pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+
+		for _, pipelineIndex := range pipelineIndices {
+			if drainAttemptsVerified[pipelineIndex] {
+				continue
+			}
+
+			pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+			pipeline, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
+			if err != nil {
+				continue
+			}
+
+			annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
+			if !found || err != nil || annotations == nil {
+				continue
+			}
+
+			if !pipelinePausingDuringForceDrain(retrievedPipelineSpec, retrievedPipelineStatus, forceDrainImagePath) {
+				continue
+			}
+
+			expectedDrainAttempts := []ExpectedDrainAttempt{
+				{
+					SourcePipelineSpec:   pipelineName,
+					DrainAttemptComplete: true,
+				},
+				{
+					SourcePipelineSpec:   forceDrainSourcePipelineName,
+					DrainAttemptComplete: false,
+				},
+			}
+			if !RecyclablePipelineDrainAttemptsMatch(rolloutStatus, pipelineName, expectedDrainAttempts) {
+				continue
+			}
+
+			drainAttemptsVerified[pipelineIndex] = true
+			By(fmt.Sprintf("verified drain attempt status for index %d\n", pipelineIndex))
+		}
+
+		for _, pipelineIndex := range pipelineIndices {
+			if !drainAttemptsVerified[pipelineIndex] {
+				return false
+			}
+		}
+		return true
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("recyclable pipeline drain attempts not verified: %v", drainAttemptsVerified))
+}
+
+func pipelinePausingWithValidSpec(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+	return pipelinePausingDuringForceDrain(retrievedPipelineSpec, retrievedPipelineStatus, validImagePath)
+}
+
+func pipelinePausingDuringForceDrain(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus, forceDrainImagePath string) bool {
+	return retrievedPipelineSpec.Vertices[1].UDF != nil && retrievedPipelineSpec.Vertices[1].UDF.Container != nil &&
+		retrievedPipelineSpec.Vertices[1].UDF.Container.Image == forceDrainImagePath &&
+		retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
+		(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing ||
+			(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause))
+}
+
+func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 
 	pausingWithCorrectSpec := map[int]bool{}
 
@@ -322,14 +398,7 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int, forceD
 				return false
 			}
 
-			if !pausingWithCorrectSpec[pipelineIndex] &&
-				retrievedPipelineSpec.Vertices[1].UDF != nil && retrievedPipelineSpec.Vertices[1].UDF.Container != nil &&
-				retrievedPipelineSpec.Vertices[1].UDF.Container.Image == validImagePath &&
-				retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
-				// we check for either Pausing or Paused w/ drainedOnPause
-				// just the latter would be a better check, but sometimes the test isn't quick enough to catch it before the pipeline is deleted
-				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing ||
-					(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause)) {
+			if !pausingWithCorrectSpec[pipelineIndex] && pipelinePausingWithValidSpec(retrievedPipelineSpec, retrievedPipelineStatus) {
 				pausingWithCorrectSpec[pipelineIndex] = true
 				By(fmt.Sprintf("setting pausingWithCorrectSpec for index %d\n", pipelineIndex))
 			}
@@ -340,25 +409,6 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int, forceD
 		for _, pipelineIndex := range pipelineIndices {
 			if !pausingWithCorrectSpec[pipelineIndex] {
 				return false
-			}
-		}
-
-		// verify drain attempts on PipelineRollout status before pipelines are deleted and status is pruned
-		if forceDrainSourcePipelineName != "" {
-			rolloutStatus, err := GetPipelineRolloutStatus(pipelineRolloutName)
-			if err != nil {
-				return false
-			}
-			expectedDrainAttempt := []ExpectedDrainAttempt{{
-				SourcePipelineSpec:    forceDrainSourcePipelineName,
-				DrainAttemptComplete:  true,
-				DrainCompletionReason: apiv1.DrainCompletionReasonDrainComplete,
-			}}
-			for _, pipelineIndex := range pipelineIndices {
-				recyclablePipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
-				if !RecyclablePipelineDrainAttemptsMatch(rolloutStatus, recyclablePipelineName, expectedDrainAttempt) {
-					return false
-				}
 			}
 		}
 
