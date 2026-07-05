@@ -165,7 +165,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// restore PipelineRollout back to original spec
 		updatePipeline(&initialPipelineSpec)
 
-		verifyPipelinesPausingWithValidSpecAndDeleted([]int{1, 2})
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{1, 2}, GetInstanceName(pipelineRolloutName, 0))
 
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 1), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 2), "Normal")
@@ -241,7 +241,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// updated Pipeline updates the sink ("test-pipeline-rollout-6")
 		updatePipeline(updatedPipelineSpec)
 
-		verifyPipelinesPausingWithValidSpecAndDeleted([]int{3, 4, 5})
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{3, 4, 5}, "")
 
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 0), "Normal")
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 3), "Normal")
@@ -300,7 +300,7 @@ func updateFailedPipelinesBackToBack(nextIndex int) {
 	})
 }
 
-func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
+func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int, forceDrainSourcePipelineName string) {
 
 	pausingWithCorrectSpec := map[int]bool{}
 
@@ -341,8 +341,27 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 			if !pausingWithCorrectSpec[pipelineIndex] {
 				return false
 			}
-
 		}
+
+		// verify drain attempts on PipelineRollout status before pipelines are deleted and status is pruned
+		if forceDrainSourcePipelineName != "" {
+			rolloutStatus, err := GetPipelineRolloutStatus(pipelineRolloutName)
+			if err != nil {
+				return false
+			}
+			expectedDrainAttempt := []ExpectedDrainAttempt{{
+				SourcePipelineSpec:    forceDrainSourcePipelineName,
+				DrainAttemptComplete:  true,
+				DrainCompletionReason: apiv1.DrainCompletionReasonDrainComplete,
+			}}
+			for _, pipelineIndex := range pipelineIndices {
+				recyclablePipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+				if !RecyclablePipelineDrainAttemptsMatch(rolloutStatus, recyclablePipelineName, expectedDrainAttempt) {
+					return false
+				}
+			}
+		}
+
 		return true
 
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", pausingWithCorrectSpec))

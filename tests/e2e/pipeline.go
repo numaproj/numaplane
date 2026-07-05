@@ -220,6 +220,59 @@ func VerifyPipelineRolloutStatusEventually(pipelineRolloutName string, f func(ap
 	}).Should(BeTrue())
 }
 
+func GetPipelineRolloutStatus(pipelineRolloutName string) (apiv1.PipelineRolloutStatus, error) {
+	rollout, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+	if err != nil {
+		return apiv1.PipelineRolloutStatus{}, err
+	}
+	return rollout.Status, nil
+}
+
+// ExpectedDrainAttempt describes expected fields on a single DrainAttempt entry.
+type ExpectedDrainAttempt struct {
+	SourcePipelineSpec    string
+	DrainAttemptComplete  bool
+	DrainCompletionReason apiv1.DrainCompletionReason // empty = do not check
+}
+
+// RecyclablePipelineDrainAttemptsMatch reports whether the given recyclable pipeline has drain
+// attempts matching all expected entries (by sourcePipelineSpec).
+func RecyclablePipelineDrainAttemptsMatch(
+	status apiv1.PipelineRolloutStatus,
+	recyclablePipelineName string,
+	expected []ExpectedDrainAttempt,
+) bool {
+	recyclablePipelineStatus := status.ProgressiveStatus.GetRecyclablePipelineStatus(recyclablePipelineName)
+	if recyclablePipelineStatus == nil {
+		return false
+	}
+	for _, want := range expected {
+		got := recyclablePipelineStatus.GetDrainAttempt(want.SourcePipelineSpec)
+		if got == nil {
+			return false
+		}
+		if got.DrainAttemptComplete != want.DrainAttemptComplete {
+			return false
+		}
+		if want.DrainCompletionReason != "" && got.DrainCompletionReason != want.DrainCompletionReason {
+			return false
+		}
+	}
+	return true
+}
+
+// VerifyRecyclablePipelineDrainAttempts polls PipelineRollout status until the given recyclable
+// pipeline has drain attempts matching all expected entries (by sourcePipelineSpec).
+func VerifyRecyclablePipelineDrainAttempts(
+	pipelineRolloutName string,
+	recyclablePipelineName string,
+	expected []ExpectedDrainAttempt,
+) {
+	VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
+		return RecyclablePipelineDrainAttemptsMatch(status, recyclablePipelineName, expected)
+	})
+}
+
 func VerifyPipelineRolloutConditionPausing(namespace string, pipelineRolloutName string) {
 	CheckEventually("Verify that Pipeline Rollout condition is Pausing/Paused", func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})

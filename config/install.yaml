@@ -1716,15 +1716,14 @@ spec:
                                 format: date-time
                                 type: string
                               failedPhaseEndTime:
-                                description: FailedPhaseEndTime is when the Pipeline
-                                  left Failed phase during this drain attempt, if
-                                  applicable.
+                                description: FailedPhaseEndTime is when a persistent
+                                  Pipeline failure caused this drain attempt to end.
                                 format: date-time
                                 type: string
                               failedPhaseStartTime:
                                 description: |-
-                                  FailedPhaseStartTime is when the Pipeline first entered Failed phase during this drain attempt.
-                                  Used for determining ephemeral vs persistent Failure
+                                  FailedPhaseStartTime is when the Pipeline entered Failed phase during the current failed-phase episode of this drain attempt.
+                                  Cleared when the Pipeline leaves Failed phase so a later failure starts a new timer.
                                 format: date-time
                                 type: string
                               sourcePipelineSpec:
