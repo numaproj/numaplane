@@ -95,6 +95,8 @@ func (r *PipelineRolloutReconciler) Recycle(
 		return false, nil
 	}
 
+	// TODO: remove later
+	// This is temporary backward compatible code to handle pipelines with older annotations
 	if err := migrateForceDrainAnnotationsToDrainAttempts(recyclablePipelineStatus, pipeline, requiresPauseOriginalSpec); err != nil {
 		return false, fmt.Errorf("failed to migrate force drain annotations to drain attempts status: %w", err)
 	}
@@ -124,6 +126,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	// if the recycling strategy requires pausing with the original spec and we still have the original spec, then
 	// make sure we pause it and check on it (skip once that drain attempt has already completed)
 	if requiresPauseOriginalSpec && originalSpec && !recyclablePipelineStatus.IsDrainAttemptComplete(pipeline.GetName()) {
+		// update the PipelineRollout Status for this recyclable pipeline to add in this DrainAttempt
 		if !recyclablePipelineStatus.HasDrainAttempt(pipeline.GetName()) {
 			recyclablePipelineStatus.StartDrainAttempt(pipeline.GetName())
 		}
@@ -134,6 +137,8 @@ func (r *PipelineRolloutReconciler) Recycle(
 		}
 		numaLogger.WithValues("paused", paused, "drained", drained).Debug("checking drain of Pipeline using original spec")
 		if failed {
+			// look for persistent "Failed" phase: if it's persistent over a period of time, we stop trying to drain
+			// if it did fail, we keep track of the time to determine if it's persistent
 			recyclablePipelineStatus.SetDrainAttemptFailure(pipeline.GetName())
 			nonTransientFailure, err := r.checkForFailedPipeline(ctx, recyclablePipelineStatus, pipeline.GetName())
 			if err != nil {
@@ -146,6 +151,8 @@ func (r *PipelineRolloutReconciler) Recycle(
 			recyclablePipelineStatus.CompleteDrainAttempt(pipeline.GetName(), apiv1.DrainCompletionReasonPipelineFailed)
 			numaLogger.Debug("Pipeline has been in Failed phase for a period of time; will force drain") // fall through to force draining
 		} else {
+			// in case there was an intermittent "Failed" phase, unset that failed state now
+			// (we require persistent failure in order to decide to stop the drain)
 			recyclablePipelineStatus.UnsetDrainAttemptFailure(pipeline.GetName())
 
 			if paused {
@@ -159,7 +166,6 @@ func (r *PipelineRolloutReconciler) Recycle(
 				} else {
 					recyclablePipelineStatus.CompleteDrainAttempt(pipeline.GetName(), apiv1.DrainCompletionReasonMaxPauseTime)
 				}
-				// else implicitly fall through to force draining
 			} else {
 				return false, nil
 			}
@@ -284,6 +290,8 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 			recyclablePipelineStatus.CompleteDrainAttempt(promotedPipeline.GetName(), apiv1.DrainCompletionReasonPipelineFailed)
 		}
 	} else {
+		// in case there was an intermittent "Failed" phase, unset that failed state now
+		// (we require persistent failure in order to decide to stop the drain)
 		recyclablePipelineStatus.UnsetDrainAttemptFailure(promotedPipeline.GetName())
 
 		if paused {

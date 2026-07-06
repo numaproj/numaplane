@@ -97,7 +97,7 @@ type PipelineProgressiveStatus struct {
 	PromotedPipelineStatus *PromotedPipelineStatus `json:"promotedPipelineStatus,omitempty"`
 	// HistoricalPodCount keeps track of per-vertex pod count from the last "promoted" pipeline
 	HistoricalPodCount map[string]int `json:"historicalPodCount,omitempty"`
-	// RecyclablePipelinesStatus provides status of the current Pipelines marked "recyclable"
+	// RecyclablePipelinesStatus provides status of the current Pipelines marked "recyclable" or "recyclable-expired"
 	RecyclablePipelinesStatus []RecyclablePipelineStatus `json:"recyclablePipelinesStatus,omitempty"`
 }
 
