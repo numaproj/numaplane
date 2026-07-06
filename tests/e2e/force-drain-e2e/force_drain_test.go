@@ -317,9 +317,6 @@ func verifyRecyclablePipelineFailedDrainAttempt(pipelineIndex int, forceDrainSou
 		}
 
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
-		if errors.IsNotFound(err) {
-			return false
-		}
 		if err != nil {
 			return false
 		}
