@@ -372,7 +372,7 @@ spec:
                     type: object
                   recyclablePipelinesStatus:
                     description: RecyclablePipelinesStatus provides status of the
-                      current Pipelines marked "recyclable"
+                      current Pipelines marked "recyclable" or "recyclable-expired"
                     items:
                       properties:
                         drainAttempts:
