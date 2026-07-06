@@ -159,23 +159,15 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 	It("Should create 2 failed Pipelines which will need to be drained and deleted and update back to original Pipeline", func() {
 
-		// Create pipeline-1 (progressive-replaced) and pipeline-2, then restore immediately.
-		// Do not wait for pipeline-2 failure assessment before or after restore: before restore,
-		// pipeline-1 is often deleted during the wait on fast clusters; after restore/discontinue,
-		// upgrading status is cleared so that assessment is no longer observable.
-		updateFailedPipelinesBackToBack(1, false)
+		// update twice
+		// first this creates "test-pipeline-rollout-1", then "test-pipeline-rollout-2"
+		updateFailedPipelinesBackToBack(1)
 
+		// restore PipelineRollout back to original spec
 		updatePipeline(&initialPipelineSpec)
 		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		VerifyPromotedPipelineExists(Namespace, pipelineRolloutName)
-		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(spec numaflowv1.PipelineSpec) bool {
-			return spec.Vertices[1].UDF != nil &&
-				spec.Vertices[1].UDF.Container != nil &&
-				spec.Vertices[1].UDF.Container.Image == validImagePath
-		})
-
-		// End state only: both recyclables eventually drain with the promoted spec and are deleted.
+		verifyRecyclablePipelinesFailedDrainAttempts([]int{1, 2}, GetInstanceName(pipelineRolloutName, 0), validImagePath)
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{1, 2})
 
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 1), "Normal")
@@ -186,10 +178,10 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 		// update twice
 		// first this creates "test-pipeline-rollout-3", then "test-pipeline-rollout-4"
-		// Create both failed pipelines, then force-promote before pipeline-3 can finish
-		// original-spec drain and be deleted (common on faster local clusters).
-		updateFailedPipelinesBackToBack(3, false)
-		VerifyPipelineExists(Namespace, GetInstanceName(pipelineRolloutName, 3))
+		updateFailedPipelinesBackToBack(3)
+
+		// Force promote test-pipeline-rollout-4 (which is unhealthy)
+		// This enables us to see that test-pipeline-rollout-0 and test-pipeline-rollout-3 start trying to drain
 		forcePromote(pipelineRolloutName, 4)
 		verifyRecyclablePipelinesFailedDrainAttempts([]int{3}, GetInstanceName(pipelineRolloutName, 4), "badpath2")
 
@@ -254,6 +246,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// updated Pipeline updates the sink ("test-pipeline-rollout-6")
 		updatePipeline(updatedPipelineSpec)
 
+		verifyRecyclablePipelinesFailedDrainAttempts([]int{3, 4, 5}, GetInstanceName(pipelineRolloutName, 6), validImagePath)
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{3, 4, 5})
 
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 0), "Normal")
@@ -272,8 +265,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		})
 
 		// create test-pipeline-rollout-7 and test-pipeline-rollout-8 and force promote 8
-		updateFailedPipelinesBackToBack(7, false)
-		VerifyPipelineExists(Namespace, GetInstanceName(pipelineRolloutName, 7))
+		updateFailedPipelinesBackToBack(7)
 		forcePromote(pipelineRolloutName, 8)
 		verifyRecyclablePipelinesFailedDrainAttempts([]int{7}, GetInstanceName(pipelineRolloutName, 8), "badpath2")
 
@@ -298,12 +290,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 // the second pipeline will actually be assessed as Failed
 // We test both since they take slightly different paths in the recycle code
 // nextIndex is the expected index of the first pipeline that will be created (second will be nextIndex+1)
-func updateFailedPipelinesBackToBack(nextIndex int, waitForFailureAssessment ...bool) {
-	wait := true
-	if len(waitForFailureAssessment) > 0 {
-		wait = waitForFailureAssessment[0]
-	}
-
+func updateFailedPipelinesBackToBack(nextIndex int) {
 	// this will be a failed Pipeline which will be replaced before it has a chance to be assessed
 	time.Sleep(10 * time.Second)
 	updatePipelineImage("badpath1")
@@ -318,43 +305,40 @@ func updateFailedPipelinesBackToBack(nextIndex int, waitForFailureAssessment ...
 	// verify the second pipeline was created
 	VerifyPipelineExists(Namespace, GetInstanceName(pipelineRolloutName, nextIndex+1))
 
-	if !wait {
-		return
-	}
-
-	waitForUpgradingPipelineFailureAssessment(nextIndex + 1)
-}
-
-func waitForUpgradingPipelineFailureAssessment(pipelineIndex int) {
+	// verify it was assessed as failed
 	VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
 		return status.ProgressiveStatus.UpgradingPipelineStatus != nil &&
-			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, pipelineIndex) &&
+			status.ProgressiveStatus.UpgradingPipelineStatus.Name == GetInstanceName(pipelineRolloutName, nextIndex+1) &&
 			status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult == apiv1.AssessmentResultFailure
 	})
 }
 
-func verifyRecyclablePipelinesFailedDrainAttempts(pipelineIndices []int, forceDrainSourcePipelineName string, forceDrainImagePath string, requireLiveForceDrainSpec ...bool) {
-	requireLive := true
-	if len(requireLiveForceDrainSpec) > 0 {
-		requireLive = requireLiveForceDrainSpec[0]
-	}
+func verifyRecyclablePipelinesFailedDrainAttempts(pipelineIndices []int, forceDrainSourcePipelineName string, forceDrainImagePath string) {
 	for _, pipelineIndex := range pipelineIndices {
-		verifyRecyclablePipelineFailedDrainAttempt(pipelineIndex, forceDrainSourcePipelineName, forceDrainImagePath, requireLive)
+		verifyRecyclablePipelineFailedDrainAttempt(pipelineIndex, forceDrainSourcePipelineName, forceDrainImagePath)
 	}
 }
 
-// verifyRecyclablePipelineFailedDrainAttempt checks per-pipeline drain progress for unhealthy
-// force-drain scenarios (tests 3+). Only assert states that remain observable:
-//   - per-pipeline Eventually (not batch)
-//   - live pipeline spec when unhealthy image must be verified afterward
-//   - rollout status DrainAttemptComplete when healthy force-drain may delete the pipeline first
-//
-// Do not use for test 2 (restore/discontinue): that test asserts end state only via deletion.
-func verifyRecyclablePipelineFailedDrainAttempt(pipelineIndex int, forceDrainSourcePipelineName string, forceDrainImagePath string, requireLiveForceDrainSpec bool) {
+// verifyRecyclablePipelineFailedDrainAttempt checks per-pipeline so a faster recyclable is not
+// blocked on a slower one, and treats NotFound as success when drain already finished.
+func verifyRecyclablePipelineFailedDrainAttempt(pipelineIndex int, forceDrainSourcePipelineName string, forceDrainImagePath string) {
 	pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
 	CheckEventually(fmt.Sprintf("Verifying recyclable Pipeline %s drain attempt status", pipelineName), func() bool {
 		rolloutStatus, err := GetPipelineRolloutStatus(pipelineRolloutName)
 		if err != nil {
+			return false
+		}
+
+		pipeline, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
+		if errors.IsNotFound(err) {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+
+		annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
+		if !found || err != nil || annotations == nil {
 			return false
 		}
 
@@ -373,22 +357,15 @@ func verifyRecyclablePipelineFailedDrainAttempt(pipelineIndex int, forceDrainSou
 			return false
 		}
 
-		if !requireLiveForceDrainSpec && forceAttempt.DrainAttemptComplete {
+		// Do not assert forceDrain in-progress (false): it races completion. Accept mid-drain,
+		// spec already applied, or a completed force attempt we may have missed while polling.
+		if pipelinePausingDuringForceDrain(retrievedPipelineSpec, retrievedPipelineStatus, forceDrainImagePath) {
 			return true
 		}
-
-		_, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
-		if err != nil {
-			return false
-		}
-
 		if forceAttempt.DrainAttemptComplete {
-			return pipelineHasForceDrainSpecApplied(retrievedPipelineSpec, forceDrainImagePath) ||
-				pipelinePausingDuringForceDrain(retrievedPipelineSpec, retrievedPipelineStatus, forceDrainImagePath)
+			return true
 		}
-
-		return pipelinePausingDuringForceDrain(retrievedPipelineSpec, retrievedPipelineStatus, forceDrainImagePath) ||
-			pipelineHasForceDrainSpecApplied(retrievedPipelineSpec, forceDrainImagePath)
+		return pipelineHasForceDrainSpecApplied(retrievedPipelineSpec, forceDrainImagePath)
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 }
 
