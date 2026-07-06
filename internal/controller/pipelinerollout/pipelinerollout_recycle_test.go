@@ -1417,6 +1417,44 @@ func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
 	}
 }
 
+func Test_getKeepUndrainedPipelines(t *testing.T) {
+	loadPipelineTestConfig(t, true) // global keepUndrainedPipelines: false
+
+	keepTrue := true
+	keepFalse := false
+
+	tests := []struct {
+		name     string
+		rollout  *apiv1.PipelineRollout
+		expected bool
+	}{
+		{
+			name:     "uses rollout value when set to true",
+			rollout:  &apiv1.PipelineRollout{Spec: apiv1.PipelineRolloutSpec{Strategy: &apiv1.PipelineStrategy{RecycleStrategy: apiv1.RecycleStrategy{KeepUndrainedPipelines: &keepTrue}}}},
+			expected: true,
+		},
+		{
+			name:     "uses rollout value when set to false",
+			rollout:  &apiv1.PipelineRollout{Spec: apiv1.PipelineRolloutSpec{Strategy: &apiv1.PipelineStrategy{RecycleStrategy: apiv1.RecycleStrategy{KeepUndrainedPipelines: &keepFalse}}}},
+			expected: false,
+		},
+		{
+			name:     "falls back to controller config when unset",
+			rollout:  &apiv1.PipelineRollout{},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, getKeepUndrainedPipelines(tc.rollout))
+		})
+	}
+
+	loadPipelineTestConfig(t, false) // global keepUndrainedPipelines: true
+	assert.True(t, getKeepUndrainedPipelines(&apiv1.PipelineRollout{}))
+}
+
 func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 	ctx := context.Background()
 

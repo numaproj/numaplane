@@ -191,6 +191,11 @@ spec:
                     type: object
                   recycleStrategy:
                     properties:
+                      keepUndrainedPipelines:
+                        description: |-
+                          KeepUndrainedPipelines controls whether pipelines that could not be drained are kept
+                          after maxRecyclableDurationMinutes has elapsed rather than deleted.
+                        type: boolean
                       scaleFactor:
                         description: |-
                           ScaleFactor is a percentage of Pipeline's original vertex scale that it will scale down by while it's being paused
@@ -199,6 +204,8 @@ spec:
                           If not defined, fallback to the one defined in the global ConfigMap
                         format: int32
                         type: integer
+                    required:
+                    - keepUndrainedPipelines
                     type: object
                 type: object
             required:

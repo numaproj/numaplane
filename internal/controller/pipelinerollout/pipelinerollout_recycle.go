@@ -664,6 +664,17 @@ func getRecycleScaleFactor(pipelineRollout *apiv1.PipelineRollout) int32 {
 	return 50
 }
 
+// return whether undrained recyclable pipelines should be kept after max recyclable duration;
+// uses the PipelineRollout recycle strategy if set, otherwise the controller config value.
+func getKeepUndrainedPipelines(pipelineRollout *apiv1.PipelineRollout) bool {
+	strategy := pipelineRollout.Spec.Strategy
+	if strategy != nil && strategy.RecycleStrategy.KeepUndrainedPipelines != nil {
+		return *strategy.RecycleStrategy.KeepUndrainedPipelines
+	}
+
+	return config.GetKeepUndrainedPipelines()
+}
+
 // if the user has set desiredPhase=Paused or any Vertex to scale.max=0, it means the user prefers not to run their Pipeline
 // so we should hold off on draining it until they set the PipelineRollout back for running again
 // Scale it to zero in the meantime (if it's not)
@@ -824,7 +835,7 @@ func (r *PipelineRolloutReconciler) shouldDeleteRecyclablePipeline(
 	}
 	if expired {
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_NeverDrained)
-		if config.GetKeepUndrainedPipelines() {
+		if getKeepUndrainedPipelines(pipelineRollout) {
 			// mark it as recyclable-expired
 			upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, r.client, pipeline)
 			if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclableExpired {

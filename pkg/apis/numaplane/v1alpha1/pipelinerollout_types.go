@@ -57,6 +57,10 @@ type RecycleStrategy struct {
 	// Note that the Pipeline's pauseGracePeriodSeconds will be multiplied by the inverse.
 	// If not defined, fallback to the one defined in the global ConfigMap
 	ScaleFactor *int32 `json:"scaleFactor,omitempty"`
+
+	// KeepUndrainedPipelines controls whether pipelines that could not be drained are kept
+	// after maxRecyclableDurationMinutes has elapsed rather than deleted.
+	KeepUndrainedPipelines *bool `json:"keepUndrainedPipelines"`
 }
 
 // PipelineRider defines a resource that can be deployed along with the primary child of a PipelineRollout
