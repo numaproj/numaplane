@@ -1513,6 +1513,7 @@ spec:
                         description: |-
                           KeepUndrainedPipelines controls whether pipelines that could not be drained are kept
                           after maxRecyclableDurationMinutes has elapsed rather than deleted.
+                          If not defined, fallback to the one defined in the global ConfigMap.
                         type: boolean
                       scaleFactor:
                         description: |-
@@ -1522,8 +1523,6 @@ spec:
                           If not defined, fallback to the one defined in the global ConfigMap
                         format: int32
                         type: integer
-                    required:
-                    - keepUndrainedPipelines
                     type: object
                 type: object
             required:

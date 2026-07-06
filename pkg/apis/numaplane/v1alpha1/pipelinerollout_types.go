@@ -60,7 +60,8 @@ type RecycleStrategy struct {
 
 	// KeepUndrainedPipelines controls whether pipelines that could not be drained are kept
 	// after maxRecyclableDurationMinutes has elapsed rather than deleted.
-	KeepUndrainedPipelines *bool `json:"keepUndrainedPipelines"`
+	// If not defined, fallback to the one defined in the global ConfigMap.
+	KeepUndrainedPipelines *bool `json:"keepUndrainedPipelines,omitempty"`
 }
 
 // PipelineRider defines a resource that can be deployed along with the primary child of a PipelineRollout
