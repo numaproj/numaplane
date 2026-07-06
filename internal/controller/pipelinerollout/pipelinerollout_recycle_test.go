@@ -1419,6 +1419,7 @@ func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
 
 func Test_getKeepUndrainedPipelines(t *testing.T) {
 	loadPipelineTestConfig(t, true) // global keepUndrainedPipelines: false
+	t.Cleanup(func() { loadPipelineTestConfig(t, true) })
 
 	keepTrue := true
 	keepFalse := false
@@ -1451,8 +1452,11 @@ func Test_getKeepUndrainedPipelines(t *testing.T) {
 		})
 	}
 
-	loadPipelineTestConfig(t, false) // global keepUndrainedPipelines: true
-	assert.True(t, getKeepUndrainedPipelines(&apiv1.PipelineRollout{}))
+	t.Run("falls back to controller config when global keepUndrainedPipelines is true", func(t *testing.T) {
+		loadPipelineTestConfig(t, false)
+		t.Cleanup(func() { loadPipelineTestConfig(t, true) })
+		assert.True(t, getKeepUndrainedPipelines(&apiv1.PipelineRollout{}))
+	})
 }
 
 func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
