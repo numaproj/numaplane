@@ -184,10 +184,8 @@ var _ = Describe("Force drain backward compatibility e2e", Serial, func() {
 		verifyPipelineScaledToZero(2)
 		updatePipeline(finalPromotionPipelineSpec)
 
-		VerifyPipelineRolloutStatusEventually(pipelineRolloutName, func(status apiv1.PipelineRolloutStatus) bool {
-			return status.ProgressiveStatus.PromotedPipelineStatus != nil &&
-				status.ProgressiveStatus.PromotedPipelineStatus.Name == newPromotedPipelineName
-		})
+		// PromotedPipelineStatus is cleared on progressive success; use the promoted Pipeline child label.
+		VerifyPromotedPipelineScaledUpForProgressive(pipelineRolloutName, newPromotedPipelineName, *finalPromotionPipelineSpec)
 
 		VerifyPipelineDeletion(recyclablePipelineName)
 	})
