@@ -52,18 +52,18 @@ var (
 		},
 	}
 
-	pipelineSpecSourceRPU      = int64(1000)
+	pipelineSpecSourceRPU         = int64(1000)
 	progressiveAlternateSourceRPU = int64(500)
 	finalPromotionSourceRPU       = int64(501)
-	pipelineSpecSourceDuration = metav1.Duration{Duration: time.Second}
-	pullPolicyAlways           = corev1.PullAlways
-	onePod                     = int32(1)
-	twoPods                    = int32(2)
-	threePods                  = int32(3)
-	fourPods                   = int32(4)
-	fivePods                   = int32(5)
-	zeroReplicaSleepSec        = uint32(15)
-	initialPipelineSpec        = numaflowv1.PipelineSpec{
+	pipelineSpecSourceDuration    = metav1.Duration{Duration: time.Second}
+	pullPolicyAlways              = corev1.PullAlways
+	onePod                        = int32(1)
+	twoPods                       = int32(2)
+	threePods                     = int32(3)
+	fourPods                      = int32(4)
+	fivePods                      = int32(5)
+	zeroReplicaSleepSec           = uint32(15)
+	initialPipelineSpec           = numaflowv1.PipelineSpec{
 		Templates: &numaflowv1.Templates{
 			VertexTemplate: &numaflowv1.VertexTemplate{
 				ContainerTemplate: &numaflowv1.ContainerTemplate{

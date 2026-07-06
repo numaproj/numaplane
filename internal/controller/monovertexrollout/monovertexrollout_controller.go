@@ -277,7 +277,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	}
 
 	// clean up recyclable monovertices
-	allDeleted, _, err := ctlrcommon.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

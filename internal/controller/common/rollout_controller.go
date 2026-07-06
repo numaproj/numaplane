@@ -42,18 +42,17 @@ type RolloutController interface {
 	GetTemplateArguments(child *unstructured.Unstructured) map[string]interface{}
 }
 
-// Garbage Collect all recyclable children; return true if we've deleted all that are recyclable,
-// along with the list of recyclable children that were processed.
+// Garbage Collect all recyclable children; return true if we've deleted all that are recyclable.
 func GarbageCollectChildren(
 	ctx context.Context,
 	rolloutObject RolloutObject,
 	controller RolloutController,
 	c client.Client,
-) (bool, unstructured.UnstructuredList, error) {
+) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	recyclableObjects, err := getRecyclableObjects(ctx, rolloutObject, c)
+	recyclableObjects, err := FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeRecyclable, nil, false, c)
 	if err != nil {
-		return false, unstructured.UnstructuredList{}, err
+		return false, err
 	}
 
 	numaLogger.WithValues("recylableObjects", recyclableObjects).Debug("recycling")
@@ -62,26 +61,13 @@ func GarbageCollectChildren(
 	for _, recyclableChild := range recyclableObjects.Items {
 		deleted, err := controller.Recycle(ctx, rolloutObject, &recyclableChild)
 		if err != nil {
-			return false, recyclableObjects, err
+			return false, err
 		}
 		if !deleted {
 			allDeleted = false
 		}
 	}
-	return allDeleted, recyclableObjects, nil
-}
-func getRecyclableObjects(
-	ctx context.Context,
-	rolloutObject RolloutObject,
-	c client.Client,
-) (unstructured.UnstructuredList, error) {
-	return kubernetes.ListResources(ctx, c, rolloutObject.GetChildGVK(),
-		rolloutObject.GetRolloutObjectMeta().Namespace,
-		client.MatchingLabels{
-			common.LabelKeyParentRollout: rolloutObject.GetRolloutObjectMeta().Name,
-			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeRecyclable),
-		},
-	)
+	return allDeleted, nil
 }
 
 // Find the children of a given Rollout of specified UpgradeState (plus optional UpgradeStateReason)

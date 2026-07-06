@@ -317,7 +317,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
 
 	// clean up recyclable interstepbufferservices
-	allDeleted, _, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
 	}

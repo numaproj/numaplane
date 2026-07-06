@@ -1325,25 +1325,38 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 
 	}
 
-	allDeleted, recyclableObjects, err := ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
 	if err != nil {
 		return false, err
 	}
 
-	if err := r.pruneRecyclablePipelinesStatus(pipelineRollout, recyclableObjects); err != nil {
+	if err := r.pruneRecyclablePipelinesStatus(ctx, pipelineRollout); err != nil {
 		return allDeleted, err
 	}
 
 	return allDeleted, nil
 }
 
-// pruneRecyclablePipelinesStatus keeps only RecyclablePipelinesStatus entries for pipelines in recyclableObjects.
+// pruneRecyclablePipelinesStatus keeps only RecyclablePipelinesStatus entries for pipelines
+// that still exist
 func (r *PipelineRolloutReconciler) pruneRecyclablePipelinesStatus(
+	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
-	recyclableObjects unstructured.UnstructuredList,
 ) error {
-	keep := make(map[string]struct{}, len(recyclableObjects.Items))
+	recyclableObjects, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradeRecyclable, nil, false, r.client)
+	if err != nil {
+		return fmt.Errorf("error listing recyclable pipelines: %w", err)
+	}
+	recyclableExpiredObjects, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradeRecyclableExpired, nil, false, r.client)
+	if err != nil {
+		return fmt.Errorf("error listing recyclable-expired pipelines: %w", err)
+	}
+
+	keep := make(map[string]struct{}, len(recyclableObjects.Items)+len(recyclableExpiredObjects.Items))
 	for _, obj := range recyclableObjects.Items {
+		keep[obj.GetName()] = struct{}{}
+	}
+	for _, obj := range recyclableExpiredObjects.Items {
 		keep[obj.GetName()] = struct{}{}
 	}
 

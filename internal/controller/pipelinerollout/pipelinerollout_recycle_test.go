@@ -1273,17 +1273,21 @@ func Test_GetOrCreateRecyclablePipelineStatus(t *testing.T) {
 }
 
 func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
-	reconciler := &PipelineRolloutReconciler{}
+	ctx := context.Background()
+	const rolloutName = "test-pipeline-rollout"
+	namespace := ctlrcommon.DefaultTestNamespace
 
 	tests := []struct {
-		name                  string
-		recyclableObjectNames []string
-		initialStatus         []apiv1.RecyclablePipelineStatus
-		expectedStatus        []apiv1.RecyclablePipelineStatus
+		name           string
+		pipelines      map[string]common.UpgradeState
+		initialStatus  []apiv1.RecyclablePipelineStatus
+		expectedStatus []apiv1.RecyclablePipelineStatus
 	}{
 		{
-			name:                  "keeps only status entries present in recyclableObjects",
-			recyclableObjectNames: []string{"pipeline-1"},
+			name: "keeps only status entries present in recyclable pipelines",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclable,
+			},
 			initialStatus: []apiv1.RecyclablePipelineStatus{
 				{Name: "pipeline-1"},
 				{Name: "pipeline-2"},
@@ -1293,8 +1297,11 @@ func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
 			},
 		},
 		{
-			name:                  "keeps all matching status entries",
-			recyclableObjectNames: []string{"pipeline-1", "pipeline-2"},
+			name: "keeps all matching status entries",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclable,
+				"pipeline-2": common.LabelValueUpgradeRecyclable,
+			},
 			initialStatus: []apiv1.RecyclablePipelineStatus{
 				{Name: "pipeline-1"},
 				{Name: "pipeline-2"},
@@ -1305,16 +1312,18 @@ func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
 			},
 		},
 		{
-			name:                  "clears all status when recyclableObjects is empty",
-			recyclableObjectNames: []string{},
+			name:      "clears all status when no recyclable or recyclable-expired pipelines exist",
+			pipelines: map[string]common.UpgradeState{},
 			initialStatus: []apiv1.RecyclablePipelineStatus{
 				{Name: "pipeline-1"},
 			},
 			expectedStatus: []apiv1.RecyclablePipelineStatus{},
 		},
 		{
-			name:                  "preserves nested drain attempt data for kept entries",
-			recyclableObjectNames: []string{"pipeline-1"},
+			name: "preserves nested drain attempt data for kept entries",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclable,
+			},
 			initialStatus: []apiv1.RecyclablePipelineStatus{
 				{
 					Name: "pipeline-1",
@@ -1331,6 +1340,35 @@ func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
 						{SourcePipelineSpec: "pipeline-1"},
 					},
 				},
+			},
+		},
+		{
+			name: "keeps status entries for recyclable-expired pipelines",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclableExpired,
+			},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+			},
+		},
+		{
+			name: "keeps status entries for both recyclable and recyclable-expired pipelines",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclable,
+				"pipeline-2": common.LabelValueUpgradeRecyclableExpired,
+			},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+				{Name: "pipeline-3"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
 			},
 		},
 	}
@@ -1338,6 +1376,10 @@ func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rolloutName,
+					Namespace: namespace,
+				},
 				Status: apiv1.PipelineRolloutStatus{
 					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
 						RecyclablePipelinesStatus: tc.initialStatus,
@@ -1345,14 +1387,30 @@ func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
 				},
 			}
 
-			recyclableObjects := unstructured.UnstructuredList{}
-			for _, name := range tc.recyclableObjectNames {
-				obj := unstructured.Unstructured{}
-				obj.SetName(name)
-				recyclableObjects.Items = append(recyclableObjects.Items, obj)
+			var clientObjects []ctlrruntimeclient.Object
+			for name, upgradeState := range tc.pipelines {
+				pipeline := &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "numaflow.numaproj.io/v1alpha1",
+						"kind":       "Pipeline",
+						"metadata": map[string]interface{}{
+							"name":      name,
+							"namespace": namespace,
+							"labels": map[string]interface{}{
+								common.LabelKeyParentRollout: rolloutName,
+								common.LabelKeyUpgradeState:  string(upgradeState),
+							},
+						},
+					},
+				}
+				pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+				clientObjects = append(clientObjects, pipeline)
 			}
 
-			err := reconciler.pruneRecyclablePipelinesStatus(pipelineRollout, recyclableObjects)
+			fakeClient := fake.NewClientBuilder().WithObjects(clientObjects...).Build()
+			reconciler := &PipelineRolloutReconciler{client: fakeClient}
+
+			err := reconciler.pruneRecyclablePipelinesStatus(ctx, pipelineRollout)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedStatus, pipelineRollout.Status.ProgressiveStatus.RecyclablePipelinesStatus)
 		})
