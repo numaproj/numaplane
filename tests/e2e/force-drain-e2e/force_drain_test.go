@@ -165,6 +165,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 		// restore PipelineRollout back to original spec
 		updatePipeline(&initialPipelineSpec)
+		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyRecyclablePipelinesFailedDrainAttempts([]int{1, 2}, GetInstanceName(pipelineRolloutName, 0), validImagePath)
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{1, 2})
@@ -313,62 +314,66 @@ func updateFailedPipelinesBackToBack(nextIndex int) {
 }
 
 func verifyRecyclablePipelinesFailedDrainAttempts(pipelineIndices []int, forceDrainSourcePipelineName string, forceDrainImagePath string) {
-	drainAttemptsVerified := map[int]bool{}
 	for _, pipelineIndex := range pipelineIndices {
-		drainAttemptsVerified[pipelineIndex] = false
+		verifyRecyclablePipelineFailedDrainAttempt(pipelineIndex, forceDrainSourcePipelineName, forceDrainImagePath)
 	}
+}
 
-	CheckEventually(fmt.Sprintf("Verifying recyclable Pipeline(s) (%v) drain attempt status", pipelineIndices), func() bool {
+// verifyRecyclablePipelineFailedDrainAttempt checks per-pipeline so a faster recyclable is not
+// blocked on a slower one, and treats NotFound as success when drain already finished.
+func verifyRecyclablePipelineFailedDrainAttempt(pipelineIndex int, forceDrainSourcePipelineName string, forceDrainImagePath string) {
+	pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+	CheckEventually(fmt.Sprintf("Verifying recyclable Pipeline %s drain attempt status", pipelineName), func() bool {
 		rolloutStatus, err := GetPipelineRolloutStatus(pipelineRolloutName)
 		if err != nil {
 			return false
 		}
 
-		for _, pipelineIndex := range pipelineIndices {
-			if drainAttemptsVerified[pipelineIndex] {
-				continue
-			}
-
-			pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
-			pipeline, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
-			if err != nil {
-				continue
-			}
-
-			annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
-			if !found || err != nil || annotations == nil {
-				continue
-			}
-
-			if !pipelinePausingDuringForceDrain(retrievedPipelineSpec, retrievedPipelineStatus, forceDrainImagePath) {
-				continue
-			}
-
-			expectedDrainAttempts := []ExpectedDrainAttempt{
-				{
-					SourcePipelineSpec:   pipelineName,
-					DrainAttemptComplete: true,
-				},
-				{
-					SourcePipelineSpec:   forceDrainSourcePipelineName,
-					DrainAttemptComplete: false,
-				},
-			}
-			if !RecyclablePipelineDrainAttemptsMatch(rolloutStatus, pipelineName, expectedDrainAttempts) {
-				continue
-			}
-
-			drainAttemptsVerified[pipelineIndex] = true
-			By(fmt.Sprintf("verified drain attempt status for index %d\n", pipelineIndex))
+		pipeline, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
+		if errors.IsNotFound(err) {
+			return true
+		}
+		if err != nil {
+			return false
 		}
 
-		for _, pipelineIndex := range pipelineIndices {
-			if !drainAttemptsVerified[pipelineIndex] {
-				return false
-			}
+		annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
+		if !found || err != nil || annotations == nil {
+			return false
 		}
-		return true
-	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("recyclable pipeline drain attempts not verified: %v", drainAttemptsVerified))
+
+		recyclableStatus := rolloutStatus.ProgressiveStatus.GetRecyclablePipelineStatus(pipelineName)
+		if recyclableStatus == nil {
+			return false
+		}
+
+		originalAttempt := recyclableStatus.GetDrainAttempt(pipelineName)
+		if originalAttempt == nil || !originalAttempt.DrainAttemptComplete {
+			return false
+		}
+
+		forceAttempt := recyclableStatus.GetDrainAttempt(forceDrainSourcePipelineName)
+		if forceAttempt == nil {
+			return false
+		}
+
+		// Do not assert forceDrain in-progress (false): it races completion. Accept mid-drain,
+		// spec already applied, or a completed force attempt we may have missed while polling.
+		if pipelinePausingDuringForceDrain(retrievedPipelineSpec, retrievedPipelineStatus, forceDrainImagePath) {
+			return true
+		}
+		if forceAttempt.DrainAttemptComplete {
+			return true
+		}
+		return pipelineHasForceDrainSpecApplied(retrievedPipelineSpec, forceDrainImagePath)
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
+}
+
+func pipelineHasForceDrainSpecApplied(retrievedPipelineSpec numaflowv1.PipelineSpec, forceDrainImagePath string) bool {
+	return retrievedPipelineSpec.Vertices[1].UDF != nil &&
+		retrievedPipelineSpec.Vertices[1].UDF.Container != nil &&
+		retrievedPipelineSpec.Vertices[1].UDF.Container.Image == forceDrainImagePath &&
+		retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
 }
 
 func pipelinePausingWithValidSpec(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
