@@ -28,8 +28,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
@@ -257,9 +257,10 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 	It("Should reach max recyclable duration and delete the Pipeline", func() {
 
-		// set numaplane controller config to have max recyclable duration of 2 minutes
+		// updateFailedPipelinesBackToBack takes several minutes; keep a generous limit during setup
+		// so the recyclable Pipeline is not deleted before force promote and drain verification.
 		UpdateNumaplaneControllerConfig(map[string]string{
-			"pipeline.maxRecyclableDurationMinutes": "2",
+			"pipeline.maxRecyclableDurationMinutes": "60",
 		})
 
 		// create test-pipeline-rollout-7 and test-pipeline-rollout-8 and force promote 8
@@ -267,7 +268,12 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		forcePromote(pipelineRolloutName, 8)
 		verifyRecyclablePipelinesFailedDrainAttempts([]int{7}, GetInstanceName(pipelineRolloutName, 8), "badpath2")
 
-		// now let's make sure that test-pipeline-rollout-7 gets deleted even though it can't drain successfully
+		// Pipeline-7 has been recyclable for longer than 2 minutes by now; apply the short limit
+		// and verify the controller deletes it even though drain cannot succeed.
+		UpdateNumaplaneControllerConfig(map[string]string{
+			"pipeline.maxRecyclableDurationMinutes": "2",
+		})
+
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 7))
 	})
 
