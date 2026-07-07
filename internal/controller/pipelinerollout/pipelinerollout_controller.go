@@ -1386,10 +1386,10 @@ func (r *PipelineRolloutReconciler) deletePipelinesMarkedForDeletion(
 		}
 
 		numaLogger.WithValues("pipeline", pipeline.GetName()).Debug("Pipeline is recyclable and marked for deletion, will be deleted now")
-		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
 		if err := kubernetes.DeleteResource(ctx, r.client, pipeline); err != nil {
 			return fmt.Errorf("failed to delete pipeline %s/%s marked for deletion: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
+		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
 	}
 	recyclablePipelines.Items = remaining
 	return nil

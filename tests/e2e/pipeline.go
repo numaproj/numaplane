@@ -228,6 +228,18 @@ func GetPipelineRolloutStatus(pipelineRolloutName string) (apiv1.PipelineRollout
 	return rollout.Status, nil
 }
 
+func GetPipelineRolloutPipelineSpec(pipelineRolloutName string) (numaflowv1.PipelineSpec, error) {
+	rollout, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+	if err != nil {
+		return numaflowv1.PipelineSpec{}, err
+	}
+	var pipelineSpec numaflowv1.PipelineSpec
+	if err := json.Unmarshal(rollout.Spec.Pipeline.Spec.Raw, &pipelineSpec); err != nil {
+		return numaflowv1.PipelineSpec{}, err
+	}
+	return pipelineSpec, nil
+}
+
 // ExpectedDrainAttempt describes expected fields on a single DrainAttempt entry.
 type ExpectedDrainAttempt struct {
 	SourcePipelineSpec   string
