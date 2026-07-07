@@ -553,9 +553,7 @@ func UpdateISBServiceRollout(
 		if UpgradeStrategy == config.ProgressiveStrategyID && progressiveRequiredField {
 			expectedPromotedName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, originalPipelineCount[pipelineRollout.PipelineRolloutName]-1)
 			expectedUpgradingName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, originalPipelineCount[pipelineRollout.PipelineRolloutName])
-			pipeline, err := GetPipelineByName(Namespace, expectedUpgradingName)
-			Expect(err).ShouldNot(HaveOccurred())
-			pipelineSpec, err := GetPipelineSpec(pipeline)
+			pipelineSpec, err := GetPipelineRolloutPipelineSpec(pipelineRollout.PipelineRolloutName)
 			Expect(err).ShouldNot(HaveOccurred())
 			PipelineFinalProgressiveChecks(pipelineRollout.PipelineRolloutName, expectedPromotedName, expectedUpgradingName, true, pipelineSpec)
 		}

@@ -21,12 +21,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -814,7 +816,7 @@ func Test_Recycle(t *testing.T) {
 				recorder:      record.NewFakeRecorder(100),
 			}
 
-			deleted, err := reconciler.Recycle(ctx, &pipelineUnstructured)
+			deleted, err := reconciler.Recycle(ctx, pipelineRollout, &pipelineUnstructured)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedDeleted, deleted)
 
@@ -834,23 +836,28 @@ func Test_Recycle(t *testing.T) {
 					assert.Equal(t, int64(120), *updatedPipeline.Spec.Lifecycle.PauseGracePeriodSeconds)
 				}
 
-				// Verify if the force drain failure time annotation is set
+				recyclablePipelineStatus := pipelineRollout.Status.ProgressiveStatus.GetRecyclablePipelineStatus(recyclablePipelineName)
+				require.NotNil(t, recyclablePipelineStatus)
+
+				// Verify failed-phase tracking on the current drain attempt
 				if tc.expectForceDrainFailureTimeSet {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyDrainFailureStartTime)
+					drainAttemptSource := recyclablePipelineName
+					if tc.expectForceDrainPipelinesStarted != "" {
+						drainAttemptSource = firstCommaDelimitedValue(tc.expectForceDrainPipelinesStarted)
+					}
+					drainAttempt := recyclablePipelineStatus.GetDrainAttempt(drainAttemptSource)
+					require.NotNil(t, drainAttempt)
+					require.NotNil(t, drainAttempt.FailedPhaseStartTime)
 				}
-
-				// Check if force-drain-specs-started annotation matches expected value
 				if tc.expectForceDrainPipelinesStarted != "" {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
-					assert.Equal(t, tc.expectForceDrainPipelinesStarted, updatedPipeline.Annotations[common.AnnotationKeyForceDrainSpecsStarted],
-						"force-drain-specs-started annotation mismatch")
+					sourcePipelineSpec := firstCommaDelimitedValue(tc.expectForceDrainPipelinesStarted)
+					assert.True(t, recyclablePipelineStatus.HasDrainAttempt(sourcePipelineSpec),
+						"expected drain attempt to be started for %s", sourcePipelineSpec)
 				}
-
-				// Check if force-drain-specs-completed annotation matches expected value
 				if tc.expectedForceDrainPipelinesCompleted != "" {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsCompleted)
-					assert.Equal(t, tc.expectedForceDrainPipelinesCompleted, updatedPipeline.Annotations[common.AnnotationKeyForceDrainSpecsCompleted],
-						"force-drain-specs-completed annotation mismatch")
+					sourcePipelineSpec := firstCommaDelimitedValue(tc.expectedForceDrainPipelinesCompleted)
+					assert.True(t, recyclablePipelineStatus.IsDrainAttemptComplete(sourcePipelineSpec),
+						"expected drain attempt to be complete for %s", sourcePipelineSpec)
 				}
 
 				if len(tc.expectedVertexScaleDefinitions) > 0 {
@@ -876,37 +883,59 @@ func Test_Recycle(t *testing.T) {
 							}
 						}
 					}
+
+					if tc.desiredPhase != nil && *tc.desiredPhase != numaflowv1.PipelinePhasePaused {
+						drainAttemptSourcePipelineName := recyclablePipelineName
+						if tc.expectForceDrainPipelinesStarted != "" {
+							drainAttemptSourcePipelineName = firstCommaDelimitedValue(tc.expectForceDrainPipelinesStarted)
+						}
+						drainAttempt := recyclablePipelineStatus.GetDrainAttempt(drainAttemptSourcePipelineName)
+						require.NotNil(t, drainAttempt, "expected drain attempt for %s", drainAttemptSourcePipelineName)
+						assert.Equal(t, vertexReplicaCountsFromScaleDefinitions(tc.expectedVertexScaleDefinitions), drainAttempt.VertexReplicaCount)
+					}
 				}
 			}
 		})
 	}
 }
 
-func Test_markPipelineForceDrainStarted_clearsForceDrainFailureStartTime(t *testing.T) {
-	ctx := context.Background()
-
-	pipeline := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "numaflow.numaproj.io/v1alpha1",
-			"kind":       "Pipeline",
-			"metadata": map[string]interface{}{
-				"name":      "test-pipeline",
-				"namespace": ctlrcommon.DefaultTestNamespace,
-			},
-		},
+func firstCommaDelimitedValue(value string) string {
+	for _, part := range strings.Split(value, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			return trimmed
+		}
 	}
-	pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
-	pipeline.SetAnnotations(map[string]string{
-		common.AnnotationKeyDrainFailureStartTime: time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
-	})
+	return ""
+}
 
-	scheme := runtime.NewScheme()
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
+func assertMigrationDrainAttempts(t *testing.T, expected, actual []apiv1.DrainAttempt) {
+	t.Helper()
+	require.Len(t, actual, len(expected))
+	for i, exp := range expected {
+		assert.Equal(t, exp.SourcePipelineSpec, actual[i].SourcePipelineSpec)
+		assert.Equal(t, exp.DrainAttemptComplete, actual[i].DrainAttemptComplete)
+		assert.Nil(t, actual[i].EndTime)
+		assert.Empty(t, actual[i].DrainCompletionReason)
+	}
+}
 
-	err := markPipelineForceDrainStarted(ctx, fakeClient, pipeline, "promoted-pipeline-1")
-	assert.NoError(t, err)
-	assert.Equal(t, "promoted-pipeline-1,", pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecsStarted])
-	assert.Empty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
+func Test_startForceDrainAttempt_startsDrainAttempt(t *testing.T) {
+	status := &apiv1.RecyclablePipelineStatus{Name: "test-pipeline"}
+	startForceDrainAttempt(status, "promoted-pipeline-1")
+	assert.True(t, status.HasDrainAttempt("promoted-pipeline-1"))
+}
+
+func Test_startForceDrainAttempt_supersedesInProgressForceDrainAttempts(t *testing.T) {
+	pipeline := &unstructured.Unstructured{}
+	pipeline.SetName("recyclable-pipeline")
+
+	status := &apiv1.RecyclablePipelineStatus{Name: "recyclable-pipeline"}
+	status.StartDrainAttempt("promoted-pipeline-1")
+
+	startForceDrainAttempt(status, "promoted-pipeline-2")
+	assert.True(t, status.IsDrainAttemptComplete("promoted-pipeline-1"))
+	assert.Equal(t, apiv1.DrainCompletionReasonSuperseded, status.GetDrainAttempt("promoted-pipeline-1").DrainCompletionReason)
+	assert.True(t, status.HasDrainAttempt("promoted-pipeline-2"))
 }
 
 func Test_checkForFailedPipeline(t *testing.T) {
@@ -914,152 +943,526 @@ func Test_checkForFailedPipeline(t *testing.T) {
 	waitDuration := time.Duration(config.GetForceDrainFailureWaitDuration()) * time.Second
 	withinWait := waitDuration - time.Second
 	pastWait := waitDuration + time.Second
+	pipelineName := "test-pipeline"
 
 	tests := []struct {
 		name                      string
-		failureStartTimeAgo       *time.Duration // nil = no annotation (first failure detection)
+		failedPhaseStartTimeAgo   *time.Duration // nil = no failed phase episode in progress
+		drainAttemptComplete      bool
 		expectNonTransientFailure bool
-		expectAnnotationSet       bool
 	}{
 		{
-			name:                "first failure sets start time and waits",
-			expectAnnotationSet: true,
+			name: "no failed phase episode in progress",
 		},
 		{
-			name:                "failure within wait duration",
-			failureStartTimeAgo: &withinWait,
+			name:                    "failure within wait duration",
+			failedPhaseStartTimeAgo: &withinWait,
 		},
 		{
 			name:                      "failure past wait duration",
-			failureStartTimeAgo:       &pastWait,
+			failedPhaseStartTimeAgo:   &pastWait,
 			expectNonTransientFailure: true,
+		},
+		{
+			name:                      "completed drain attempt ignores stale failure start time",
+			failedPhaseStartTimeAgo:   &pastWait,
+			drainAttemptComplete:      true,
+			expectNonTransientFailure: false,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			pipeline := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": "numaflow.numaproj.io/v1alpha1",
-					"kind":       "Pipeline",
-					"metadata": map[string]interface{}{
-						"name":      "test-pipeline",
-						"namespace": ctlrcommon.DefaultTestNamespace,
-					},
-				},
+			status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+			status.StartDrainAttempt(pipelineName)
+			if tc.failedPhaseStartTimeAgo != nil {
+				startTime := metav1.NewTime(time.Now().Add(-*tc.failedPhaseStartTimeAgo))
+				status.GetDrainAttempt(pipelineName).FailedPhaseStartTime = &startTime
 			}
-			pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
-
-			if tc.failureStartTimeAgo != nil {
-				pipeline.SetAnnotations(map[string]string{
-					common.AnnotationKeyDrainFailureStartTime: time.Now().Add(-*tc.failureStartTimeAgo).Format(time.RFC3339),
-				})
+			if tc.drainAttemptComplete {
+				status.CompleteDrainAttempt(pipelineName, apiv1.DrainCompletionReasonPipelineFailed)
 			}
 
-			scheme := runtime.NewScheme()
-			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pipeline).Build()
 			reconciler := &PipelineRolloutReconciler{
-				client:        fakeClient,
 				customMetrics: createTestMetrics(),
 				recorder:      record.NewFakeRecorder(100),
 			}
 
-			nonTransientFailure, err := reconciler.checkForFailedPipeline(ctx, pipeline)
+			nonTransientFailure, err := reconciler.checkForFailedPipeline(ctx, status, pipelineName)
 
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectNonTransientFailure, nonTransientFailure)
-
-			if tc.expectAnnotationSet {
-				assert.NotEmpty(t, pipeline.GetAnnotations()[common.AnnotationKeyDrainFailureStartTime])
-			}
 		})
 	}
 }
 
-func Test_checkForValueInCommaDelimitedAnnotation(t *testing.T) {
-	testAnnotationKey := "test-annotation-key"
+func Test_migrateForceDrainAnnotationsToDrainAttempts(t *testing.T) {
+	pipelineName := "recyclable-pipeline"
+	existingStart := metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	existingDrainAttempts := []apiv1.DrainAttempt{
+		{
+			SourcePipelineSpec:   pipelineName,
+			StartTime:            existingStart,
+			DrainAttemptComplete: true,
+		},
+		{
+			SourcePipelineSpec:   "promoted-a",
+			StartTime:            existingStart,
+			DrainAttemptComplete: true,
+		},
+	}
+
+	newPipeline := func(annotations map[string]string) *unstructured.Unstructured {
+		pipeline := &unstructured.Unstructured{}
+		pipeline.SetName(pipelineName)
+		pipeline.SetAnnotations(annotations)
+		return pipeline
+	}
 
 	tests := []struct {
-		name           string
-		annotations    map[string]string
-		value          string
-		annotationKey  string
-		expectedResult bool
+		name                      string
+		annotations               map[string]string
+		initialDrainAttempts      []apiv1.DrainAttempt
+		requiresPauseOriginalSpec bool
+		callTwice                 bool
+		expectedDrainAttempts     []apiv1.DrainAttempt
 	}{
 		{
-			name:           "nil annotations",
-			annotations:    nil,
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
+			name:                      "no annotations leaves status unchanged",
+			requiresPauseOriginalSpec: true,
+			expectedDrainAttempts:     []apiv1.DrainAttempt{},
 		},
 		{
-			name:           "annotation key not present",
-			annotations:    map[string]string{"other-key": "value"},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
+			name: "empty force drain annotations leaves status unchanged",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted:   "",
+				common.AnnotationKeyForceDrainSpecsCompleted: "",
+			},
+			requiresPauseOriginalSpec: true,
+			expectedDrainAttempts:     []apiv1.DrainAttempt{},
 		},
 		{
-			name:           "empty annotation value",
-			annotations:    map[string]string{testAnnotationKey: ""},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
+			name: "force-drain-specs-completed sets DrainAttemptComplete",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted:   "promoted-a,promoted-b,",
+				common.AnnotationKeyForceDrainSpecsCompleted: "promoted-a,",
+			},
+			requiresPauseOriginalSpec: true,
+			expectedDrainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: pipelineName, DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-a", DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-b"},
+			},
 		},
 		{
-			name:           "value found - single value in annotation",
-			annotations:    map[string]string{testAnnotationKey: "abc,"},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: true,
+			name: "idempotent when called twice",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted:   "promoted-a,",
+				common.AnnotationKeyForceDrainSpecsCompleted: "promoted-a,",
+			},
+			requiresPauseOriginalSpec: true,
+			callTwice:                 true,
+			expectedDrainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: pipelineName, DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-a", DrainAttemptComplete: true},
+			},
 		},
 		{
-			name:           "value found - first of multiple values",
-			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: true,
+			name: "skips migration when DrainAttempts already set",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted: "promoted-a,",
+			},
+			initialDrainAttempts:      existingDrainAttempts,
+			requiresPauseOriginalSpec: true,
+			expectedDrainAttempts:     existingDrainAttempts,
 		},
 		{
-			name:           "value found - middle of multiple values",
-			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
-			value:          "def",
-			annotationKey:  testAnnotationKey,
-			expectedResult: true,
-		},
-		{
-			name:           "value found - last of multiple values",
-			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
-			value:          "ghi",
-			annotationKey:  testAnnotationKey,
-			expectedResult: true,
-		},
-		{
-			name:           "value not found",
-			annotations:    map[string]string{testAnnotationKey: "abc,def,ghi,"},
-			value:          "xyz",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
-		},
-		{
-			name:           "partial match should not match",
-			annotations:    map[string]string{testAnnotationKey: "abcdef,"},
-			value:          "abc",
-			annotationKey:  testAnnotationKey,
-			expectedResult: false,
+			name: "does not prepend original when requiresPauseOriginalSpec is false",
+			annotations: map[string]string{
+				common.AnnotationKeyForceDrainSpecsStarted:   "promoted-a,promoted-b,",
+				common.AnnotationKeyForceDrainSpecsCompleted: "promoted-a,",
+			},
+			requiresPauseOriginalSpec: false,
+			expectedDrainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: "promoted-a", DrainAttemptComplete: true},
+				{SourcePipelineSpec: "promoted-b"},
+			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			pipeline := &unstructured.Unstructured{}
-			pipeline.SetAnnotations(tc.annotations)
+			status := &apiv1.RecyclablePipelineStatus{
+				Name:          pipelineName,
+				DrainAttempts: append([]apiv1.DrainAttempt(nil), tc.initialDrainAttempts...),
+			}
+			pipeline := newPipeline(tc.annotations)
 
-			result := checkForValueInCommaDelimitedAnnotation(pipeline, tc.value, tc.annotationKey)
-			assert.Equal(t, tc.expectedResult, result)
+			err := migrateForceDrainAnnotationsToDrainAttempts(status, pipeline, tc.requiresPauseOriginalSpec)
+			assert.NoError(t, err)
+
+			if tc.callTwice {
+				firstSnapshot := append([]apiv1.DrainAttempt(nil), status.DrainAttempts...)
+				err = migrateForceDrainAnnotationsToDrainAttempts(status, pipeline, tc.requiresPauseOriginalSpec)
+				assert.NoError(t, err)
+				assert.Equal(t, firstSnapshot, status.DrainAttempts)
+				return
+			}
+
+			if len(tc.expectedDrainAttempts) == 0 {
+				assert.Empty(t, status.DrainAttempts)
+				return
+			}
+
+			if tc.name == "skips migration when DrainAttempts already set" {
+				assert.Equal(t, tc.expectedDrainAttempts, status.DrainAttempts)
+				return
+			}
+
+			assertMigrationDrainAttempts(t, tc.expectedDrainAttempts, status.DrainAttempts)
 		})
 	}
+}
+
+func Test_RecyclablePipelineStatusDrainAttemptHelpers(t *testing.T) {
+	pipelineName := "recyclable-pipeline"
+
+	t.Run("StartDrainAttempt and CompleteDrainAttempt", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		beforeStart := time.Now()
+		status.StartDrainAttempt("promoted-a")
+		require.True(t, status.HasDrainAttempt("promoted-a"))
+		assert.False(t, status.IsDrainAttemptComplete("promoted-a"))
+		assert.False(t, status.GetDrainAttempt("promoted-a").StartTime.Time.Before(beforeStart))
+
+		beforeComplete := time.Now()
+		status.CompleteDrainAttempt("promoted-a", apiv1.DrainCompletionReasonDrainComplete)
+		assert.True(t, status.IsDrainAttemptComplete("promoted-a"))
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").EndTime)
+		assert.False(t, status.GetDrainAttempt("promoted-a").EndTime.Time.Before(beforeComplete))
+		assert.Equal(t, apiv1.DrainCompletionReasonDrainComplete, status.GetDrainAttempt("promoted-a").DrainCompletionReason)
+	})
+
+	t.Run("HasForceDrainStarted", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{
+			DrainAttempts: []apiv1.DrainAttempt{
+				{SourcePipelineSpec: pipelineName},
+			},
+		}
+		assert.False(t, status.HasForceDrainStarted(pipelineName))
+
+		status.StartDrainAttempt("promoted-a")
+		assert.True(t, status.HasForceDrainStarted(pipelineName))
+	})
+
+	t.Run("StartDrainAttempt is idempotent", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+		firstStartTime := status.DrainAttempts[0].StartTime
+		status.StartDrainAttempt("promoted-a")
+		require.Len(t, status.DrainAttempts, 1)
+		assert.Equal(t, firstStartTime, status.DrainAttempts[0].StartTime)
+	})
+
+	t.Run("SetDrainAttemptVertexReplicaCount", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+
+		status.SetDrainAttemptVertexReplicaCount("promoted-a", []apiv1.VertexScaleDefinition{
+			{
+				VertexName: "in",
+				ScaleDefinition: &apiv1.ScaleDefinition{
+					Min: int64Ptr(0),
+					Max: int64Ptr(0),
+				},
+			},
+			{
+				VertexName: "out",
+				ScaleDefinition: &apiv1.ScaleDefinition{
+					Min: int64Ptr(2),
+					Max: int64Ptr(2),
+				},
+			},
+		})
+
+		assert.Equal(t, []apiv1.VertexReplicaCount{
+			{Name: "in", Replicas: 0},
+			{Name: "out", Replicas: 2},
+		}, status.GetDrainAttempt("promoted-a").VertexReplicaCount)
+	})
+
+	t.Run("StartDrainAttempt supersedes incomplete last attempt", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+		status.StartDrainAttempt("promoted-b")
+
+		assert.True(t, status.GetDrainAttempt("promoted-a").DrainAttemptComplete)
+		assert.Equal(t, apiv1.DrainCompletionReasonSuperseded, status.GetDrainAttempt("promoted-a").DrainCompletionReason)
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").EndTime)
+		assert.False(t, status.GetDrainAttempt("promoted-b").DrainAttemptComplete)
+	})
+
+	t.Run("StartDrainAttempt does not supersede completed last attempt", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+		status.CompleteDrainAttempt("promoted-a", apiv1.DrainCompletionReasonMaxPauseTime)
+		status.StartDrainAttempt("promoted-b")
+
+		assert.Equal(t, apiv1.DrainCompletionReasonMaxPauseTime, status.GetDrainAttempt("promoted-a").DrainCompletionReason)
+		assert.False(t, status.GetDrainAttempt("promoted-b").DrainAttemptComplete)
+	})
+
+	t.Run("SetDrainAttemptFailure and UnsetDrainAttemptFailure", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+
+		status.SetDrainAttemptFailure("promoted-a")
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").FailedPhaseStartTime)
+		assert.Nil(t, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
+
+		status.UnsetDrainAttemptFailure("promoted-a")
+		assert.Nil(t, status.GetDrainAttempt("promoted-a").FailedPhaseStartTime)
+		assert.Nil(t, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
+
+		status.SetDrainAttemptFailure("promoted-a")
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").FailedPhaseStartTime)
+		assert.Nil(t, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
+	})
+
+	t.Run("CompleteDrainAttempt sets FailedPhaseEndTime for persistent pipeline failure", func(t *testing.T) {
+		status := &apiv1.RecyclablePipelineStatus{Name: pipelineName}
+		status.StartDrainAttempt("promoted-a")
+		status.SetDrainAttemptFailure("promoted-a")
+
+		status.CompleteDrainAttempt("promoted-a", apiv1.DrainCompletionReasonPipelineFailed)
+
+		require.NotNil(t, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
+		assert.Equal(t, status.GetDrainAttempt("promoted-a").EndTime, status.GetDrainAttempt("promoted-a").FailedPhaseEndTime)
+	})
+}
+
+func Test_GetOrCreateRecyclablePipelineStatus(t *testing.T) {
+	t.Run("returns existing entry", func(t *testing.T) {
+		status := &apiv1.PipelineProgressiveStatus{
+			RecyclablePipelinesStatus: []apiv1.RecyclablePipelineStatus{
+				{
+					Name: "pipeline-1",
+					DrainAttempts: []apiv1.DrainAttempt{
+						{SourcePipelineSpec: "pipeline-1"},
+					},
+				},
+			},
+		}
+
+		recyclablePipelineStatus := status.GetOrCreateRecyclablePipelineStatus("pipeline-1")
+		assert.NotNil(t, recyclablePipelineStatus)
+		assert.Equal(t, "pipeline-1", recyclablePipelineStatus.Name)
+		assert.Len(t, recyclablePipelineStatus.DrainAttempts, 1)
+		assert.Len(t, status.RecyclablePipelinesStatus, 1)
+	})
+
+	t.Run("creates new entry when missing", func(t *testing.T) {
+		status := &apiv1.PipelineProgressiveStatus{}
+
+		recyclablePipelineStatus := status.GetOrCreateRecyclablePipelineStatus("pipeline-2")
+		assert.NotNil(t, recyclablePipelineStatus)
+		assert.Equal(t, "pipeline-2", recyclablePipelineStatus.Name)
+		assert.Equal(t, []apiv1.DrainAttempt{}, recyclablePipelineStatus.DrainAttempts)
+		assert.Len(t, status.RecyclablePipelinesStatus, 1)
+	})
+}
+
+func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
+	ctx := context.Background()
+	const rolloutName = "test-pipeline-rollout"
+	namespace := ctlrcommon.DefaultTestNamespace
+
+	tests := []struct {
+		name           string
+		pipelines      map[string]common.UpgradeState
+		initialStatus  []apiv1.RecyclablePipelineStatus
+		expectedStatus []apiv1.RecyclablePipelineStatus
+	}{
+		{
+			name: "keeps only status entries present in recyclable pipelines",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclable,
+			},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+			},
+		},
+		{
+			name: "keeps all matching status entries",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclable,
+				"pipeline-2": common.LabelValueUpgradeRecyclable,
+			},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+			},
+		},
+		{
+			name:      "clears all status when no recyclable or recyclable-expired pipelines exist",
+			pipelines: map[string]common.UpgradeState{},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{},
+		},
+		{
+			name: "preserves nested drain attempt data for kept entries",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclable,
+			},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{
+					Name: "pipeline-1",
+					DrainAttempts: []apiv1.DrainAttempt{
+						{SourcePipelineSpec: "pipeline-1"},
+					},
+				},
+				{Name: "pipeline-2"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{
+					Name: "pipeline-1",
+					DrainAttempts: []apiv1.DrainAttempt{
+						{SourcePipelineSpec: "pipeline-1"},
+					},
+				},
+			},
+		},
+		{
+			name: "keeps status entries for recyclable-expired pipelines",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclableExpired,
+			},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+			},
+		},
+		{
+			name: "keeps status entries for both recyclable and recyclable-expired pipelines",
+			pipelines: map[string]common.UpgradeState{
+				"pipeline-1": common.LabelValueUpgradeRecyclable,
+				"pipeline-2": common.LabelValueUpgradeRecyclableExpired,
+			},
+			initialStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+				{Name: "pipeline-3"},
+			},
+			expectedStatus: []apiv1.RecyclablePipelineStatus{
+				{Name: "pipeline-1"},
+				{Name: "pipeline-2"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rolloutName,
+					Namespace: namespace,
+				},
+				Status: apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						RecyclablePipelinesStatus: tc.initialStatus,
+					},
+				},
+			}
+
+			var clientObjects []ctlrruntimeclient.Object
+			for name, upgradeState := range tc.pipelines {
+				pipeline := &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "numaflow.numaproj.io/v1alpha1",
+						"kind":       "Pipeline",
+						"metadata": map[string]interface{}{
+							"name":      name,
+							"namespace": namespace,
+							"labels": map[string]interface{}{
+								common.LabelKeyParentRollout: rolloutName,
+								common.LabelKeyUpgradeState:  string(upgradeState),
+							},
+						},
+					},
+				}
+				pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+				clientObjects = append(clientObjects, pipeline)
+			}
+
+			fakeClient := fake.NewClientBuilder().WithObjects(clientObjects...).Build()
+			reconciler := &PipelineRolloutReconciler{client: fakeClient}
+
+			allRecyclableObjects := unstructured.UnstructuredList{}
+			allRecyclableObjects.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+			for _, obj := range clientObjects {
+				allRecyclableObjects.Items = append(allRecyclableObjects.Items, *obj.(*unstructured.Unstructured))
+			}
+
+			err := reconciler.pruneRecyclablePipelinesStatus(ctx, pipelineRollout, allRecyclableObjects)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedStatus, pipelineRollout.Status.ProgressiveStatus.RecyclablePipelinesStatus)
+		})
+	}
+}
+
+func Test_getKeepUndrainedPipelines(t *testing.T) {
+	loadPipelineTestConfig(t, true) // global keepUndrainedPipelines: false
+	t.Cleanup(func() { loadPipelineTestConfig(t, true) })
+
+	keepTrue := true
+	keepFalse := false
+
+	tests := []struct {
+		name     string
+		rollout  *apiv1.PipelineRollout
+		expected bool
+	}{
+		{
+			name:     "uses rollout value when set to true",
+			rollout:  &apiv1.PipelineRollout{Spec: apiv1.PipelineRolloutSpec{Strategy: &apiv1.PipelineStrategy{RecycleStrategy: apiv1.RecycleStrategy{KeepUndrainedPipelines: &keepTrue}}}},
+			expected: true,
+		},
+		{
+			name:     "uses rollout value when set to false",
+			rollout:  &apiv1.PipelineRollout{Spec: apiv1.PipelineRolloutSpec{Strategy: &apiv1.PipelineStrategy{RecycleStrategy: apiv1.RecycleStrategy{KeepUndrainedPipelines: &keepFalse}}}},
+			expected: false,
+		},
+		{
+			name:     "falls back to controller config when unset",
+			rollout:  &apiv1.PipelineRollout{},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, getKeepUndrainedPipelines(tc.rollout))
+		})
+	}
+
+	t.Run("falls back to controller config when global keepUndrainedPipelines is true", func(t *testing.T) {
+		loadPipelineTestConfig(t, false)
+		t.Cleanup(func() { loadPipelineTestConfig(t, true) })
+		assert.True(t, getKeepUndrainedPipelines(&apiv1.PipelineRollout{}))
+	})
 }
 
 func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
@@ -1071,7 +1474,6 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		forcePromoteStrategy    bool
 		requiresDrainAnnotation string
 		recyclableStartTime     string
-		deletionAnnotation      string
 		expectedShouldDelete    bool
 		expectedExpired         bool
 		expectedError           bool
@@ -1147,17 +1549,6 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			expectedError:           true,
 		},
 		{
-			name:                    "has deletion annotation",
-			deleteExpiredPipelines:  true,
-			forcePromoteStrategy:    false,
-			requiresDrainAnnotation: "false",
-			recyclableStartTime:     "",
-			deletionAnnotation:      "true",
-			expectedShouldDelete:    true,
-			expectedExpired:         false,
-			expectedError:           false,
-		},
-		{
 			name:                    "expired recyclable pipeline is kept when deleteExpiredPipelines is false",
 			deleteExpiredPipelines:  false,
 			requiresDrainAnnotation: "true",
@@ -1214,9 +1605,6 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			if tc.recyclableStartTime != "" {
 				annotations[common.AnnotationKeyRecyclableStartTime] = tc.recyclableStartTime
 			}
-			if tc.deletionAnnotation != "" {
-				annotations[common.AnnotationKeyMarkedForDeletion] = tc.deletionAnnotation
-			}
 			if len(annotations) > 0 {
 				pipeline.SetAnnotations(annotations)
 			}
@@ -1272,6 +1660,17 @@ func getDesiredPhase(pipeline *numaflowv1.Pipeline) numaflowv1.PipelinePhase {
 // Helper function to create int64 pointer
 func int64Ptr(i int64) *int64 {
 	return &i
+}
+
+func vertexReplicaCountsFromScaleDefinitions(vertexScaleDefinitions []apiv1.VertexScaleDefinition) []apiv1.VertexReplicaCount {
+	vertexReplicaCounts := make([]apiv1.VertexReplicaCount, len(vertexScaleDefinitions))
+	for i, scaleDef := range vertexScaleDefinitions {
+		vertexReplicaCounts[i] = apiv1.VertexReplicaCount{
+			Name:     scaleDef.VertexName,
+			Replicas: int32(scaleDef.Min()),
+		}
+	}
+	return vertexReplicaCounts
 }
 
 func createPipelineForRecycleTest(pipelineRolloutName, pipelineName string, desiredPhase *numaflowv1.PipelinePhase, phase numaflowv1.PipelinePhase, upgradeState, upgradeStateReason, sinkImagePath string,

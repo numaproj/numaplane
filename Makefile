@@ -134,7 +134,33 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-.PHONY: test
+E2E_TEST_TARGETS := \
+	test-functional-nc \
+	test-functional-monovertex \
+	test-functional-pipeline \
+	test-concurrent-e2e \
+	test-ppnd-e2e \
+	test-progressive-monovertex-e2e \
+	test-progressive-pipeline-e2e \
+	test-progressive-analysis-monovertex-e2e \
+	test-progressive-analysis-pipeline-e2e \
+	test-skip-progressive-e2e \
+	test-pipeline-rider-e2e \
+	test-monovertex-rider-e2e \
+	test-rollback-e2e \
+	test-force-drain-e2e \
+	test-force-drain-backward-compatibility-e2e \
+	test-no-drain-e2e \
+	test-hpa-monovertex-e2e
+
+define RUN_E2E_TEST
+.PHONY: $(1)
+$(1): envtest ## Run e2e tests. Note we may need to increase the timeout in the future.
+	GOFLAGS="-count=1" ginkgo run -v --timeout 35m ./tests/e2e/$(patsubst test-%,%,$(1))
+endef
+$(foreach t,$(E2E_TEST_TARGETS),$(eval $(call RUN_E2E_TEST,$(t))))
+
+.PHONY: test test-with-coverage
 test: codegen fmt vet envtest ## Run unit tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -covermode=atomic -coverprofile=coverage.out -coverpkg=./... -p 1 -race -short -v $$(go list ./... | grep -v /tests/e2e | grep -v /pkg/client/ | grep -v /vendor/)
 
@@ -143,23 +169,8 @@ test-with-coverage: test
 	go tool cover -func=filtered_coverage.out
 	go tool cover -html=filtered_coverage.out -o coverage.html
 
-test-functional-nc:
-test-functional-monovertex:
-test-functional-pipeline:
-test-ppnd-e2e:
-test-progressive-monovertex-e2e:
-test-progressive-pipeline-e2e:
-test-progressive-analysis-monovertex-e2e:
-test-progressive-analysis-pipeline-e2e:
-test-skip-progressive-e2e:
-test-pipeline-rider-e2e:
-test-monovertex-rider-e2e:
-test-rollback-e2e:
-test-force-drain-e2e:
-test-no-drain-e2e:
-test-hpa-monovertex-e2e:
 test-%: envtest ## Run e2e tests. Note we may need to increase the timeout in the future.
-	GOFLAGS="-count=1" ginkgo run -v --timeout 35m ./tests/e2e/$*
+	GOFLAGS="-count=1" ginkgo run -v --timeout 35m ./tests/e2e/$(patsubst test-%,%,$@)
 
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.11.4

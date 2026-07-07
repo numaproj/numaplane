@@ -1276,6 +1276,21 @@ func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Con
 	return ctlrcommon.FindChildrenOfUpgradeState(ctx, isbsvcRollout, upgradeState, nil, false, r.client)
 }
 
+func (r *PipelineRolloutReconciler) getAllRecyclablePipelines(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (unstructured.UnstructuredList, error) {
+	recyclableObjects, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradeRecyclable, nil, false, r.client)
+	if err != nil {
+		return unstructured.UnstructuredList{}, fmt.Errorf("error listing recyclable pipelines: %w", err)
+	}
+	recyclableExpiredObjects, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradeRecyclableExpired, nil, false, r.client)
+	if err != nil {
+		return unstructured.UnstructuredList{}, fmt.Errorf("error listing recyclable-expired pipelines: %w", err)
+	}
+
+	allRecyclableObjects := recyclableObjects
+	allRecyclableObjects.Items = append(recyclableObjects.Items, recyclableExpiredObjects.Items...)
+	return allRecyclableObjects, nil
+}
+
 func (r *PipelineRolloutReconciler) ErrorHandler(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
 	numaLogger := logger.FromContext(ctx)
 	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
@@ -1291,7 +1306,18 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	// first check to see if there are any isbservices that are marked "recyclable"
+	// get both the "recyclable" and "recyclable-expired" Pipeline children
+	allRecyclableObjects, err := r.getAllRecyclablePipelines(ctx, pipelineRollout)
+	if err != nil {
+		return false, err
+	}
+
+	// delete any of those Pipelines which are marked for deletion
+	if err := r.deletePipelinesMarkedForDeletion(ctx, &allRecyclableObjects); err != nil {
+		return false, err
+	}
+
+	// check to see if there are any isbservices that are marked "recyclable"
 	// our pipelines need to be marked "recyclable" if they are using one of those
 	recyclableISBServices, err := r.getISBServicesByUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradeRecyclable)
 	if err != nil {
@@ -1325,7 +1351,68 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 
 	}
 
-	return ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+	// process the "recyclable" children (drain/delete)
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+	if err != nil {
+		return false, err
+	}
+
+	// get the current list of "recyclable" and "recyclable-expired" Pipeline children again
+	// so we can clear any other ones from the PipelineRollout status
+	allRecyclableObjects, err = r.getAllRecyclablePipelines(ctx, pipelineRollout)
+	if err != nil {
+		return false, err
+	}
+
+	if err := r.pruneRecyclablePipelinesStatus(ctx, pipelineRollout, allRecyclableObjects); err != nil {
+		return allDeleted, err
+	}
+
+	return allDeleted, nil
+}
+
+func (r *PipelineRolloutReconciler) deletePipelinesMarkedForDeletion(
+	ctx context.Context,
+	recyclablePipelines *unstructured.UnstructuredList,
+) error {
+	numaLogger := logger.FromContext(ctx)
+	for i := range recyclablePipelines.Items {
+		pipeline := &recyclablePipelines.Items[i]
+		if pipeline.GetAnnotations() == nil || pipeline.GetAnnotations()[common.AnnotationKeyMarkedForDeletion] != "true" {
+			continue
+		}
+
+		numaLogger.WithValues("pipeline", pipeline.GetName()).Debug("Pipeline is recyclable and marked for deletion, will be deleted now")
+		if err := kubernetes.DeleteResource(ctx, r.client, pipeline); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete pipeline %s/%s marked for deletion: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+	}
+
+	return nil
+}
+
+// pruneRecyclablePipelinesStatus keeps only RecyclablePipelinesStatus entries for pipelines
+// that still exist
+func (r *PipelineRolloutReconciler) pruneRecyclablePipelinesStatus(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+	allRecyclableObjects unstructured.UnstructuredList,
+) error {
+
+	keep := make(map[string]struct{}, len(allRecyclableObjects.Items))
+	for _, obj := range allRecyclableObjects.Items {
+		keep[obj.GetName()] = struct{}{}
+	}
+
+	// go through the full list of RecyclablePipelinesStatus and keep any found in the "keep" map
+	remaining := []apiv1.RecyclablePipelineStatus{}
+	for _, recyclablePipelineStatus := range pipelineRollout.Status.ProgressiveStatus.RecyclablePipelinesStatus {
+		if _, ok := keep[recyclablePipelineStatus.Name]; ok {
+			remaining = append(remaining, recyclablePipelineStatus)
+		}
+	}
+	pipelineRollout.Status.ProgressiveStatus.RecyclablePipelinesStatus = remaining
+	return nil
 }
 
 func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1.PipelineRollout, error) {

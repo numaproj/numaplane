@@ -140,6 +140,10 @@ jobs:
         case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent", "rollback"]
         include:
            - strategy: "progressive"
+             case: "force-drain"
+           - strategy: "progressive"
+             case: "force-drain-backward-compatibility"
+           - strategy: "progressive"
              case: "hpa-monovertex"
            - strategy: "pause-and-drain"
              case: "ppnd"
@@ -155,8 +159,6 @@ jobs:
              case: "progressive-analysis-monovertex"
            - strategy: "progressive"
              case: "progressive-analysis-pipeline"
-           - strategy: "progressive"
-             case: "force-drain"
            - strategy: "progressive"
              case: "no-drain"
            - strategy: "progressive"

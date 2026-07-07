@@ -22,7 +22,7 @@ type RolloutController interface {
 	IncrementChildCount(ctx context.Context, rolloutObject RolloutObject) (int32, error)
 
 	// Recycle deletes child; returns true if it was in fact deleted
-	Recycle(ctx context.Context, childObject *unstructured.Unstructured) (bool, error)
+	Recycle(ctx context.Context, rolloutObject RolloutObject, childObject *unstructured.Unstructured) (bool, error)
 
 	// GetDesiredRiders gets the list of Riders as specified in the RolloutObject, templated for the specific child name and
 	// based on the child definition.
@@ -42,7 +42,7 @@ type RolloutController interface {
 	GetTemplateArguments(child *unstructured.Unstructured) map[string]interface{}
 }
 
-// Garbage Collect all recyclable children; return true if we've deleted all that are recyclable
+// Garbage Collect all recyclable children; return true if we've deleted all that are recyclable.
 func GarbageCollectChildren(
 	ctx context.Context,
 	rolloutObject RolloutObject,
@@ -50,7 +50,7 @@ func GarbageCollectChildren(
 	c client.Client,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	recyclableObjects, err := getRecyclableObjects(ctx, rolloutObject, c)
+	recyclableObjects, err := FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeRecyclable, nil, false, c)
 	if err != nil {
 		return false, err
 	}
@@ -59,7 +59,7 @@ func GarbageCollectChildren(
 
 	allDeleted := true
 	for _, recyclableChild := range recyclableObjects.Items {
-		deleted, err := controller.Recycle(ctx, &recyclableChild)
+		deleted, err := controller.Recycle(ctx, rolloutObject, &recyclableChild)
 		if err != nil {
 			return false, err
 		}
@@ -68,19 +68,6 @@ func GarbageCollectChildren(
 		}
 	}
 	return allDeleted, nil
-}
-func getRecyclableObjects(
-	ctx context.Context,
-	rolloutObject RolloutObject,
-	c client.Client,
-) (unstructured.UnstructuredList, error) {
-	return kubernetes.ListResources(ctx, c, rolloutObject.GetChildGVK(),
-		rolloutObject.GetRolloutObjectMeta().Namespace,
-		client.MatchingLabels{
-			common.LabelKeyParentRollout: rolloutObject.GetRolloutObjectMeta().Name,
-			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeRecyclable),
-		},
-	)
 }
 
 // Find the children of a given Rollout of specified UpgradeState (plus optional UpgradeStateReason)
