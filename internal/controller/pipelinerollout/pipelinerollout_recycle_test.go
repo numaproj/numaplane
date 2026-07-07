@@ -1410,7 +1410,13 @@ func Test_pruneRecyclablePipelinesStatus(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().WithObjects(clientObjects...).Build()
 			reconciler := &PipelineRolloutReconciler{client: fakeClient}
 
-			err := reconciler.pruneRecyclablePipelinesStatus(ctx, pipelineRollout)
+			allRecyclableObjects := unstructured.UnstructuredList{}
+			allRecyclableObjects.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+			for _, obj := range clientObjects {
+				allRecyclableObjects.Items = append(allRecyclableObjects.Items, *obj.(*unstructured.Unstructured))
+			}
+
+			err := reconciler.pruneRecyclablePipelinesStatus(ctx, pipelineRollout, allRecyclableObjects)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedStatus, pipelineRollout.Status.ProgressiveStatus.RecyclablePipelinesStatus)
 		})
@@ -1468,7 +1474,6 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 		forcePromoteStrategy    bool
 		requiresDrainAnnotation string
 		recyclableStartTime     string
-		deletionAnnotation      string
 		expectedShouldDelete    bool
 		expectedExpired         bool
 		expectedError           bool
@@ -1544,17 +1549,6 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			expectedError:           true,
 		},
 		{
-			name:                    "has deletion annotation",
-			deleteExpiredPipelines:  true,
-			forcePromoteStrategy:    false,
-			requiresDrainAnnotation: "false",
-			recyclableStartTime:     "",
-			deletionAnnotation:      "true",
-			expectedShouldDelete:    true,
-			expectedExpired:         false,
-			expectedError:           false,
-		},
-		{
 			name:                    "expired recyclable pipeline is kept when deleteExpiredPipelines is false",
 			deleteExpiredPipelines:  false,
 			requiresDrainAnnotation: "true",
@@ -1610,9 +1604,6 @@ func Test_shouldDeleteRecyclablePipeline(t *testing.T) {
 			}
 			if tc.recyclableStartTime != "" {
 				annotations[common.AnnotationKeyRecyclableStartTime] = tc.recyclableStartTime
-			}
-			if tc.deletionAnnotation != "" {
-				annotations[common.AnnotationKeyMarkedForDeletion] = tc.deletionAnnotation
 			}
 			if len(annotations) > 0 {
 				pipeline.SetAnnotations(annotations)
