@@ -1391,7 +1391,7 @@ func (r *PipelineRolloutReconciler) deletePipelinesMarkedForDeletion(
 		}
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
 	}
-	recyclablePipelines.Items = remaining
+
 	return nil
 }
 
