@@ -1313,7 +1313,7 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 	}
 
 	// delete any of those Pipelines which are marked for deletion
-	if err := r.deletePipelinesMarkedForDeletion(ctx, pipelineRollout, &allRecyclableObjects); err != nil {
+	if err := r.deletePipelinesMarkedForDeletion(ctx, &allRecyclableObjects); err != nil {
 		return false, err
 	}
 
@@ -1373,23 +1373,19 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 
 func (r *PipelineRolloutReconciler) deletePipelinesMarkedForDeletion(
 	ctx context.Context,
-	pipelineRollout *apiv1.PipelineRollout,
 	recyclablePipelines *unstructured.UnstructuredList,
 ) error {
 	numaLogger := logger.FromContext(ctx)
-	remaining := make([]unstructured.Unstructured, 0, len(recyclablePipelines.Items))
 	for i := range recyclablePipelines.Items {
 		pipeline := &recyclablePipelines.Items[i]
 		if pipeline.GetAnnotations() == nil || pipeline.GetAnnotations()[common.AnnotationKeyMarkedForDeletion] != "true" {
-			remaining = append(remaining, recyclablePipelines.Items[i])
 			continue
 		}
 
 		numaLogger.WithValues("pipeline", pipeline.GetName()).Debug("Pipeline is recyclable and marked for deletion, will be deleted now")
-		if err := kubernetes.DeleteResource(ctx, r.client, pipeline); err != nil {
+		if err := kubernetes.DeleteResource(ctx, r.client, pipeline); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete pipeline %s/%s marked for deletion: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
-		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_DrainNotRequired)
 	}
 
 	return nil
