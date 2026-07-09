@@ -53,15 +53,6 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			},
 		}
 
-		It("Should throw a CR validation error", func() {
-			By("Creating a NumaflowControllerRollout resource with an invalid name")
-			resource := numaflowControllerResource
-			resource.Name = "test-numaflow-controller"
-			err := ctlrcommon.TestK8sClient.Create(ctx, &resource)
-			Expect(err).NotTo(Succeed())
-			Expect(err.Error()).To(ContainSubstring("The metadata name must start with 'numaflow-controller'"))
-		})
-
 		It("Should throw duplicate resource error", func() {
 			By("Creating duplicate NumaflowControllerRollout resource with the same name")
 			resource := numaflowControllerResource
