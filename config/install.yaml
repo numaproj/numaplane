@@ -3001,7 +3001,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: quay.io/numaproj/numaplane-controller:v0.33.0
+        image: quay.io/numaproj/numaplane-controller:v0.33.1
         livenessProbe:
           httpGet:
             path: /healthz
