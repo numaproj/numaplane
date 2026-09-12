@@ -377,6 +377,9 @@ func Test_processExistingMonoVertex_AnalysisRunGeneration(t *testing.T) {
 							UpgradingChildStatus: unassessedUpgradingChildStatus,
 							Analysis:             apiv1.AnalysisStatus{},
 						},
+						// monoVertexSpec doesn't define scale, so its original scale definition is "{}"
+						// (numaflowv1.Scale is a non-pointer struct field, so it always marshals to "{}" rather than being omitted)
+						OriginalScaleDefinition: "{}",
 					},
 					PromotedMonoVertexStatus: defaultPromotedChildStatus,
 				}})
@@ -1109,6 +1112,9 @@ func Test_reconcile_promotedPodSelector_progressiveCompletion(t *testing.T) {
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: unassessedUpgradingChildStatus,
 					},
+					// monoVertexSpec doesn't define scale, so its original scale definition is "{}"
+					// (numaflowv1.Scale is a non-pointer struct field, so it always marshals to "{}" rather than being omitted)
+					OriginalScaleDefinition: "{}",
 				},
 				PromotedMonoVertexStatus: defaultPromotedChildStatus,
 			},
@@ -1500,7 +1506,10 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 			// Create MonoVertexRollout with template values
 			upgradingStatus := tc.upgradingMonoVertexStatus
 			if upgradingStatus == nil {
-				upgradingStatus = &apiv1.UpgradingMonoVertexStatus{}
+				// none of the monovertex specs in this test define scale; an unset Scale still marshals to "{}"
+				// since numaflowv1.Scale is a non-pointer struct field, so that's the original scale definition
+				// it would have been given
+				upgradingStatus = &apiv1.UpgradingMonoVertexStatus{OriginalScaleDefinition: "{}"}
 			}
 			upgradingStatus.Name = tc.upgradingChildName
 			mvRollout := ctlrcommon.CreateTestMVRollout(
