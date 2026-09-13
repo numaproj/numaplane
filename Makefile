@@ -254,7 +254,9 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 rollouts:
 ifeq ($(ROLLOUTS_REQUIRED), true)
 	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/rollouts-ns.yaml
-	$(KUBECTL) kustomize $(ARGO_ROLLOUTS_PATH) | $(KUBECTL) apply -n argo-rollouts -f -
+	# use server-side apply: the argo-rollouts CRDs are large enough that client-side apply's
+	# last-applied-configuration annotation can exceed Kubernetes' 256KiB annotation size limit
+	$(KUBECTL) kustomize $(ARGO_ROLLOUTS_PATH) | $(KUBECTL) apply --server-side --force-conflicts -n argo-rollouts -f -
 endif
 
 .PHONY: prometheus
