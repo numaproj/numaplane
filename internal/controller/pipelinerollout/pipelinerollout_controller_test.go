@@ -1604,7 +1604,10 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 			// Create PipelineRollout with template values
 			upgradingStatus := tc.upgradingPipelineStatus
 			if upgradingStatus == nil {
-				upgradingStatus = &apiv1.UpgradingPipelineStatus{}
+				// none of the pipeline specs in this test define scale for their vertices (in, cat, out);
+				// an unset Scale still marshals to "{}" since numaflowv1.Scale is a non-pointer struct field,
+				// so that's the original scale definition each vertex would have been given
+				upgradingStatus = &apiv1.UpgradingPipelineStatus{OriginalScaleDefinitions: []string{"{}", "{}", "{}"}}
 			}
 			upgradingStatus.Name = tc.upgradingChildName
 			pipelineRollout := ctlrcommon.CreateTestPipelineRollout(
