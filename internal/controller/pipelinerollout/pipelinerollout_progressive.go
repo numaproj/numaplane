@@ -41,14 +41,8 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
 	if err != nil {
 		return nil, err
-	} else if isbsvc == nil {
-		// TODO: temporary code for handling LabelValueUpgradeInProgress for backwards compatibility purposes, remove later
-		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
-		if err != nil {
-			return nil, err
-		}
 	}
-	// if isbsvc is still nil after checking for trial and in progress labels, look for promoted
+	// if no "upgrading" isbsvc was found, look for the "promoted" one
 	if isbsvc == nil {
 		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
 		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
@@ -248,17 +242,6 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 		}
 		if upgradingPipelineStatus.Name != pipelineDef.GetName() {
 			return false, fmt.Errorf("can't CheckForDifferences: upgradingPipelineStatus.Name %s != existing pipeline name %s", upgradingPipelineStatus.Name, pipelineDef.GetName())
-		}
-
-		// Temporary code for backward compatibility: if OriginalScaleDefinitions wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says
-		// TODO: remove later
-		if len(upgradingPipelineStatus.OriginalScaleDefinitions) == 0 {
-			originalScaleDefinitions, err := numaflowtypes.GenerateFullScaleDefinitionsFromPipelineMap(requiredSpec)
-			if err != nil {
-				return false, err
-			}
-			numaLogger.Debugf("OriginalScaleDefinitions not found in existing PipelineRollout status, setting OriginalScaleDefinitions to %v", originalScaleDefinitions)
-			upgradingPipelineStatus.OriginalScaleDefinitions = originalScaleDefinitions
 		}
 
 		err := numaflowtypes.ApplyFullScaleDefinitionsToPipelineMap(pipelineCopy.Object, upgradingPipelineStatus.OriginalScaleDefinitions)

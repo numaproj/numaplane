@@ -253,8 +253,6 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		promotedISBSvc, initialISBServiceSpec, _, err := GetPromotedISBServiceSpecAndStatus(Namespace, isbServiceRolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
-		promotedPipelineName, err := GetPromotedPipelineName(Namespace, pipelineRolloutName)
-		Expect(err).ShouldNot(HaveOccurred())
 
 		_ = updateISBServiceForFailure()
 
@@ -269,13 +267,17 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		// promptly; it remains "recyclable" until the maxRecyclableDurationMinutes expiry, which is well beyond this
 		// test's timeout. The "upgrading" isbsvc likewise can't be deleted while the pipeline still uses it. So rather
 		// than verify deletion, we verify both settle into the "recyclable" state.
+		// After that, PipelineRollout may briefly start one extra trial Pipeline on the promoted ISB (the original
+		// trial was recycled via the ISB path before Pipeline Discontinue ran). That extra trial is allowed; wait
+		// until only one non-recyclable Pipeline remains, then confirm it stays that way.
 		UpdateISBService(isbServiceRolloutName, initialISBServiceSpec)
 		VerifyPipelineUpgradeState(Namespace, GetInstanceName(pipelineRolloutName, 1), string(common.LabelValueUpgradeRecyclable), nil)     // the "Upgrading" one
 		VerifyISBServiceUpgradeState(Namespace, GetInstanceName(isbServiceRolloutName, 4), string(common.LabelValueUpgradeRecyclable), nil) // the "Upgrading" one
-		CheckConsistently("verifying trial Pipeline recycled", func() bool {
-			pipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
-			return GetNumberOfNonRecyclableChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName) == 1 && pipelineName == promotedPipelineName
-		}).Should(BeTrue())
+		oneNonRecyclablePipeline := func() bool {
+			return GetNumberOfNonRecyclableChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName) == 1
+		}
+		CheckEventually("verifying one non-recyclable Pipeline", oneNonRecyclablePipeline).Should(BeTrue())
+		CheckConsistently("verifying one non-recyclable Pipeline stays", oneNonRecyclablePipeline).Should(BeTrue())
 
 		CheckConsistently("verifying trial InterstepBufferService recycled", func() bool {
 			isbsvcName, _ := GetPromotedISBServiceName(Namespace, isbServiceRolloutName)

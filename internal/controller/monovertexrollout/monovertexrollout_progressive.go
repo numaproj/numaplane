@@ -210,22 +210,6 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 		}
 
 		originalScaleDefinition := upgradingMonoVertexStatus.OriginalScaleDefinition
-		// Temporary code for backward compatibility: if OriginalScaleDefinition wasn't set yet (because we just rolled out this change), then we set it to what the Rollout says initially
-		// TODO: remove later
-		if originalScaleDefinition == "" {
-			if to["scale"] == nil {
-				originalScaleDefinition = "null"
-			} else {
-				jsonBytes, err := json.Marshal(to["scale"])
-				if err != nil {
-					return false, fmt.Errorf("can't CheckForDifferences for MonoVertexRollout %s/%s: error marshaling scale from monovertex: %w",
-						monoVertexRollout.Namespace, monoVertexRollout.Name, err)
-				}
-				originalScaleDefinition = string(jsonBytes)
-			}
-			numaLogger.Debugf("OriginalScaleDefinition not found in existing MonoVertexRollout status, setting OriginalScaleDefinition to %s", originalScaleDefinition)
-			upgradingMonoVertexStatus.OriginalScaleDefinition = originalScaleDefinition
-		}
 
 		// replace the entire scale definition in the Rollout-defined spec with upgradingMonoVertexStatus.OriginalScaleDefinition
 		if originalScaleDefinition == "null" {

@@ -118,10 +118,6 @@ const (
 	// after an upgrade.
 	LabelValueUpgradePromoted UpgradeState = "promoted"
 
-	// LabelValueUpgradeInProgress is the label value indicating that the resource managed by a NumaRollout is in progress
-	// of upgrade.
-	LabelValueUpgradeInProgress UpgradeState = "in-progress"
-
 	// LabelValueUpgradeTrial is the label value indicating that the resource managed by a NumaRollout is the trial resource
 	// of an upgrade.
 	LabelValueUpgradeTrial UpgradeState = "trial"
