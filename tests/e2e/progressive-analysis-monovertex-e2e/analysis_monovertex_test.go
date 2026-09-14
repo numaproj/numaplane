@@ -38,6 +38,8 @@ const (
 	analysisTemplateNameFailureOne = "test-monovertex-template-failure-1"
 	analysisTemplateNameFailureTwo = "test-monovertex-template-failure-2"
 	analysisRunName                = "monovertex-" + monoVertexRolloutName
+	// Aligns metric interval, initialDelay, and PromQL increase() lookback.
+	analysisMetricInterval = "60s"
 )
 
 var (
@@ -108,37 +110,62 @@ var (
 		},
 	}
 
+	analysisTemplateArgs = []argov1alpha1.Argument{
+		{Name: "upgrading-monovertex-name"},
+		{Name: "promoted-monovertex-name"},
+		{Name: "monovertex-namespace"},
+		{Name: "prometheus-port", Value: ptr.To("9090")},
+		{Name: "interval", Value: ptr.To(analysisMetricInterval)},
+	}
+
 	initialAnalysisTemplateSpec = argov1alpha1.AnalysisTemplateSpec{
 		Metrics: []argov1alpha1.Metric{
 			{
-				Name:                    "mvtx-example-1",
+				Name:                    "mvtx-no-critical-errors-1",
 				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
-				Interval:                "60s",
+				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
+				InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
 				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
 				Provider: argov1alpha1.MetricProvider{
 					Prometheus: &argov1alpha1.PrometheusMetric{
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
 						Query: `
 (
-  absent(sum(monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}))
-  OR
-  sum(monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) == 0
+  sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == 0
 )
 OR
 (
-  sum(monovtx_ack_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) > 0
+  absent(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"})
 )`,
 					},
 				},
 				SuccessCondition: "len(result) > 0 && result[0] > 0",
 			},
 		},
-		Args: []argov1alpha1.Argument{
-			{Name: "upgrading-monovertex-name"},
-			{Name: "promoted-monovertex-name"},
-			{Name: "monovertex-namespace"},
-			{Name: "prometheus-port", Value: ptr.To("9090")},
+		Args: analysisTemplateArgs,
+	}
+
+	// Strict query without the absent() pass-through: when monovtx_critical_error_total
+	// has never been emitted (e.g. sink never acks but also never increments the counter),
+	// Prometheus returns no series and the AnalysisRun metric fails.
+	failureAnalysisTemplateSpec = argov1alpha1.AnalysisTemplateSpec{
+		Metrics: []argov1alpha1.Metric{
+			{
+				Name:                    "mvtx-no-critical-errors-1",
+				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
+				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
+				InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
+				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
+				Provider: argov1alpha1.MetricProvider{
+					Prometheus: &argov1alpha1.PrometheusMetric{
+						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
+						Query:   `sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == 0`,
+					},
+				},
+				SuccessCondition: "len(result) > 0 && result[0] > 0",
+			},
 		},
+		Args: analysisTemplateArgs,
 	}
 )
 
@@ -161,10 +188,9 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Success case", func() {
 		CreateAnalysisTemplate(analysisTemplateNameSuccessOne, Namespace, initialAnalysisTemplateSpec)
 
-		// Update the initial AnalysisTemplateSpec to use a different metric name and success condition
+		// Use a second template with the same query to verify multiple AnalysisTemplates are merged
 		updatedAnalysisTemplateSpec := initialAnalysisTemplateSpec.DeepCopy()
-		updatedAnalysisTemplateSpec.Metrics[0].Name = "mvtx-example-2"
-		updatedAnalysisTemplateSpec.Metrics[0].SuccessCondition = "len(result) > 0"
+		updatedAnalysisTemplateSpec.Metrics[0].Name = "mvtx-no-critical-errors-2"
 		CreateAnalysisTemplate(analysisTemplateNameSuccessTwo, Namespace, *updatedAnalysisTemplateSpec)
 
 		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategyForSuccessCase, apiv1.Metadata{})
@@ -176,8 +202,8 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		// Verify the previously promoted monovertex was deleted
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
 
-		VerifyAnalysisRunStatus("mvtx-example-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("mvtx-example-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("mvtx-no-critical-errors-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("mvtx-no-critical-errors-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameSuccessOne)
@@ -185,27 +211,20 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	})
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Failure case", func() {
-		CreateAnalysisTemplate(analysisTemplateNameFailureOne, Namespace, initialAnalysisTemplateSpec)
-		// Update a fake query to cause a success status
-		updatedAnalysisTemplate := initialAnalysisTemplateSpec.DeepCopy()
-		updatedAnalysisTemplate.Metrics[0].Name = "mvtx-example-2"
-		updatedAnalysisTemplate.Metrics[0].SuccessCondition = "true"
-		updatedAnalysisTemplate.Metrics[0].Provider.Prometheus.Query = "vector(1)"
-
+		CreateAnalysisTemplate(analysisTemplateNameFailureOne, Namespace, failureAnalysisTemplateSpec)
+		updatedAnalysisTemplate := failureAnalysisTemplateSpec.DeepCopy()
+		updatedAnalysisTemplate.Metrics[0].Name = "mvtx-no-critical-errors-2"
 		CreateAnalysisTemplate(analysisTemplateNameFailureTwo, Namespace, *updatedAnalysisTemplate)
 
-		// Update the initial MonoVertexSpec to use a bad image for the sink
-		updatedInitialMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
-		updatedInitialMonoVertexSpec.Sink.AbstractSink.Blackhole = nil
-		updatedInitialMonoVertexSpec.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: monovertexSinkBadImage}}
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, *updatedInitialMonoVertexSpec, &defaultStrategyForFailureCase, apiv1.Metadata{})
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategyForFailureCase, apiv1.Metadata{})
 
-		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, *updatedInitialMonoVertexSpec, udTransformer)
+		// Bad sink on the upgrading MonoVertex keeps pods healthy but prevents acks; with the strict
+		// query (no absent() branch) the AnalysisRun fails because the critical-error metric never appears.
+		updatedMonoVertexSpec := UpdateMonoVertexRolloutForAnalysisFailure(monoVertexRolloutName, initialMonoVertexSpec, udTransformer, validUDTransformerImage, monovertexSinkBadImage)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
 
-		// Verify the AnalysisRun status is Failed
-		VerifyAnalysisRunStatus("mvtx-example-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
-		VerifyAnalysisRunStatus("mvtx-example-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("mvtx-no-critical-errors-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("mvtx-no-critical-errors-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameFailureOne)

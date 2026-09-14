@@ -9,7 +9,7 @@ spec:
     #  assessmentSchedule: "10,200,60,10"
     analysis:
       templates:
-      - templateName: mvtx-acknowledged-messages
+      - templateName: mvtx-no-critical-errors
         clusterScope: false
   riders: # can be defined here for resources that need to be deployed per-Monovertex
 
@@ -39,7 +39,7 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  name: mvtx-acknowledged-messages
+  name: mvtx-no-critical-errors
   namespace: example-namespace
   labels:
     used_by: numaplane
@@ -47,24 +47,34 @@ spec:
   args:
     - name: upgrading-monovertex-name
     - name: monovertex-namespace
+    # Shared by metric interval, initialDelay, and the PromQL increase() lookback.
+    # Align with the MonoVertex defaultAssessmentSchedule consecutive-health period (60s).
     - name: interval
-      value: 10s
+      value: 60s
     - name: success-limit
-      value: "3" # if we do this check too early and the prometheus metric doesn't know about the read count yet, it could
-                        # succeed when it shouldn't
-    - name: failure-limit 
-      value: "3" # if we do this check too early and the read has occurred but not the ack, it could fail when it shouldn't
+      value: "3"
+    - name: failure-limit
+      value: "3"
   metrics:
-  - name: acknowledged-messages
+  - name: no-critical-errors
     consecutiveSuccessLimit: '{{args.success-limit}}'
     failureLimit: '{{args.failure-limit}}'
     interval: '{{args.interval}}'
+    # Wait one interval after AnalysisRun creation before the first Prometheus query so the
+    # increase() lookback does not overlap the upgrading MonoVertex health ramp-up window.
+    initialDelay: '{{args.interval}}'
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
-        query: (vector(1) and on() ((sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}",
-          mvtx_name="{{args.upgrading-monovertex-name}}"}) or vector(0)) == 0)) or
-          (vector(1) and on() ((sum(numaflow_monovtx_ack_total{namespace="{{args.monovertex-namespace}}",
-          mvtx_name="{{args.upgrading-monovertex-name}}"}) or vector(0)) > 0)) or
-          vector(0)
+        # Requires Numaflow >= 1.8.0 (monovtx_critical_error_total, numaflow#3154).
+        # Pass when no critical errors (EOT, UDF crash, etc.) occurred in the lookback window.
+        # absent() treats assets with no traffic / no counter yet as healthy.
+        query: |
+          (
+            sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == 0
+          )
+          or
+          (
+            absent(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"})
+          )
     successCondition: len(result) > 0 && result[0] > 0
