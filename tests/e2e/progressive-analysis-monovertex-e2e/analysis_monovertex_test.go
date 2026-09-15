@@ -145,7 +145,7 @@ OR
 			},
 			{
 				Name:                    acknowledgedMessagesMetricName,
-				FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
+				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
 				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
 				Provider: argov1alpha1.MetricProvider{

@@ -53,12 +53,14 @@ spec:
       value: 60s
     - name: success-limit
       value: "3"
-    - name: failure-limit
+    - name: no-critical-errors-failure-limit
       value: "1"
+    - name: acknowledged-messages-failure-limit
+      value: "3"
   metrics:
   - name: no-critical-errors
     consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+    failureLimit: '{{args.no-critical-errors-failure-limit}}'
     interval: '{{args.interval}}'
     # Wait one evaluation interval before the first query so increase() has a full lookback window.
     initialDelay: '{{args.interval}}'
@@ -79,7 +81,7 @@ spec:
     successCondition: len(result) > 0 && result[0] > 0
   - name: acknowledged-messages
     consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+    failureLimit: '{{args.acknowledged-messages-failure-limit}}'
     interval: '{{args.interval}}'
     provider:
       prometheus:
