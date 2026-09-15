@@ -54,7 +54,7 @@ spec:
     - name: success-limit
       value: "3"
     - name: failure-limit
-      value: "3"
+      value: "1"
   metrics:
   - name: no-critical-errors
     consecutiveSuccessLimit: '{{args.success-limit}}'

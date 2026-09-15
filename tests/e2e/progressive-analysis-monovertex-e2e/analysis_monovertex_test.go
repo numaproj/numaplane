@@ -124,7 +124,7 @@ func monoVertexAnalysisTemplateSpec(criticalErrorsMetricName, acknowledgedMessag
 		Metrics: []argov1alpha1.Metric{
 			{
 				Name:                    criticalErrorsMetricName,
-				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
+				FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
 				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 				InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
 				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
@@ -145,7 +145,7 @@ OR
 			},
 			{
 				Name:                    acknowledgedMessagesMetricName,
-				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
+				FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
 				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
 				Provider: argov1alpha1.MetricProvider{
