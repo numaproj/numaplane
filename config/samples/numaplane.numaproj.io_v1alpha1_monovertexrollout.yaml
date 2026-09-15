@@ -48,7 +48,7 @@ spec:
     - name: upgrading-monovertex-name
     - name: monovertex-namespace
     # Shared by metric interval, initialDelay, and the PromQL increase() lookback.
-    # Align with the MonoVertex defaultAssessmentSchedule consecutive-health period (60s).
+    # 60s spans ~2 Prometheus scrapes at the default 30s interval; matches UBC production config.
     - name: interval
       value: 60s
     - name: success-limit
@@ -60,8 +60,7 @@ spec:
     consecutiveSuccessLimit: '{{args.success-limit}}'
     failureLimit: '{{args.failure-limit}}'
     interval: '{{args.interval}}'
-    # Wait one interval after AnalysisRun creation before the first Prometheus query so the
-    # increase() lookback does not overlap the upgrading MonoVertex health ramp-up window.
+    # Wait one evaluation interval before the first query so increase() has a full lookback window.
     initialDelay: '{{args.interval}}'
     provider:
       prometheus:
