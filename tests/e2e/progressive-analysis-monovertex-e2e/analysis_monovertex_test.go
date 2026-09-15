@@ -117,11 +117,13 @@ var (
 		{Name: "prometheus-port", Value: ptr.To("9090")},
 		{Name: "interval", Value: ptr.To(analysisMetricInterval)},
 	}
+)
 
-	initialAnalysisTemplateSpec = argov1alpha1.AnalysisTemplateSpec{
+func monoVertexAnalysisTemplateSpec(criticalErrorsMetricName, acknowledgedMessagesMetricName string) argov1alpha1.AnalysisTemplateSpec {
+	return argov1alpha1.AnalysisTemplateSpec{
 		Metrics: []argov1alpha1.Metric{
 			{
-				Name:                    "mvtx-no-critical-errors-1",
+				Name:                    criticalErrorsMetricName,
 				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
 				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 				InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
@@ -141,25 +143,19 @@ OR
 				},
 				SuccessCondition: "len(result) > 0 && result[0] > 0",
 			},
-		},
-		Args: analysisTemplateArgs,
-	}
-
-	// Strict query without the absent() pass-through: when monovtx_critical_error_total
-	// has never been emitted (e.g. sink never acks but also never increments the counter),
-	// Prometheus returns no series and the AnalysisRun metric fails.
-	failureAnalysisTemplateSpec = argov1alpha1.AnalysisTemplateSpec{
-		Metrics: []argov1alpha1.Metric{
 			{
-				Name:                    "mvtx-no-critical-errors-1",
+				Name:                    acknowledgedMessagesMetricName,
 				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
 				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
-				InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
 				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
 				Provider: argov1alpha1.MetricProvider{
 					Prometheus: &argov1alpha1.PrometheusMetric{
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
-						Query:   `sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == 0`,
+						Query: `(vector(1) and on() ((sum(monovtx_read_total{namespace="{{args.monovertex-namespace}}",
+mvtx_name="{{args.upgrading-monovertex-name}}"}) or vector(0)) == 0)) or
+(vector(1) and on() ((sum(monovtx_ack_total{namespace="{{args.monovertex-namespace}}",
+mvtx_name="{{args.upgrading-monovertex-name}}"}) or vector(0)) > 0)) or
+vector(0)`,
 					},
 				},
 				SuccessCondition: "len(result) > 0 && result[0] > 0",
@@ -167,7 +163,7 @@ OR
 		},
 		Args: analysisTemplateArgs,
 	}
-)
+}
 
 func TestProgressiveE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -186,12 +182,12 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	})
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Success case", func() {
-		CreateAnalysisTemplate(analysisTemplateNameSuccessOne, Namespace, initialAnalysisTemplateSpec)
+		CreateAnalysisTemplate(analysisTemplateNameSuccessOne, Namespace,
+			monoVertexAnalysisTemplateSpec("mvtx-no-critical-errors-1", "mvtx-acknowledged-messages-1"))
 
-		// Use a second template with the same query to verify multiple AnalysisTemplates are merged
-		updatedAnalysisTemplateSpec := initialAnalysisTemplateSpec.DeepCopy()
-		updatedAnalysisTemplateSpec.Metrics[0].Name = "mvtx-no-critical-errors-2"
-		CreateAnalysisTemplate(analysisTemplateNameSuccessTwo, Namespace, *updatedAnalysisTemplateSpec)
+		// Use a second template with the same metrics to verify multiple AnalysisTemplates are merged
+		CreateAnalysisTemplate(analysisTemplateNameSuccessTwo, Namespace,
+			monoVertexAnalysisTemplateSpec("mvtx-no-critical-errors-2", "mvtx-acknowledged-messages-2"))
 
 		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategyForSuccessCase, apiv1.Metadata{})
 
@@ -203,7 +199,9 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
 
 		VerifyAnalysisRunStatus("mvtx-no-critical-errors-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("mvtx-acknowledged-messages-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyAnalysisRunStatus("mvtx-no-critical-errors-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("mvtx-acknowledged-messages-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameSuccessOne)
@@ -211,20 +209,23 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	})
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Failure case", func() {
-		CreateAnalysisTemplate(analysisTemplateNameFailureOne, Namespace, failureAnalysisTemplateSpec)
-		updatedAnalysisTemplate := failureAnalysisTemplateSpec.DeepCopy()
-		updatedAnalysisTemplate.Metrics[0].Name = "mvtx-no-critical-errors-2"
-		CreateAnalysisTemplate(analysisTemplateNameFailureTwo, Namespace, *updatedAnalysisTemplate)
+		CreateAnalysisTemplate(analysisTemplateNameFailureOne, Namespace,
+			monoVertexAnalysisTemplateSpec("mvtx-no-critical-errors-1", "mvtx-acknowledged-messages-1"))
+		CreateAnalysisTemplate(analysisTemplateNameFailureTwo, Namespace,
+			monoVertexAnalysisTemplateSpec("mvtx-no-critical-errors-2", "mvtx-acknowledged-messages-2"))
 
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategyForFailureCase, apiv1.Metadata{})
+		// Start with a bad sink so reads occur without acks before the upgrade; upgrading keeps the same sink.
+		initialWithBadSink := initialMonoVertexSpec.DeepCopy()
+		initialWithBadSink.Sink.AbstractSink.Blackhole = nil
+		initialWithBadSink.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: monovertexSinkBadImage}}
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, *initialWithBadSink, &defaultStrategyForFailureCase, apiv1.Metadata{})
 
-		// Bad sink on the upgrading MonoVertex keeps pods healthy but prevents acks; with the strict
-		// query (no absent() branch) the AnalysisRun fails because the critical-error metric never appears.
-		updatedMonoVertexSpec := UpdateMonoVertexRolloutForAnalysisFailure(monoVertexRolloutName, initialMonoVertexSpec, udTransformer, validUDTransformerImage, monovertexSinkBadImage)
+		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, *initialWithBadSink, udTransformer)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
 
-		VerifyAnalysisRunStatus("mvtx-no-critical-errors-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
-		VerifyAnalysisRunStatus("mvtx-no-critical-errors-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		// Rollout failure is driven by the legacy acknowledged-messages metric (reads without acks).
+		VerifyAnalysisRunStatus("mvtx-acknowledged-messages-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("mvtx-acknowledged-messages-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameFailureOne)

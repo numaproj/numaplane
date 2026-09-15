@@ -65,9 +65,9 @@ spec:
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
-        # Requires Numaflow >= 1.8.0 (monovtx_critical_error_total, numaflow#3154).
+        # Numaflow >= 1.8.0 (monovtx_critical_error_total, numaflow#3154).
         # Pass when no critical errors (EOT, UDF crash, etc.) occurred in the lookback window.
-        # absent() treats assets with no traffic / no counter yet as healthy.
+        # absent() treats assets with no traffic / no counter yet as healthy (fallback on older Numaflow).
         query: |
           (
             sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == 0
@@ -76,4 +76,19 @@ spec:
           (
             absent(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"})
           )
+    successCondition: len(result) > 0 && result[0] > 0
+  - name: acknowledged-messages
+    consecutiveSuccessLimit: '{{args.success-limit}}'
+    failureLimit: '{{args.failure-limit}}'
+    interval: '{{args.interval}}'
+    provider:
+      prometheus:
+        address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
+        # Legacy read/ack check; provides validation on Numaflow < 1.8 where critical-error metric is absent.
+        # Pass when no reads yet, or at least one ack has been recorded.
+        query: (vector(1) and on() ((sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}",
+          mvtx_name="{{args.upgrading-monovertex-name}}"}) or vector(0)) == 0)) or
+          (vector(1) and on() ((sum(numaflow_monovtx_ack_total{namespace="{{args.monovertex-namespace}}",
+          mvtx_name="{{args.upgrading-monovertex-name}}"}) or vector(0)) > 0)) or
+          vector(0)
     successCondition: len(result) > 0 && result[0] > 0

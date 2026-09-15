@@ -686,22 +686,6 @@ func UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformer
 	return updatedMonoVertexSpec
 }
 
-func UpdateMonoVertexRolloutForAnalysisFailure(monoVertexRolloutName string, initialMonoVertexSpec numaflowv1.MonoVertexSpec, udTransformer numaflowv1.UDTransformer, validUDTransformerImage, badSinkImage string) *numaflowv1.MonoVertexSpec {
-	By("Updating the MonoVertex Topology to cause a Progressive change - Analysis failure case")
-	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
-	updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
-	updatedMonoVertexSpec.Source.UDTransformer.Container = &numaflowv1.Container{Image: validUDTransformerImage}
-	updatedMonoVertexSpec.Sink.AbstractSink.Blackhole = nil
-	updatedMonoVertexSpec.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: badSinkImage}}
-	rawSpec, err := json.Marshal(updatedMonoVertexSpec)
-	Expect(err).ShouldNot(HaveOccurred())
-	UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
-		return mvr, nil
-	})
-	return updatedMonoVertexSpec
-}
-
 func UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage string, initialMonoVertexSpec numaflowv1.MonoVertexSpec, udTransformer numaflowv1.UDTransformer) *numaflowv1.MonoVertexSpec {
 	By("Updating the MonoVertex Topology to cause a Progressive change - Failure case")
 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
