@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
@@ -41,6 +42,15 @@ const (
 	// Aligns metric interval, initialDelay, and PromQL increase() lookback.
 	analysisMetricInterval = "60s"
 )
+
+// numaflowControllerVersionForTest returns the Numaflow controller version to deploy.
+// Override via shell env (not Makefile): NUMAFLOW_CONTROLLER_VERSION=1.7.5 make test-progressive-analysis-monovertex-e2e
+func numaflowControllerVersionForTest() string {
+	if v := os.Getenv("NUMAFLOW_CONTROLLER_VERSION"); v != "" {
+		return v
+	}
+	return PrimaryNumaflowControllerVersion
+}
 
 var (
 	monoVertexScaleMin  = int32(4)
@@ -178,7 +188,7 @@ func TestProgressiveE2E(t *testing.T) {
 var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
+		CreateNumaflowControllerRollout(numaflowControllerVersionForTest())
 	})
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Success case", func() {
@@ -189,7 +199,8 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		CreateAnalysisTemplate(analysisTemplateNameSuccessTwo, Namespace,
 			monoVertexAnalysisTemplateSpec("mvtx-no-critical-errors-2", "mvtx-acknowledged-messages-2"))
 
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategyForSuccessCase, apiv1.Metadata{})
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, &defaultStrategyForSuccessCase, apiv1.Metadata{})
+		VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
 
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
 		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
@@ -218,7 +229,8 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		initialWithBadSink := initialMonoVertexSpec.DeepCopy()
 		initialWithBadSink.Sink.AbstractSink.Blackhole = nil
 		initialWithBadSink.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: monovertexSinkBadImage}}
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, *initialWithBadSink, &defaultStrategyForFailureCase, apiv1.Metadata{})
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, *initialWithBadSink, &defaultStrategyForFailureCase, apiv1.Metadata{})
+		VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
 
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, *initialWithBadSink, udTransformer)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
