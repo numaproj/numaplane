@@ -199,6 +199,15 @@ data:
         includeSubfields: true
       - path: spec.source.udsource.container.envfrom
         includeSubfields: true
+      - path: spec.udf.container.image
+      - path: spec.udf.container.volumeMounts
+        includeSubfields: true
+      - path: spec.udf.container.command
+      - path: spec.udf.container.args
+      - path: spec.udf.container.env
+        includeSubfields: true
+      - path: spec.udf.container.envfrom
+        includeSubfields: true
       - path: spec.volumes
         includeSubfields: true
 

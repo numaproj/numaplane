@@ -686,6 +686,19 @@ func UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformer
 	return updatedMonoVertexSpec
 }
 
+func UpdateMonoVertexRolloutUDFImage(monoVertexRolloutName, udfImage string, initialMonoVertexSpec numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec {
+	By("Updating the MonoVertex UDF container image to cause a Progressive change")
+	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
+	updatedMonoVertexSpec.UDF = &numaflowv1.UDF{Container: &numaflowv1.Container{Image: udfImage}}
+	rawSpec, err := json.Marshal(updatedMonoVertexSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
+		return mvr, nil
+	})
+	return updatedMonoVertexSpec
+}
+
 func UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage string, initialMonoVertexSpec numaflowv1.MonoVertexSpec, udTransformer numaflowv1.UDTransformer) *numaflowv1.MonoVertexSpec {
 	By("Updating the MonoVertex Topology to cause a Progressive change - Failure case")
 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
