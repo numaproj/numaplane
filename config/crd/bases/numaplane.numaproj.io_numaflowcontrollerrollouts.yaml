@@ -65,6 +65,21 @@ spec:
                 required:
                 - version
                 type: object
+              strategy:
+                description: ControllerStrategy defines the strategy to use when upgrading
+                  the NumaflowController
+                properties:
+                  progressive:
+                    description: ControllerProgressiveStrategy defines the configuration
+                      for a progressive upgrade of the NumaflowController
+                    properties:
+                      assessmentSchedule:
+                        description: |-
+                          AssessmentSchedule describes the schedule for how often we assess the health of the upgrading controller instance,
+                          in the format "delay,end,period,interval" (see config.AssessmentSchedule)
+                        type: string
+                    type: object
+                type: object
             required:
             - controller
             type: object
@@ -128,6 +143,48 @@ spec:
                   - reason
                   - status
                   - type
+                  type: object
+                type: array
+              controllerInstances:
+                description: ControllerInstances holds one entry for each live NumaflowController
+                  child, whether promoted or trial.
+                items:
+                  description: ControllerInstanceRef represents a live NumaflowController
+                    child, either promoted or trial.
+                  properties:
+                    instanceID:
+                      description: |-
+                        InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
+                        controller instance.
+                      type: string
+                    name:
+                      description: Name of the child NumaflowController CR, e.g. "numaflow-controller-2".
+                      type: string
+                    referencingInterStepBufferServices:
+                      description: |-
+                        ReferencingInterStepBufferServices and ReferencingMonovertices are live counts of ISBServices and MonoVertices,
+                        respectively, currently bound to this instance. Pipelines are not counted directly: a Pipeline's ISBSvc is not
+                        deleted while that Pipeline still references it, so counting ISBServices already transitively captures
+                        Pipeline usage. Both fields are consulted exclusively by Recycle() as a deletion-safety gate, once a controller
+                        instance has already been marked recyclable.
+                      format: int32
+                      type: integer
+                    referencingMonovertices:
+                      format: int32
+                      type: integer
+                    state:
+                      description: 'State reuses the existing common.UpgradeState
+                        values: "promoted" or "trial".'
+                      type: string
+                    version:
+                      type: string
+                  required:
+                  - instanceID
+                  - name
+                  - referencingInterStepBufferServices
+                  - referencingMonovertices
+                  - state
+                  - version
                   type: object
                 type: array
               lastFailureTime:
