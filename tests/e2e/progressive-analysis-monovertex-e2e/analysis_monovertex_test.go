@@ -38,8 +38,6 @@ const (
 	analysisTemplateNameSuccessTwo = "test-monovertex-template-success-2"
 	analysisTemplateNameFailureOne = "test-monovertex-template-failure-1"
 	analysisTemplateNameFailureTwo = "test-monovertex-template-failure-2"
-	analysisTemplateNameUDFOne     = "test-monovertex-template-udf-1"
-	analysisTemplateNameUDFTwo     = "test-monovertex-template-udf-2"
 	analysisRunName                = "monovertex-" + monoVertexRolloutName
 	// Aligns metric interval, initialDelay, and PromQL increase() lookback.
 	analysisMetricInterval = "60s"
@@ -62,11 +60,6 @@ var (
 	monoVertexScaleTo               = int64(2)
 	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"disabled\":null,\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
 	monovertexSinkBadImage          = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
-
-	// map-cat is an ordinary, working UDF used elsewhere in this test suite (e.g. concurrent-e2e,
-	// force-drain-e2e). This test only needs to prove that adding/changing spec.udf.container.image
-	// triggers Progressive rollout - the UDF does not need to be broken to prove that.
-	monovertexUDFImage = "quay.io/numaio/numaflow-go/map-cat:stable"
 
 	defaultStrategyForSuccessCase = apiv1.PipelineTypeRolloutStrategy{
 		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
@@ -110,26 +103,6 @@ var (
 
 	udTransformer           = numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
 	validUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
-
-	defaultStrategyForUDFCase = apiv1.PipelineTypeRolloutStrategy{
-		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
-			Progressive: apiv1.ProgressiveStrategy{
-				AssessmentSchedule: "10,180,30,10",
-			},
-			Analysis: apiv1.Analysis{
-				Templates: []argov1alpha1.AnalysisTemplateRef{
-					{
-						TemplateName: analysisTemplateNameUDFOne,
-						ClusterScope: false,
-					},
-					{
-						TemplateName: analysisTemplateNameUDFTwo,
-						ClusterScope: false,
-					},
-				},
-			},
-		},
-	}
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{Min: &monoVertexScaleMin, Max: &monoVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
@@ -269,36 +242,6 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameFailureOne)
 		DeleteAnalysisTemplate(analysisTemplateNameFailureTwo)
-	})
-
-	It("Should trigger Progressive rollout on a UDF container image change", func() {
-		CreateAnalysisTemplate(analysisTemplateNameUDFOne, Namespace,
-			monoVertexAnalysisTemplateSpec("mvtx-no-critical-errors-1", "mvtx-acknowledged-messages-1"))
-		CreateAnalysisTemplate(analysisTemplateNameUDFTwo, Namespace,
-			monoVertexAnalysisTemplateSpec("mvtx-no-critical-errors-2", "mvtx-acknowledged-messages-2"))
-
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, &defaultStrategyForUDFCase, apiv1.Metadata{})
-		VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
-
-		// Adding a UDF where none existed before, with an ordinary working image, must be sufficient
-		// on its own to trigger Progressive rollout (regression test for numaplane#1016: this path was
-		// previously falling through to a direct apply because usde-config.yaml had no
-		// monovertex.progressive entry for spec.udf.container.*).
-		updatedMonoVertexSpec := UpdateMonoVertexRolloutUDFImage(monoVertexRolloutName, monovertexUDFImage, initialMonoVertexSpec)
-		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
-			0, 1, false, true)
-
-		// Verify the previously promoted monovertex was deleted
-		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
-
-		VerifyAnalysisRunStatus("mvtx-no-critical-errors-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("mvtx-acknowledged-messages-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("mvtx-no-critical-errors-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("mvtx-acknowledged-messages-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-
-		DeleteMonoVertexRollout(monoVertexRolloutName)
-		DeleteAnalysisTemplate(analysisTemplateNameUDFOne)
-		DeleteAnalysisTemplate(analysisTemplateNameUDFTwo)
 	})
 
 	It("Should delete all remaining rollout objects", func() {

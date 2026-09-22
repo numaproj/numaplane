@@ -2791,6 +2791,24 @@ data:
         includeSubfields: true
       - path: spec.vertices.sink.udsink.container.envfrom
         includeSubfields: true
+      - path: spec.vertices.sink.fallback.udsink.container.image
+      - path: spec.vertices.sink.fallback.udsink.container.volumeMounts
+        includeSubfields: true
+      - path: spec.vertices.sink.fallback.udsink.container.command
+      - path: spec.vertices.sink.fallback.udsink.container.args
+      - path: spec.vertices.sink.fallback.udsink.container.env
+        includeSubfields: true
+      - path: spec.vertices.sink.fallback.udsink.container.envfrom
+        includeSubfields: true
+      - path: spec.vertices.sink.onSuccess.udsink.container.image
+      - path: spec.vertices.sink.onSuccess.udsink.container.volumeMounts
+        includeSubfields: true
+      - path: spec.vertices.sink.onSuccess.udsink.container.command
+      - path: spec.vertices.sink.onSuccess.udsink.container.args
+      - path: spec.vertices.sink.onSuccess.udsink.container.env
+        includeSubfields: true
+      - path: spec.vertices.sink.onSuccess.udsink.container.envfrom
+        includeSubfields: true
       - path: spec.vertices.udf.container.image
       - path: spec.vertices.udf.container.volumeMounts
         includeSubfields: true
@@ -2799,6 +2817,24 @@ data:
       - path: spec.vertices.udf.container.env
         includeSubfields: true
       - path: spec.vertices.udf.container.envfrom
+        includeSubfields: true
+      - path: spec.vertices.initContainers.image
+      - path: spec.vertices.initContainers.volumeMounts
+        includeSubfields: true
+      - path: spec.vertices.initContainers.command
+      - path: spec.vertices.initContainers.args
+      - path: spec.vertices.initContainers.env
+        includeSubfields: true
+      - path: spec.vertices.initContainers.envfrom
+        includeSubfields: true
+      - path: spec.vertices.sidecars.image
+      - path: spec.vertices.sidecars.volumeMounts
+        includeSubfields: true
+      - path: spec.vertices.sidecars.command
+      - path: spec.vertices.sidecars.args
+      - path: spec.vertices.sidecars.env
+        includeSubfields: true
+      - path: spec.vertices.sidecars.envfrom
         includeSubfields: true
       - path: spec.vertices.volumes
         includeSubfields: true
@@ -2814,6 +2850,11 @@ data:
       - path: spec.sideInputs.container.envfrom
         includeSubfields: true
       - path: spec.templates     # note: this one could be broken down further into just the fields that are at risk
+        includeSubfields: true
+      - path: spec.ordered
+      - path: spec.vertices.ordered
+        includeSubfields: true
+      - path: spec.interStepBuffer
         includeSubfields: true
     progressive:
       # Decision: Many of the fields inside of these source types and sink types are risky to change and could warrant doing Progressive Rollout
@@ -2904,8 +2945,17 @@ data:
       - path: spec.sink.udsink.container.command
       - path: spec.sink.udsink.container.args
       - path: spec.sink.udsink.container.env
-        includeSubfields: true   
+        includeSubfields: true
       - path: spec.sink.udsink.container.envfrom
+        includeSubfields: true
+      - path: spec.sink.onSuccess.udsink.container.image
+      - path: spec.sink.onSuccess.udsink.container.volumeMounts
+        includeSubfields: true
+      - path: spec.sink.onSuccess.udsink.container.command
+      - path: spec.sink.onSuccess.udsink.container.args
+      - path: spec.sink.onSuccess.udsink.container.env
+        includeSubfields: true
+      - path: spec.sink.onSuccess.udsink.container.envfrom
         includeSubfields: true
       - path: spec.source.transformer.container.image
       - path: spec.source.transformer.container.volumeMounts
@@ -2936,6 +2986,8 @@ data:
         includeSubfields: true
       - path: spec.volumes
         includeSubfields: true
+      - path: spec.bypass
+        includeSubfields: true
 
       # Decision: Many of the fields inside of these source types and sink types are risky to change and could warrant doing Progressive Rollout
       # There are too many different fields to go through each one and determine if it is, so for simplicity we do Progressive Rollout for all.
@@ -2955,7 +3007,7 @@ data:
         includeSubfields: true
       - path: spec.vertices.source.sqs
         includeSubfields: true
-      
+
       - path: spec.vertices.sink.kafka
         includeSubfields: true
       - path: spec.vertices.sink.serve
