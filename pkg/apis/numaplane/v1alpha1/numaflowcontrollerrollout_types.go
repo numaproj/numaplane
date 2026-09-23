@@ -32,13 +32,52 @@ type Controller struct {
 
 // NumaflowControllerRolloutSpec defines the desired state of NumaflowControllerRollout
 type NumaflowControllerRolloutSpec struct {
-	Controller Controller `json:"controller"`
+	Controller Controller          `json:"controller"`
+	Strategy   *ControllerStrategy `json:"strategy,omitempty"`
+}
+
+// ControllerStrategy defines the strategy to use when upgrading the NumaflowController
+type ControllerStrategy struct {
+	Progressive *ControllerProgressiveStrategy `json:"progressive,omitempty"`
+}
+
+// ControllerProgressiveStrategy defines the configuration for a progressive upgrade of the NumaflowController
+type ControllerProgressiveStrategy struct {
+	// AssessmentSchedule describes the schedule for how often we assess the health of the upgrading controller instance,
+	// in the format "delay,end,period,interval" (see config.AssessmentSchedule)
+	AssessmentSchedule string `json:"assessmentSchedule,omitempty"`
 }
 
 // NumaflowControllerRolloutStatus defines the observed state of NumaflowControllerRollout
 type NumaflowControllerRolloutStatus struct {
 	Status             `json:",inline"`
 	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
+
+	// ControllerInstances holds one entry for each live NumaflowController child, whether promoted or trial.
+	ControllerInstances []ControllerInstanceRef `json:"controllerInstances,omitempty"`
+}
+
+// ControllerInstanceRef represents a live NumaflowController child, either promoted or trial.
+type ControllerInstanceRef struct {
+	// Name of the child NumaflowController CR, e.g. "numaflow-controller-2".
+	Name string `json:"name"`
+
+	// InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
+	// controller instance.
+	InstanceID string `json:"instanceID"`
+
+	Version string `json:"version"`
+
+	// State reuses the existing common.UpgradeState values: "promoted" or "trial".
+	State string `json:"state"`
+
+	// ReferencingInterStepBufferServices and ReferencingMonovertices are live counts of ISBServices and MonoVertices,
+	// respectively, currently bound to this instance. Pipelines are not counted directly: a Pipeline's ISBSvc is not
+	// deleted while that Pipeline still references it, so counting ISBServices already transitively captures
+	// Pipeline usage. Both fields are consulted exclusively by Recycle() as a deletion-safety gate, once a controller
+	// instance has already been marked recyclable.
+	ReferencingInterStepBufferServices int32 `json:"referencingInterStepBufferServices"`
+	ReferencingMonovertices            int32 `json:"referencingMonovertices"`
 }
 
 // +genclient
