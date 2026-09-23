@@ -14,6 +14,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 type RolloutController interface {
@@ -231,6 +232,28 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 	} else {
 		return existingChild.GetName(), nil
 	}
+}
+
+// GetPromotedControllerInstanceID finds the NumaflowControllerRollout for the given namespace and returns the
+// InstanceID of its promoted (i.e. today, only) NumaflowController instance.
+// If no NumaflowControllerRollout exists yet in the namespace, this returns "" rather than an error: InstanceID
+// is optional and today is commonly unset, so the absence of a controller rollout is not itself an error case
+// for Pipeline/MonoVertex reconciliation.
+// TODO: once NumaflowControllerRolloutStatus.ControllerInstances is populated (its InstanceID values constructed
+// as <version>-<nameCount>, per the design doc and PR #1026 review discussion), prefer resolving the "promoted"
+// entry from that list instead of Spec.Controller.InstanceID directly.
+func GetPromotedControllerInstanceID(ctx context.Context, c client.Client, namespace string) (string, error) {
+	var nfcRolloutList apiv1.NumaflowControllerRolloutList
+	if err := c.List(ctx, &nfcRolloutList, &client.ListOptions{Namespace: namespace}); err != nil {
+		return "", fmt.Errorf("failed to list NumaflowControllerRollouts in namespace %q: %w", namespace, err)
+	}
+	if len(nfcRolloutList.Items) == 0 {
+		return "", nil
+	}
+	if len(nfcRolloutList.Items) > 1 {
+		return "", fmt.Errorf("expected at most 1 NumaflowControllerRollout in namespace %q, found %d", namespace, len(nfcRolloutList.Items))
+	}
+	return nfcRolloutList.Items[0].Spec.Controller.InstanceID, nil
 }
 
 // Determine the list of Riders which are needed for the child and create them on the cluster

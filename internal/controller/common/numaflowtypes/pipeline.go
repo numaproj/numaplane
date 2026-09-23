@@ -262,6 +262,28 @@ func PipelineWithISBServiceName(pipeline *unstructured.Unstructured, isbsvcName 
 	return nil
 }
 
+// PipelineWithControllerInstanceID sets the annotation that Numaflow's own controller reads to decide
+// whether it should reconcile this Pipeline.
+func PipelineWithControllerInstanceID(pipeline *unstructured.Unstructured, instanceID string) error {
+	return WithControllerInstanceID(pipeline, instanceID)
+}
+
+// WithControllerInstanceID sets the annotation that Numaflow's own controller reads to decide whether it
+// should reconcile the given resource (Pipeline or MonoVertex). If instanceID is empty (no NumaflowControllerRollout
+// resolved yet), this is a no-op: an empty instanceID isn't a real controller instance to bind to.
+func WithControllerInstanceID(obj *unstructured.Unstructured, instanceID string) error {
+	if instanceID == "" {
+		return nil
+	}
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[common.AnnotationKeyNumaflowInstanceID] = instanceID
+	obj.SetAnnotations(annotations)
+	return nil
+}
+
 func PipelineWithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
 	err := unstructured.SetNestedField(pipeline.Object, phase, "spec", "lifecycle", "desiredPhase")
 	if err != nil {

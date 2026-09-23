@@ -460,6 +460,9 @@ func Test_CheckForDifferences(t *testing.T) {
 	ctx := context.Background()
 	numaLogger := logger.FromContext(ctx)
 
+	_, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+
 	tests := []struct {
 		name                      string
 		from                      *unstructured.Unstructured
@@ -731,7 +734,7 @@ func Test_CheckForDifferences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reconciler := &MonoVertexRolloutReconciler{}
+			reconciler := &MonoVertexRolloutReconciler{client: client}
 
 			// Extract spec from unstructured object and convert to RawExtension
 			specData, found, err := unstructured.NestedMap(tt.to.Object, "spec")

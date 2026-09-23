@@ -1112,12 +1112,20 @@ func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 		}
 	}
 
+	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, pipelineRollout.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
+	if controllerInstanceID != "" {
+		metadata.Labels[common.LabelKeyControllerInstanceID] = controllerInstanceID
+	}
 
 	// determine name of the Pipeline
 	pipelineName, err := ctlrcommon.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
@@ -1125,7 +1133,7 @@ func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 		return nil, err
 	}
 
-	pipelineDef, err := r.makePipelineDefinition(pipelineRollout, pipelineName, isbsvc.GetName(), metadata)
+	pipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout, pipelineName, isbsvc.GetName(), metadata)
 	return pipelineDef, err
 }
 
@@ -1158,6 +1166,7 @@ func (r *PipelineRolloutReconciler) getTemplateArguments(pipelineName string, na
 }
 
 func (r *PipelineRolloutReconciler) makePipelineDefinition(
+	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 	pipelineName string,
 	isbsvcName string,
@@ -1186,6 +1195,14 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)})
 
 	if err := numaflowtypes.PipelineWithISBServiceName(pipelineDef, isbsvcName); err != nil {
+		return nil, err
+	}
+
+	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, pipelineRollout.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	if err := numaflowtypes.PipelineWithControllerInstanceID(pipelineDef, controllerInstanceID); err != nil {
 		return nil, err
 	}
 

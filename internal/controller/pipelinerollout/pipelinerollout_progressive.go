@@ -51,7 +51,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 		}
 	}
 
-	pipeline, err := r.makePipelineDefinition(pipelineRollout, name, isbsvc.GetName(), metadata)
+	pipeline, err := r.makePipelineDefinition(ctx, pipelineRollout, name, isbsvc.GetName(), metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -59,6 +59,9 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	labels := pipeline.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
 	labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
+	if controllerInstanceID := pipeline.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]; controllerInstanceID != "" {
+		labels[common.LabelKeyControllerInstanceID] = controllerInstanceID
+	}
 	pipeline.SetLabels(labels)
 
 	return pipeline, nil
@@ -321,7 +324,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 
 	// In order to effectively compare, we need to create a Pipeline Definition from the PipelineRollout which uses the same name and isbsvc name as our current Pipeline
 	// (so that won't be interpreted as a difference)
-	rolloutBasedPipelineDef, err := r.makePipelineDefinition(pipelineRollout, existingPipeline.GetName(), isbsvcName, pipelineRollout.Spec.Pipeline.Metadata)
+	rolloutBasedPipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout, existingPipeline.GetName(), isbsvcName, pipelineRollout.Spec.Pipeline.Metadata)
 	if err != nil {
 		return false, err
 	}

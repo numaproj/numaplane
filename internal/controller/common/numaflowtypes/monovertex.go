@@ -67,6 +67,12 @@ func GetMonoVertexDesiredPhase(monovertex *unstructured.Unstructured) (string, e
 	return desiredPhase, err
 }
 
+// MonoVertexWithControllerInstanceID sets the annotation that Numaflow's own controller reads to decide
+// whether it should reconcile this MonoVertex.
+func MonoVertexWithControllerInstanceID(monovertex *unstructured.Unstructured, instanceID string) error {
+	return WithControllerInstanceID(monovertex, instanceID)
+}
+
 // CanMonoVertexIngestData verifies that the configuration of the MonoVertex would allow it to ingest data
 // (must be set to Running and must have scale > 0)
 func CanMonoVertexIngestData(ctx context.Context, monovertex *unstructured.Unstructured) (bool, error) {

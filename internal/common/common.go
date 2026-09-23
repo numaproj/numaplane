@@ -83,6 +83,12 @@ const (
 	// LabelKeyISBServiceChildNameForPipeline is the label key used to identify the InterstepBufferService that a Pipeline is associated with
 	LabelKeyISBServiceChildNameForPipeline = KeyNumaplanePrefix + "isbsvc-child-name"
 
+	// LabelKeyControllerInstanceID identifies the NumaflowController instance to which a Pipeline or MonoVertex is bound.
+	// This is Numaplane's own bookkeeping label; it is never read by the Numaflow controller itself (which reads
+	// AnnotationKeyNumaflowInstanceID instead). It exists because Kubernetes indexes and supports server-side
+	// selection by label, not by annotation.
+	LabelKeyControllerInstanceID = KeyNumaplanePrefix + "controller-instance-id"
+
 	// LabelKeyParentRollout is the label key used to identify the Rollout that a child Resource is managed by
 	// This is useful as a Label to quickly locate all children of a given Rollout
 	LabelKeyParentRollout = KeyNumaplanePrefix + "parent-rollout-name"
