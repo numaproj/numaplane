@@ -169,7 +169,11 @@ data:
         includeSubfields: true
       - path: spec.redis.native.persistence
         includeSubfields: true
-      
+  
+      # changing any field in the buffer configuration won't result in an update to existing buffers so we need to create new pipelines
+      - path: spec.jetstream.bufferConfig
+        includeSubfields: true
+    
       # This checks if the spec changed from jetstream to redis and viceversa. In this case, the ISBSvc and associated pipelines will need to be recreated.
       - path: spec.jetstream
       - path: spec.redis
