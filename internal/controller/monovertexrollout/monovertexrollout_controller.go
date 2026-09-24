@@ -734,11 +734,8 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 		return nil, err
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
-	if controllerInstanceID != "" {
-		metadata.Labels[common.LabelKeyControllerInstanceID] = controllerInstanceID
-	}
 
-	return r.makeMonoVertexDefinition(ctx, monoVertexRollout, monoVertexName, metadata)
+	return r.makeMonoVertexDefinition(monoVertexRollout, monoVertexName, metadata, controllerInstanceID)
 }
 
 // templates are used to dynamically evaluate child spec, metadata, as well as Riders
@@ -754,10 +751,10 @@ func (r *MonoVertexRolloutReconciler) getTemplateArguments(monovertexName string
 }
 
 func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
-	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	monoVertexName string,
 	metadata apiv1.Metadata,
+	controllerInstanceID string,
 ) (*unstructured.Unstructured, error) {
 
 	args := r.getTemplateArguments(monoVertexName, monoVertexRollout.Namespace)
@@ -780,10 +777,6 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	monoVertexDef.SetNamespace(monoVertexRollout.Namespace)
 	monoVertexDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)})
 
-	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
-	if err != nil {
-		return nil, err
-	}
 	if err := numaflowtypes.MonoVertexWithControllerInstanceID(monoVertexDef, controllerInstanceID); err != nil {
 		return nil, err
 	}

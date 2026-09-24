@@ -67,8 +67,7 @@ func GetMonoVertexDesiredPhase(monovertex *unstructured.Unstructured) (string, e
 	return desiredPhase, err
 }
 
-// MonoVertexWithControllerInstanceID sets the annotation that Numaflow's own controller reads to decide
-// whether it should reconcile this MonoVertex.
+// MonoVertexWithControllerInstanceID binds a MonoVertex to a NumaflowController instance.
 func MonoVertexWithControllerInstanceID(monovertex *unstructured.Unstructured, instanceID string) error {
 	return WithControllerInstanceID(monovertex, instanceID)
 }

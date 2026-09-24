@@ -34,16 +34,17 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	if err != nil {
 		return nil, err
 	}
-	monoVertex, err := r.makeMonoVertexDefinition(ctx, monoVertexRollout, name, metadata)
+	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	monoVertex, err := r.makeMonoVertexDefinition(monoVertexRollout, name, metadata, controllerInstanceID)
 	if err != nil {
 		return nil, err
 	}
 
 	labels := monoVertex.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
-	if controllerInstanceID := monoVertex.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]; controllerInstanceID != "" {
-		labels[common.LabelKeyControllerInstanceID] = controllerInstanceID
-	}
 	monoVertex.SetLabels(labels)
 
 	return monoVertex, nil
@@ -281,7 +282,11 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 
 	// In order to effectively compare, we need to create a MonoVertex Definition from the MonoVertexRollout which uses the same name as our current MonoVertex
 	// (so that won't be interpreted as a difference)
-	rolloutBasedMVDef, err := r.makeMonoVertexDefinition(ctx, monoVertexRollout, existingMonoVertex.GetName(), monoVertexRollout.Spec.MonoVertex.Metadata)
+	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+	if err != nil {
+		return false, err
+	}
+	rolloutBasedMVDef, err := r.makeMonoVertexDefinition(monoVertexRollout, existingMonoVertex.GetName(), monoVertexRollout.Spec.MonoVertex.Metadata, controllerInstanceID)
 	if err != nil {
 		return false, err
 	}

@@ -239,9 +239,8 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 // If no NumaflowControllerRollout exists yet in the namespace, this returns "" rather than an error: InstanceID
 // is optional and today is commonly unset, so the absence of a controller rollout is not itself an error case
 // for Pipeline/MonoVertex reconciliation.
-// TODO: once NumaflowControllerRolloutStatus.ControllerInstances is populated (its InstanceID values constructed
-// as <version>-<nameCount>, per the design doc and PR #1026 review discussion), prefer resolving the "promoted"
-// entry from that list instead of Spec.Controller.InstanceID directly.
+// TODO: once NumaflowControllerRollout manages children with promoted/trial upgrade-state labels, resolve the
+// promoted child directly and read its InstanceID instead of using the legacy spec field.
 func GetPromotedControllerInstanceID(ctx context.Context, c client.Client, namespace string) (string, error) {
 	var nfcRolloutList apiv1.NumaflowControllerRolloutList
 	if err := c.List(ctx, &nfcRolloutList, &client.ListOptions{Namespace: namespace}); err != nil {

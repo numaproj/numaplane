@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -262,25 +263,38 @@ func PipelineWithISBServiceName(pipeline *unstructured.Unstructured, isbsvcName 
 	return nil
 }
 
-// PipelineWithControllerInstanceID sets the annotation that Numaflow's own controller reads to decide
-// whether it should reconcile this Pipeline.
+// PipelineWithControllerInstanceID binds a Pipeline to a NumaflowController instance.
 func PipelineWithControllerInstanceID(pipeline *unstructured.Unstructured, instanceID string) error {
 	return WithControllerInstanceID(pipeline, instanceID)
 }
 
-// WithControllerInstanceID sets the annotation that Numaflow's own controller reads to decide whether it
-// should reconcile the given resource (Pipeline or MonoVertex). If instanceID is empty (no NumaflowControllerRollout
-// resolved yet), this is a no-op: an empty instanceID isn't a real controller instance to bind to.
+// WithControllerInstanceID keeps Numaflow's controller-selection annotation and Numaplane's lookup label aligned.
+// If instanceID is empty, an annotation supplied in the Rollout metadata is preserved and used as the source of truth.
 func WithControllerInstanceID(obj *unstructured.Unstructured, instanceID string) error {
-	if instanceID == "" {
-		return nil
-	}
 	annotations := obj.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
-	annotations[common.AnnotationKeyNumaflowInstanceID] = instanceID
+	if instanceID != "" {
+		annotations[common.AnnotationKeyNumaflowInstanceID] = instanceID
+	}
 	obj.SetAnnotations(annotations)
+
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	effectiveInstanceID := annotations[common.AnnotationKeyNumaflowInstanceID]
+	if effectiveInstanceID == "" {
+		delete(labels, common.LabelKeyControllerInstanceID)
+		obj.SetLabels(labels)
+		return nil
+	}
+	if validationErrors := validation.IsValidLabelValue(effectiveInstanceID); len(validationErrors) > 0 {
+		return fmt.Errorf("controller instance ID %q is not a valid Kubernetes label value: %s", effectiveInstanceID, validationErrors[0])
+	}
+	labels[common.LabelKeyControllerInstanceID] = effectiveInstanceID
+	obj.SetLabels(labels)
 	return nil
 }
 
