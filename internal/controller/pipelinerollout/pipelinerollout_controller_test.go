@@ -572,6 +572,16 @@ func Test_CheckForDifferences(t *testing.T) {
 			expectedError:             false,
 		},
 		{
+			name:                      "Stale controller instance annotation on existing child",
+			from:                      specNoScale,
+			to:                        specNoScale,
+			annotations1:              map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"},
+			annotations2:              nil,
+			existingChildUpgradeState: common.LabelValueUpgradePromoted,
+			expectedNeedsUpdating:     true,
+			expectedError:             false,
+		},
+		{
 			name:                      "Comparison to Upgrading child - original scale matches rollout",
 			from:                      specWithNonEmptyNonZeroScale, // current upgrading pipeline (modified by progressive)
 			to:                        specNoScale,                  // rollout definition (no scale)
@@ -1564,7 +1574,6 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		if pipeline.Annotations == nil {
 			pipeline.Annotations = make(map[string]string)
 		}
-		pipeline.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
 
 		// Convert to unstructured
 		unstructMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(pipeline)

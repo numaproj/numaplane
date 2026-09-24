@@ -67,3 +67,35 @@ func TestWithControllerInstanceID(t *testing.T) {
 		assert.ErrorContains(t, err, "not a valid Kubernetes label value")
 	})
 }
+
+func TestHasStaleControllerInstanceBinding(t *testing.T) {
+	t.Run("detects stale annotation when desired definition has none", func(t *testing.T) {
+		stale := HasStaleControllerInstanceBinding(
+			map[string]string{},
+			map[string]string{},
+			map[string]string{},
+			map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"},
+		)
+		assert.True(t, stale)
+	})
+
+	t.Run("detects stale label when desired definition has none", func(t *testing.T) {
+		stale := HasStaleControllerInstanceBinding(
+			map[string]string{},
+			map[string]string{},
+			map[string]string{common.LabelKeyControllerInstanceID: "old"},
+			map[string]string{},
+		)
+		assert.True(t, stale)
+	})
+
+	t.Run("ignores extra unrelated metadata", func(t *testing.T) {
+		stale := HasStaleControllerInstanceBinding(
+			map[string]string{"app": "pipeline"},
+			map[string]string{},
+			map[string]string{"app": "pipeline", "extra": "ok"},
+			map[string]string{"note": "ok"},
+		)
+		assert.False(t, stale)
+	})
+}

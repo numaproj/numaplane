@@ -304,10 +304,11 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
-	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
-		specsEqual, labelsFound, annotationsFound, pipelineCopy.Object["spec"], requiredSpecCopy["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
+	staleBinding := numaflowtypes.HasStaleControllerInstanceBinding(requiredLabels, requiredAnnotations, actualLabels, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, staleBinding=%t, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, staleBinding, pipelineCopy.Object["spec"], requiredSpecCopy["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
 
-	return !specsEqual || !labelsFound || !annotationsFound, nil
+	return !specsEqual || !labelsFound || !annotationsFound || staleBinding, nil
 }
 
 // CheckForDifferencesWithRolloutDef tests if there's a meaningful difference between an existing child and the child

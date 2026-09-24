@@ -1497,7 +1497,6 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		if monoVertex.Annotations == nil {
 			monoVertex.Annotations = make(map[string]string)
 		}
-		monoVertex.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
 
 		// Convert to unstructured
 		unstructMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(monoVertex)
