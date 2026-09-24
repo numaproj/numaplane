@@ -652,41 +652,80 @@ func DeletePipelineRollout(name string) {
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
 }
 
-// VerifyPipelineISBJobsGone waits until Numaflow Jobs that create or delete
-// pipeline ISB buffers/buckets are gone. Recreating a Pipeline with the same
-// name while those Jobs are still running can leave streams and watermark
-// buckets missing.
+// how long we let Numaflow's ISB Jobs finish on their own before deleting them
+const pipelineISBJobFinishTimeout = 90 * time.Second
+
+// CleanUpPipelineISBJobs makes sure that no Numaflow Job which creates or
+// deletes a Pipeline's ISB buffers and buckets is still able to run.
 //
-// Call this after DeletePipelineRollout returns (Pipeline CR gone) and while
-// the InterStepBufferService is still up. Numaflow creates the cleanup Job
-// in the same reconcile that removes the Pipeline finalizer, so the Job
-// already exists once the Pipeline object has disappeared. The Job still
-// needs JetStream in order to finish deleting streams.
-func VerifyPipelineISBJobsGone() {
-	backgroundDeletion := metav1.DeletePropagationBackground
+// Numaflow runs these as Jobs named "<pipeline>-cre-<hash>" (create buffers
+// and buckets), "<pipeline>-del-<hash>" (delete the ones no longer in the
+// spec), and "<pipeline>-cln-<hash>" (delete all of them when the Pipeline is
+// deleted). A Job left over from a deleted Pipeline will happily delete the
+// buffers and watermark buckets of a new Pipeline that reuses the same name,
+// which leaves the new Pipeline's Pods crashing on a missing JetStream bucket.
+//
+// We first give the Jobs a chance to finish on their own, rather than cutting
+// short a clean up that is still deleting streams. Any Job still left after
+// that is deleted, because a clean up Job cannot always succeed: it is created
+// while its Pipeline is being deleted and mounts the secret of the Pipeline's
+// InterStepBufferService, so if that InterStepBufferService has already been
+// replaced, the Job's Pod is stuck on the missing secret until the Job hits
+// its own deadline several minutes later.
+func CleanUpPipelineISBJobs() {
+	By("Waiting for pipeline ISB Jobs to finish, then deleting any that are left")
 
-	CheckEventually("Verifying pipeline ISB create/delete/cleanup Jobs are gone", func() bool {
-		jobs, err := kubeClient.BatchV1().Jobs(Namespace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return false
+	finishDeadline := time.Now().Add(pipelineISBJobFinishTimeout)
+	for {
+		unfinishedJobs, err := listPipelineISBJobs(func(job batchv1.Job) bool {
+			return !pipelineISBJobHasFinished(job)
+		})
+		if err == nil && len(unfinishedJobs) == 0 {
+			break
 		}
-
-		remaining := 0
-		for _, job := range jobs.Items {
-			if !isPipelineISBJob(job) {
-				continue
-			}
-			remaining++
-
-			// Finished Jobs can sit around and retry; delete them so the next
-			// case cannot race with leftover ISB work.
-			if pipelineISBJobHasFinished(job) {
-				_ = kubeClient.BatchV1().Jobs(Namespace).Delete(ctx, job.Name, metav1.DeleteOptions{PropagationPolicy: &backgroundDeletion})
-			}
+		if time.Now().After(finishDeadline) {
+			break
 		}
+		time.Sleep(time.Second)
+	}
 
-		return remaining == 0
-	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "Pipeline ISB create/delete/cleanup Jobs should have been gone but were still found.")
+	// Foreground deletion so that the Job's Pods are gone before the Job is,
+	// which lets us treat "Job gone" as "nothing can touch the ISB anymore".
+	foregroundDeletion := metav1.DeletePropagationForeground
+	remainingJobs, err := listPipelineISBJobs(nil)
+	Expect(err).ShouldNot(HaveOccurred())
+	for _, job := range remainingJobs {
+		err := kubeClient.BatchV1().Jobs(Namespace).Delete(ctx, job.Name, metav1.DeleteOptions{PropagationPolicy: &foregroundDeletion})
+		if err != nil && !errors.IsNotFound(err) {
+			Expect(err).ShouldNot(HaveOccurred())
+		}
+	}
+
+	CheckEventually("Verifying pipeline ISB Jobs are gone", func() bool {
+		jobs, err := listPipelineISBJobs(nil)
+		return err == nil && len(jobs) == 0
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "Pipeline ISB Jobs should have been deleted but they were found.")
+}
+
+// listPipelineISBJobs returns the Numaflow Jobs which create or delete
+// pipeline ISB buffers and buckets, optionally narrowed down by a filter.
+func listPipelineISBJobs(filter func(job batchv1.Job) bool) ([]batchv1.Job, error) {
+	jobList, err := kubeClient.BatchV1().Jobs(Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	isbJobs := []batchv1.Job{}
+	for _, job := range jobList.Items {
+		if !isPipelineISBJob(job) {
+			continue
+		}
+		if filter != nil && !filter(job) {
+			continue
+		}
+		isbJobs = append(isbJobs, job)
+	}
+	return isbJobs, nil
 }
 
 // isPipelineISBJob reports whether a Job is Numaflow ISB buffer/bucket work

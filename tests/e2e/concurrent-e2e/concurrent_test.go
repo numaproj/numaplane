@@ -409,11 +409,11 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			// case cleanup
 			DeleteMonoVertexRollout(monoVertexRolloutName)
 			DeletePipelineRollout(pipelineRolloutName)
-			// Wait here, while ISB is still available: Numaflow creates the
-			// buffer cleanup Job before it removes the Pipeline finalizer, so
-			// once the Pipeline CR is gone that Job already exists (or was
-			// skipped because ISB was already missing).
-			VerifyPipelineISBJobsGone()
+			// Do this here, while the ISBService is still available: Numaflow
+			// creates the buffer clean up Job before it removes the Pipeline
+			// finalizer, so once the Pipeline is gone that Job already exists
+			// and still has an ISBService to talk to.
+			CleanUpPipelineISBJobs()
 			DeleteISBServiceRollout(isbServiceRolloutName)
 			DeleteNumaflowControllerRollout()
 		})
