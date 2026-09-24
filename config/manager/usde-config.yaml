@@ -39,7 +39,7 @@ data:
       - path: spec.vertices.source.udsource.container.args
       - path: spec.vertices.source.udsource.container.env
         includeSubfields: true
-      - path: spec.vertices.source.udsource.container.envfrom
+      - path: spec.vertices.source.udsource.container.envFrom
         includeSubfields: true
       - path: spec.vertices.source.transformer.container.image
       - path: spec.vertices.source.transformer.container.volumeMounts
@@ -48,7 +48,7 @@ data:
       - path: spec.vertices.source.transformer.container.args
       - path: spec.vertices.source.transformer.container.env
         includeSubfields: true
-      - path: spec.vertices.source.transformer.container.envfrom
+      - path: spec.vertices.source.transformer.container.envFrom
         includeSubfields: true
       - path: spec.vertices.source.transformer.builtin
         includeSubfields: true
@@ -63,7 +63,7 @@ data:
       - path: spec.vertices.sink.udsink.container.args
       - path: spec.vertices.sink.udsink.container.env
         includeSubfields: true
-      - path: spec.vertices.sink.udsink.container.envfrom
+      - path: spec.vertices.sink.udsink.container.envFrom
         includeSubfields: true
       - path: spec.vertices.sink.fallback.udsink.container.image
       - path: spec.vertices.sink.fallback.udsink.container.volumeMounts
@@ -72,7 +72,7 @@ data:
       - path: spec.vertices.sink.fallback.udsink.container.args
       - path: spec.vertices.sink.fallback.udsink.container.env
         includeSubfields: true
-      - path: spec.vertices.sink.fallback.udsink.container.envfrom
+      - path: spec.vertices.sink.fallback.udsink.container.envFrom
         includeSubfields: true
       - path: spec.vertices.sink.onSuccess.udsink.container.image
       - path: spec.vertices.sink.onSuccess.udsink.container.volumeMounts
@@ -81,7 +81,7 @@ data:
       - path: spec.vertices.sink.onSuccess.udsink.container.args
       - path: spec.vertices.sink.onSuccess.udsink.container.env
         includeSubfields: true
-      - path: spec.vertices.sink.onSuccess.udsink.container.envfrom
+      - path: spec.vertices.sink.onSuccess.udsink.container.envFrom
         includeSubfields: true
       - path: spec.vertices.udf.container.image
       - path: spec.vertices.udf.container.volumeMounts
@@ -90,7 +90,7 @@ data:
       - path: spec.vertices.udf.container.args
       - path: spec.vertices.udf.container.env
         includeSubfields: true
-      - path: spec.vertices.udf.container.envfrom
+      - path: spec.vertices.udf.container.envFrom
         includeSubfields: true
       - path: spec.vertices.initContainers.image
       - path: spec.vertices.initContainers.volumeMounts
@@ -99,7 +99,7 @@ data:
       - path: spec.vertices.initContainers.args
       - path: spec.vertices.initContainers.env
         includeSubfields: true
-      - path: spec.vertices.initContainers.envfrom
+      - path: spec.vertices.initContainers.envFrom
         includeSubfields: true
       - path: spec.vertices.sidecars.image
       - path: spec.vertices.sidecars.volumeMounts
@@ -108,7 +108,7 @@ data:
       - path: spec.vertices.sidecars.args
       - path: spec.vertices.sidecars.env
         includeSubfields: true
-      - path: spec.vertices.sidecars.envfrom
+      - path: spec.vertices.sidecars.envFrom
         includeSubfields: true
       - path: spec.vertices.volumes
         includeSubfields: true
@@ -121,7 +121,7 @@ data:
       - path: spec.sideInputs.container.args
       - path: spec.sideInputs.container.env
         includeSubfields: true
-      - path: spec.sideInputs.container.envfrom
+      - path: spec.sideInputs.container.envFrom
         includeSubfields: true
       - path: spec.templates     # note: this one could be broken down further into just the fields that are at risk
         includeSubfields: true
@@ -169,7 +169,11 @@ data:
         includeSubfields: true
       - path: spec.redis.native.persistence
         includeSubfields: true
-      
+  
+      # changing any field in the buffer configuration won't result in an update to existing buffers so we need to create new pipelines
+      - path: spec.jetstream.bufferConfig
+        includeSubfields: true
+    
       # This checks if the spec changed from jetstream to redis and viceversa. In this case, the ISBSvc and associated pipelines will need to be recreated.
       - path: spec.jetstream
       - path: spec.redis
@@ -193,7 +197,7 @@ data:
       - path: spec.initContainers.args
       - path: spec.initContainers.env
         includeSubfields: true
-      - path: spec.initContainers.envfrom
+      - path: spec.initContainers.envFrom
         includeSubfields: true
       - path: spec.sidecars.image
       - path: spec.sidecars.volumeMounts
@@ -202,7 +206,7 @@ data:
       - path: spec.sidecars.args
       - path: spec.sidecars.env
         includeSubfields: true
-      - path: spec.sidecars.envfrom
+      - path: spec.sidecars.envFrom
         includeSubfields: true
       - path: spec.sink.fallback.udsink.container.image
       - path: spec.sink.fallback.udsink.container.volumeMounts
@@ -211,7 +215,7 @@ data:
       - path: spec.sink.fallback.udsink.container.args
       - path: spec.sink.fallback.udsink.container.env
         includeSubfields: true
-      - path: spec.sink.fallback.udsink.container.envfrom
+      - path: spec.sink.fallback.udsink.container.envFrom
         includeSubfields: true
       - path: spec.sink.udsink.container.image
       - path: spec.sink.udsink.container.volumeMounts
@@ -220,7 +224,7 @@ data:
       - path: spec.sink.udsink.container.args
       - path: spec.sink.udsink.container.env
         includeSubfields: true
-      - path: spec.sink.udsink.container.envfrom
+      - path: spec.sink.udsink.container.envFrom
         includeSubfields: true
       - path: spec.sink.onSuccess.udsink.container.image
       - path: spec.sink.onSuccess.udsink.container.volumeMounts
@@ -229,7 +233,7 @@ data:
       - path: spec.sink.onSuccess.udsink.container.args
       - path: spec.sink.onSuccess.udsink.container.env
         includeSubfields: true
-      - path: spec.sink.onSuccess.udsink.container.envfrom
+      - path: spec.sink.onSuccess.udsink.container.envFrom
         includeSubfields: true
       - path: spec.source.transformer.container.image
       - path: spec.source.transformer.container.volumeMounts
@@ -238,7 +242,7 @@ data:
       - path: spec.source.transformer.container.args
       - path: spec.source.transformer.container.env
         includeSubfields: true
-      - path: spec.source.transformer.container.envfrom
+      - path: spec.source.transformer.container.envFrom
         includeSubfields: true
       - path: spec.source.udsource.container.image
       - path: spec.source.udsource.container.volumeMounts
@@ -247,7 +251,7 @@ data:
       - path: spec.source.udsource.container.args
       - path: spec.source.udsource.container.env
         includeSubfields: true
-      - path: spec.source.udsource.container.envfrom
+      - path: spec.source.udsource.container.envFrom
         includeSubfields: true
       - path: spec.udf.container.image
       - path: spec.udf.container.volumeMounts
@@ -256,7 +260,7 @@ data:
       - path: spec.udf.container.args
       - path: spec.udf.container.env
         includeSubfields: true
-      - path: spec.udf.container.envfrom
+      - path: spec.udf.container.envFrom
         includeSubfields: true
       - path: spec.volumes
         includeSubfields: true
@@ -265,30 +269,30 @@ data:
 
       # Decision: Many of the fields inside of these source types and sink types are risky to change and could warrant doing Progressive Rollout
       # There are too many different fields to go through each one and determine if it is, so for simplicity we do Progressive Rollout for all.
-      - path: spec.vertices.source.generator
+      - path: spec.source.generator
         includeSubfields: true
-      - path: spec.vertices.source.kafka
+      - path: spec.source.kafka
         includeSubfields: true
-      - path: spec.vertices.source.http
+      - path: spec.source.http
         includeSubfields: true
-      - path: spec.vertices.source.nats
+      - path: spec.source.nats
         includeSubfields: true
-      - path: spec.vertices.source.jetstream
+      - path: spec.source.jetstream
         includeSubfields: true
-      - path: spec.vertices.source.serving
+      - path: spec.source.serving
         includeSubfields: true
-      - path: spec.vertices.source.pulsar
+      - path: spec.source.pulsar
         includeSubfields: true
-      - path: spec.vertices.source.sqs
+      - path: spec.source.sqs
         includeSubfields: true
 
-      - path: spec.vertices.sink.kafka
+      - path: spec.sink.kafka
         includeSubfields: true
-      - path: spec.vertices.sink.serve
+      - path: spec.sink.serve
         includeSubfields: true
-      - path: spec.vertices.sink.sqs
+      - path: spec.sink.sqs
         includeSubfields: true
-      - path: spec.vertices.sink.pulsar
+      - path: spec.sink.pulsar
         includeSubfields: true
   numaflowcontroller: |
     dataLoss:
