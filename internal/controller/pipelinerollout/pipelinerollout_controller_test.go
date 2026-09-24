@@ -572,13 +572,13 @@ func Test_CheckForDifferences(t *testing.T) {
 			expectedError:             false,
 		},
 		{
-			name:                      "Stale controller instance annotation on existing child",
+			name:                      "Existing controller instance annotation is not a Rollout-definition difference",
 			from:                      specNoScale,
 			to:                        specNoScale,
 			annotations1:              map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"},
 			annotations2:              nil,
 			existingChildUpgradeState: common.LabelValueUpgradePromoted,
-			expectedNeedsUpdating:     true,
+			expectedNeedsUpdating:     false,
 			expectedError:             false,
 		},
 		{

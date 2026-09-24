@@ -266,11 +266,10 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
-	staleBinding := numaflowtypes.HasStaleControllerInstanceBinding(requiredLabels, requiredAnnotations, actualLabels, actualAnnotations)
-	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, staleBinding=%t, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
-		specsEqual, labelsFound, annotationsFound, staleBinding, from, to, requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, from, to, requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
 
-	return !specsEqual || !labelsFound || !annotationsFound || staleBinding, nil
+	return !specsEqual || !labelsFound || !annotationsFound, nil
 
 }
 
@@ -281,16 +280,14 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingChildUpgradeState common.UpgradeState) (bool, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 
-	// In order to effectively compare, we need to create a MonoVertex Definition from the MonoVertexRollout which uses the same name as our current MonoVertex
-	// (so that won't be interpreted as a difference)
-	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
-	if err != nil {
-		return false, err
-	}
+	// Pin name and controller-instance identity to the existing child so this check
+	// only compares the Rollout definition, not trial vs promoted controller selection.
+	controllerInstanceID := numaflowtypes.ControllerInstanceIDFromResource(existingMonoVertex)
 	rolloutBasedMVDef, err := r.makeMonoVertexDefinition(monoVertexRollout, existingMonoVertex.GetName(), monoVertexRollout.Spec.MonoVertex.Metadata, controllerInstanceID)
 	if err != nil {
 		return false, err
 	}
+	numaflowtypes.CopyControllerInstanceBinding(rolloutBasedMVDef, existingMonoVertex)
 
 	rolloutDefinedMetadata, _ := rolloutBasedMVDef.Object["metadata"].(map[string]interface{})
 	return r.CheckForDifferences(ctx, monoVertexRollout, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata, existingChildUpgradeState)

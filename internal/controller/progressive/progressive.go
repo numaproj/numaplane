@@ -597,6 +597,9 @@ func checkForDifferences(
 	if err != nil {
 		return false, err
 	}
+	if controllerInstanceBindingDiffers(newChildDef, existingChildDef) {
+		childNeedsUpdating = true
+	}
 	if childNeedsUpdating {
 		needsUpdating = childNeedsUpdating
 	} else {
@@ -608,6 +611,12 @@ func checkForDifferences(
 		}
 	}
 	return needsUpdating, nil
+}
+
+func controllerInstanceBindingDiffers(desired, existing *unstructured.Unstructured) bool {
+	// Compare the effective Numaflow instance ID. Annotation and label can be out of
+	// sync on live children; treating them as independent keys caused false replacements.
+	return numaflowtypes.ControllerInstanceIDFromResource(desired) != numaflowtypes.ControllerInstanceIDFromResource(existing)
 }
 
 // Do any Riders need updating? (including additions, modifications, or deletions)

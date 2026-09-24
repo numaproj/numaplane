@@ -56,15 +56,43 @@ func WithControllerInstanceID(obj *unstructured.Unstructured, instanceID string)
 	return nil
 }
 
-// HasStaleControllerInstanceBinding reports whether the existing child still has a controller-instance
-// label or annotation after the desired definition has dropped that binding.
-func HasStaleControllerInstanceBinding(requiredLabels, requiredAnnotations, actualLabels, actualAnnotations map[string]string) bool {
-	_, requiredLabel := requiredLabels[common.LabelKeyControllerInstanceID]
-	_, actualLabel := actualLabels[common.LabelKeyControllerInstanceID]
-	if !requiredLabel && actualLabel {
-		return true
+// ControllerInstanceIDFromResource returns the Numaflow instance annotation, falling back to Numaplane's lookup label.
+func ControllerInstanceIDFromResource(obj *unstructured.Unstructured) string {
+	if obj == nil {
+		return ""
 	}
-	_, requiredAnnotation := requiredAnnotations[common.AnnotationKeyNumaflowInstanceID]
-	_, actualAnnotation := actualAnnotations[common.AnnotationKeyNumaflowInstanceID]
-	return !requiredAnnotation && actualAnnotation
+	if id := obj.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]; id != "" {
+		return id
+	}
+	return obj.GetLabels()[common.LabelKeyControllerInstanceID]
+}
+
+// CopyControllerInstanceBinding copies the live child's instance annotation and label onto dest
+// so comparisons against the Rollout definition do not treat those identity fields as a spec delta.
+func CopyControllerInstanceBinding(dest, src *unstructured.Unstructured) {
+	if dest == nil || src == nil {
+		return
+	}
+
+	destAnnotations := dest.GetAnnotations()
+	if destAnnotations == nil {
+		destAnnotations = map[string]string{}
+	}
+	if srcID, found := src.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]; found {
+		destAnnotations[common.AnnotationKeyNumaflowInstanceID] = srcID
+	} else {
+		delete(destAnnotations, common.AnnotationKeyNumaflowInstanceID)
+	}
+	dest.SetAnnotations(destAnnotations)
+
+	destLabels := dest.GetLabels()
+	if destLabels == nil {
+		destLabels = map[string]string{}
+	}
+	if srcID, found := src.GetLabels()[common.LabelKeyControllerInstanceID]; found {
+		destLabels[common.LabelKeyControllerInstanceID] = srcID
+	} else {
+		delete(destLabels, common.LabelKeyControllerInstanceID)
+	}
+	dest.SetLabels(destLabels)
 }

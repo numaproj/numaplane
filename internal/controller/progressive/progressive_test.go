@@ -825,3 +825,29 @@ func Test_ExtractScaleMinMax(t *testing.T) {
 	}
 
 }
+
+func TestControllerInstanceBindingDiffers(t *testing.T) {
+	t.Run("desired child dropped the instance annotation", func(t *testing.T) {
+		desired := &unstructured.Unstructured{}
+		existing := &unstructured.Unstructured{}
+		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"})
+		assert.True(t, controllerInstanceBindingDiffers(desired, existing))
+	})
+
+	t.Run("instance annotation changed", func(t *testing.T) {
+		desired := &unstructured.Unstructured{}
+		desired.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "new"})
+		existing := &unstructured.Unstructured{}
+		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"})
+		assert.True(t, controllerInstanceBindingDiffers(desired, existing))
+	})
+
+	t.Run("matching instance metadata is not a difference", func(t *testing.T) {
+		desired := &unstructured.Unstructured{}
+		desired.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "same"})
+		desired.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "same"})
+		existing := &unstructured.Unstructured{}
+		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "same"})
+		assert.False(t, controllerInstanceBindingDiffers(desired, existing))
+	})
+}

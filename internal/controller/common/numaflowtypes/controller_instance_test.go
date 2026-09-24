@@ -68,34 +68,32 @@ func TestWithControllerInstanceID(t *testing.T) {
 	})
 }
 
-func TestHasStaleControllerInstanceBinding(t *testing.T) {
-	t.Run("detects stale annotation when desired definition has none", func(t *testing.T) {
-		stale := HasStaleControllerInstanceBinding(
-			map[string]string{},
-			map[string]string{},
-			map[string]string{},
-			map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"},
-		)
-		assert.True(t, stale)
+func TestCopyControllerInstanceBinding(t *testing.T) {
+	t.Run("copies annotation and label from the live child", func(t *testing.T) {
+		src := &unstructured.Unstructured{}
+		src.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "live"})
+		src.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "live"})
+		dest := &unstructured.Unstructured{}
+		dest.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "desired"})
+		dest.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "desired"})
+
+		CopyControllerInstanceBinding(dest, src)
+
+		assert.Equal(t, "live", dest.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID])
+		assert.Equal(t, "live", dest.GetLabels()[common.LabelKeyControllerInstanceID])
 	})
 
-	t.Run("detects stale label when desired definition has none", func(t *testing.T) {
-		stale := HasStaleControllerInstanceBinding(
-			map[string]string{},
-			map[string]string{},
-			map[string]string{common.LabelKeyControllerInstanceID: "old"},
-			map[string]string{},
-		)
-		assert.True(t, stale)
-	})
+	t.Run("removes dest binding when the live child has none", func(t *testing.T) {
+		src := &unstructured.Unstructured{}
+		dest := &unstructured.Unstructured{}
+		dest.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "desired"})
+		dest.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "desired"})
 
-	t.Run("ignores extra unrelated metadata", func(t *testing.T) {
-		stale := HasStaleControllerInstanceBinding(
-			map[string]string{"app": "pipeline"},
-			map[string]string{},
-			map[string]string{"app": "pipeline", "extra": "ok"},
-			map[string]string{"note": "ok"},
-		)
-		assert.False(t, stale)
+		CopyControllerInstanceBinding(dest, src)
+
+		_, hasAnnotation := dest.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
+		_, hasLabel := dest.GetLabels()[common.LabelKeyControllerInstanceID]
+		assert.False(t, hasAnnotation)
+		assert.False(t, hasLabel)
 	})
 }

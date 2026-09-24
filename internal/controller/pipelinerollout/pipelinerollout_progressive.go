@@ -304,11 +304,10 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(
 
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
-	staleBinding := numaflowtypes.HasStaleControllerInstanceBinding(requiredLabels, requiredAnnotations, actualLabels, actualAnnotations)
-	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, staleBinding=%t, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
-		specsEqual, labelsFound, annotationsFound, staleBinding, pipelineCopy.Object["spec"], requiredSpecCopy["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, pipelineCopy.Object["spec"], requiredSpecCopy["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
 
-	return !specsEqual || !labelsFound || !annotationsFound || staleBinding, nil
+	return !specsEqual || !labelsFound || !annotationsFound, nil
 }
 
 // CheckForDifferencesWithRolloutDef tests if there's a meaningful difference between an existing child and the child
@@ -324,16 +323,14 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 		return false, err
 	}
 
-	// In order to effectively compare, we need to create a Pipeline Definition from the PipelineRollout which uses the same name and isbsvc name as our current Pipeline
-	// (so that won't be interpreted as a difference)
-	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, pipelineRollout.Namespace)
-	if err != nil {
-		return false, err
-	}
+	// Pin name, ISBSvc, and controller-instance identity to the existing child so this check
+	// only compares the Rollout definition, not trial vs promoted controller selection.
+	controllerInstanceID := numaflowtypes.ControllerInstanceIDFromResource(existingPipeline)
 	rolloutBasedPipelineDef, err := r.makePipelineDefinition(pipelineRollout, existingPipeline.GetName(), isbsvcName, pipelineRollout.Spec.Pipeline.Metadata, controllerInstanceID)
 	if err != nil {
 		return false, err
 	}
+	numaflowtypes.CopyControllerInstanceBinding(rolloutBasedPipelineDef, existingPipeline)
 	rolloutDefinedMetadata, _ := rolloutBasedPipelineDef.Object["metadata"].(map[string]interface{})
 	return r.CheckForDifferences(ctx, pipelineRollout, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata, existingChildUpgradeState)
 }
