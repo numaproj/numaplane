@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"k8s.io/utils/ptr"
@@ -12,6 +13,8 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -647,6 +650,78 @@ func DeletePipelineRollout(name string) {
 		}
 		return false
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
+}
+
+// VerifyPipelineISBJobsGone waits until Numaflow Jobs that create or delete
+// pipeline ISB buffers/buckets are gone. Recreating a Pipeline with the same
+// name while those Jobs are still running can leave streams and watermark
+// buckets missing.
+//
+// Call this after DeletePipelineRollout returns (Pipeline CR gone) and while
+// the InterStepBufferService is still up. Numaflow creates the cleanup Job
+// in the same reconcile that removes the Pipeline finalizer, so the Job
+// already exists once the Pipeline object has disappeared. The Job still
+// needs JetStream in order to finish deleting streams.
+func VerifyPipelineISBJobsGone() {
+	backgroundDeletion := metav1.DeletePropagationBackground
+
+	CheckEventually("Verifying pipeline ISB create/delete/cleanup Jobs are gone", func() bool {
+		jobs, err := kubeClient.BatchV1().Jobs(Namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false
+		}
+
+		remaining := 0
+		for _, job := range jobs.Items {
+			if !isPipelineISBJob(job) {
+				continue
+			}
+			remaining++
+
+			// Finished Jobs can sit around and retry; delete them so the next
+			// case cannot race with leftover ISB work.
+			if pipelineISBJobHasFinished(job) {
+				_ = kubeClient.BatchV1().Jobs(Namespace).Delete(ctx, job.Name, metav1.DeleteOptions{PropagationPolicy: &backgroundDeletion})
+			}
+		}
+
+		return remaining == 0
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "Pipeline ISB create/delete/cleanup Jobs should have been gone but were still found.")
+}
+
+// isPipelineISBJob reports whether a Job is Numaflow ISB buffer/bucket work
+// (create, delete, or cleanup).
+func isPipelineISBJob(job batchv1.Job) bool {
+	for _, marker := range []string{"-cre-", "-del-", "-cln-"} {
+		if strings.Contains(job.Name, marker) {
+			return true
+		}
+	}
+
+	for _, container := range job.Spec.Template.Spec.Containers {
+		if len(container.Args) == 0 {
+			continue
+		}
+		if container.Args[0] == "isbsvc-create" || container.Args[0] == "isbsvc-delete" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// pipelineISBJobHasFinished reports whether the Job has a Complete or Failed
+// condition set to True.
+func pipelineISBJobHasFinished(job batchv1.Job) bool {
+	for _, condition := range job.Status.Conditions {
+		if condition.Status != corev1.ConditionTrue {
+			continue
+		}
+		if condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed {
+			return true
+		}
+	}
+	return false
 }
 
 // update PipelineRollout and verify correct process
