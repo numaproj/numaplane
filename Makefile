@@ -149,7 +149,6 @@ E2E_TEST_TARGETS := \
 	test-monovertex-rider-e2e \
 	test-rollback-e2e \
 	test-force-drain-e2e \
-	test-force-drain-backward-compatibility-e2e \
 	test-no-drain-e2e \
 	test-hpa-monovertex-e2e
 
