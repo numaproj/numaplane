@@ -943,7 +943,7 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
-	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
+	controllerInstanceID, err := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
 	if err != nil {
 		return nil, err
 	}

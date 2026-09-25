@@ -26,35 +26,20 @@ import (
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" pipeline
 // This implements a function of the progressiveController interface
 func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error) {
-	numaLogger := logger.FromContext(ctx)
-
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
 
-	// which InterstepBufferServiceName should we use?
-	// If there is an upgrading isbsvc, use that
-	// Otherwise, use the promoted one
-	var isbsvc *unstructured.Unstructured
-	isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
+	isbsvc, controllerInstanceID, err := r.getTargetPipelineDependencies(ctx, pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
-	// if no "upgrading" isbsvc was found, look for the "promoted" one
 	if isbsvc == nil {
-		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
-		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
-		if err != nil || isbsvc == nil {
-			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
-		}
+		return nil, fmt.Errorf("no consistent ISBService and controller instance pairing found for PipelineRollout %s/%s", pipelineRollout.Namespace, pipelineRollout.Name)
 	}
 
-	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, pipelineRollout.Namespace)
-	if err != nil {
-		return nil, err
-	}
 	pipeline, err := r.makePipelineDefinition(pipelineRollout, name, isbsvc.GetName(), metadata, &controllerInstanceID)
 	if err != nil {
 		return nil, err

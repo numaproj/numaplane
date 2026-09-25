@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -234,25 +235,73 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 	}
 }
 
-// GetPromotedControllerInstanceID finds the NumaflowControllerRollout for the given namespace and returns the
-// InstanceID of its promoted (i.e. today, only) NumaflowController instance.
-// If no NumaflowControllerRollout exists yet in the namespace, this returns "" rather than an error: InstanceID
+// GetControllerInstanceIDs finds the promoted and trial controller instances from one consistent status snapshot.
+// If no NumaflowControllerRollout exists yet in the namespace, this returns empty IDs rather than an error: InstanceID
 // is optional and today is commonly unset, so the absence of a controller rollout is not itself an error case
 // for Pipeline/MonoVertex reconciliation.
+// The promoted instance falls back to the legacy spec field while ControllerInstances is not populated,
+// preserving the existing single-controller behavior.
 // TODO: once NumaflowControllerRollout manages children with promoted/trial upgrade-state labels, resolve the
-// promoted child directly and read its InstanceID instead of using the legacy spec field.
-func GetPromotedControllerInstanceID(ctx context.Context, c client.Client, namespace string) (string, error) {
+// children directly and read their InstanceIDs instead of using Status.ControllerInstances / the legacy spec field.
+func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace string) (string, string, error) {
 	var nfcRolloutList apiv1.NumaflowControllerRolloutList
 	if err := c.List(ctx, &nfcRolloutList, &client.ListOptions{Namespace: namespace}); err != nil {
-		return "", fmt.Errorf("failed to list NumaflowControllerRollouts in namespace %q: %w", namespace, err)
+		return "", "", fmt.Errorf("failed to list NumaflowControllerRollouts in namespace %q: %w", namespace, err)
 	}
 	if len(nfcRolloutList.Items) == 0 {
-		return "", nil
+		return "", "", nil
 	}
 	if len(nfcRolloutList.Items) > 1 {
-		return "", fmt.Errorf("expected at most 1 NumaflowControllerRollout in namespace %q, found %d", namespace, len(nfcRolloutList.Items))
+		return "", "", fmt.Errorf("expected at most 1 NumaflowControllerRollout in namespace %q, found %d", namespace, len(nfcRolloutList.Items))
 	}
-	return nfcRolloutList.Items[0].Spec.Controller.InstanceID, nil
+
+	nfcRollout := &nfcRolloutList.Items[0]
+	instanceIDs := map[common.UpgradeState]string{}
+	foundStates := map[common.UpgradeState]bool{}
+	for _, controllerInstance := range nfcRollout.Status.ControllerInstances {
+		upgradeState := common.UpgradeState(controllerInstance.State)
+		if upgradeState != common.LabelValueUpgradePromoted && upgradeState != common.LabelValueUpgradeTrial {
+			continue
+		}
+		if foundStates[upgradeState] {
+			return "", "", fmt.Errorf("expected at most 1 %q controller instance in namespace %q", upgradeState, namespace)
+		}
+		instanceIDs[upgradeState] = controllerInstance.InstanceID
+		foundStates[upgradeState] = true
+	}
+
+	promotedInstanceID := instanceIDs[common.LabelValueUpgradePromoted]
+	if promotedInstanceID == "" {
+		promotedInstanceID = nfcRollout.Spec.Controller.InstanceID
+	}
+	trialInstanceID := instanceIDs[common.LabelValueUpgradeTrial]
+	for _, instanceID := range []string{promotedInstanceID, trialInstanceID} {
+		if instanceID == "" {
+			continue
+		}
+		if validationErrors := validation.IsValidLabelValue(instanceID); len(validationErrors) > 0 {
+			return "", "", fmt.Errorf("controller instance ID %q is not a valid Kubernetes label value: %s", instanceID, validationErrors[0])
+		}
+	}
+	return promotedInstanceID, trialInstanceID, nil
+}
+
+// GetPromotedControllerInstanceID returns the promoted controller instance ID.
+func GetPromotedControllerInstanceID(ctx context.Context, c client.Client, namespace string) (string, error) {
+	promotedInstanceID, _, err := GetControllerInstanceIDs(ctx, c, namespace)
+	return promotedInstanceID, err
+}
+
+// GetDesiredControllerInstanceID returns the trial controller instance when one exists, otherwise the promoted one.
+func GetDesiredControllerInstanceID(ctx context.Context, c client.Client, namespace string) (string, error) {
+	promotedInstanceID, trialInstanceID, err := GetControllerInstanceIDs(ctx, c, namespace)
+	if err != nil {
+		return "", err
+	}
+	if trialInstanceID != "" {
+		return trialInstanceID, nil
+	}
+	return promotedInstanceID, nil
 }
 
 // Determine the list of Riders which are needed for the child and create them on the cluster
