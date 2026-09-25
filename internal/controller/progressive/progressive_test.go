@@ -835,6 +835,13 @@ func TestControllerInstanceBindingDiffers(t *testing.T) {
 		assert.True(t, controllerInstanceBindingDiffers(desired, existing))
 	})
 
+	t.Run("unbind is detected from the annotation alone", func(t *testing.T) {
+		desired := &unstructured.Unstructured{}
+		existing := &unstructured.Unstructured{}
+		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"})
+		assert.True(t, controllerInstanceBindingDiffers(desired, existing))
+	})
+
 	t.Run("instance changed", func(t *testing.T) {
 		desired := &unstructured.Unstructured{}
 		desired.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "new"})
@@ -845,20 +852,49 @@ func TestControllerInstanceBindingDiffers(t *testing.T) {
 		assert.True(t, controllerInstanceBindingDiffers(desired, existing))
 	})
 
-	t.Run("instance annotation Numaplane didn't set is not a difference", func(t *testing.T) {
-		// e.g. an ISBService, which Numaplane doesn't bind to a controller instance
-		desired := &unstructured.Unstructured{}
-		existing := &unstructured.Unstructured{}
-		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"})
-		assert.False(t, controllerInstanceBindingDiffers(desired, existing))
-	})
-
-	t.Run("matching instance metadata is not a difference", func(t *testing.T) {
+	t.Run("matching annotation without the lookup label is not a difference", func(t *testing.T) {
 		desired := &unstructured.Unstructured{}
 		desired.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "same"})
 		desired.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "same"})
 		existing := &unstructured.Unstructured{}
 		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "same"})
 		assert.False(t, controllerInstanceBindingDiffers(desired, existing))
+	})
+}
+
+func TestApplyDesiredControllerInstanceAnnotation(t *testing.T) {
+	t.Run("replaces rollout annotation X with desired Y", func(t *testing.T) {
+		required := map[string]interface{}{
+			"annotations": map[string]interface{}{
+				common.AnnotationKeyNumaflowInstanceID: "X",
+				"keep-me":                              "user",
+			},
+		}
+		desired := &unstructured.Unstructured{}
+		desired.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "Y"})
+		desired.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "Y"})
+
+		applyDesiredControllerInstanceAnnotation(required, desired)
+
+		annotations := required["annotations"].(map[string]interface{})
+		assert.Equal(t, "Y", annotations[common.AnnotationKeyNumaflowInstanceID])
+		assert.Equal(t, "user", annotations["keep-me"])
+		_, hasLabel := required["labels"]
+		assert.False(t, hasLabel)
+	})
+
+	t.Run("removes instance annotation when desired has unbound", func(t *testing.T) {
+		required := map[string]interface{}{
+			"annotations": map[string]interface{}{
+				common.AnnotationKeyNumaflowInstanceID: "X",
+			},
+		}
+		desired := &unstructured.Unstructured{}
+
+		applyDesiredControllerInstanceAnnotation(required, desired)
+
+		annotations := required["annotations"].(map[string]interface{})
+		_, found := annotations[common.AnnotationKeyNumaflowInstanceID]
+		assert.False(t, found)
 	})
 }
