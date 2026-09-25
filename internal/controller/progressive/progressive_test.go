@@ -827,19 +827,30 @@ func Test_ExtractScaleMinMax(t *testing.T) {
 }
 
 func TestControllerInstanceBindingDiffers(t *testing.T) {
-	t.Run("desired child dropped the instance annotation", func(t *testing.T) {
+	t.Run("desired child dropped the binding", func(t *testing.T) {
 		desired := &unstructured.Unstructured{}
 		existing := &unstructured.Unstructured{}
 		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"})
+		existing.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "old"})
 		assert.True(t, controllerInstanceBindingDiffers(desired, existing))
 	})
 
-	t.Run("instance annotation changed", func(t *testing.T) {
+	t.Run("instance changed", func(t *testing.T) {
 		desired := &unstructured.Unstructured{}
 		desired.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "new"})
+		desired.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "new"})
 		existing := &unstructured.Unstructured{}
 		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"})
+		existing.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "old"})
 		assert.True(t, controllerInstanceBindingDiffers(desired, existing))
+	})
+
+	t.Run("instance annotation Numaplane didn't set is not a difference", func(t *testing.T) {
+		// e.g. an ISBService, which Numaplane doesn't bind to a controller instance
+		desired := &unstructured.Unstructured{}
+		existing := &unstructured.Unstructured{}
+		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"})
+		assert.False(t, controllerInstanceBindingDiffers(desired, existing))
 	})
 
 	t.Run("matching instance metadata is not a difference", func(t *testing.T) {

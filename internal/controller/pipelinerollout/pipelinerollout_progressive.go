@@ -55,7 +55,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	if err != nil {
 		return nil, err
 	}
-	pipeline, err := r.makePipelineDefinition(pipelineRollout, name, isbsvc.GetName(), metadata, controllerInstanceID)
+	pipeline, err := r.makePipelineDefinition(pipelineRollout, name, isbsvc.GetName(), metadata, &controllerInstanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -323,14 +323,12 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 		return false, err
 	}
 
-	// Pin name, ISBSvc, and controller-instance identity to the existing child so this check
-	// only compares the Rollout definition, not trial vs promoted controller selection.
-	controllerInstanceID := numaflowtypes.ControllerInstanceIDFromResource(existingPipeline)
-	rolloutBasedPipelineDef, err := r.makePipelineDefinition(pipelineRollout, existingPipeline.GetName(), isbsvcName, pipelineRollout.Spec.Pipeline.Metadata, controllerInstanceID)
+	// Don't set the controller instance binding: the instance a Pipeline is bound to isn't part of the Rollout
+	// definition, and CheckForDifferences only requires the existing Pipeline to contain the Rollout's metadata.
+	rolloutBasedPipelineDef, err := r.makePipelineDefinition(pipelineRollout, existingPipeline.GetName(), isbsvcName, pipelineRollout.Spec.Pipeline.Metadata, nil)
 	if err != nil {
 		return false, err
 	}
-	numaflowtypes.CopyControllerInstanceBinding(rolloutBasedPipelineDef, existingPipeline)
 	rolloutDefinedMetadata, _ := rolloutBasedPipelineDef.Object["metadata"].(map[string]interface{})
 	return r.CheckForDifferences(ctx, pipelineRollout, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata, existingChildUpgradeState)
 }

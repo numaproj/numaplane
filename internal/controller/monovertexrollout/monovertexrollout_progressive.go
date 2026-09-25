@@ -38,7 +38,7 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	if err != nil {
 		return nil, err
 	}
-	monoVertex, err := r.makeMonoVertexDefinition(monoVertexRollout, name, metadata, controllerInstanceID)
+	monoVertex, err := r.makeMonoVertexDefinition(monoVertexRollout, name, metadata, &controllerInstanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -280,14 +280,12 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(
 func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingChildUpgradeState common.UpgradeState) (bool, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 
-	// Pin name and controller-instance identity to the existing child so this check
-	// only compares the Rollout definition, not trial vs promoted controller selection.
-	controllerInstanceID := numaflowtypes.ControllerInstanceIDFromResource(existingMonoVertex)
-	rolloutBasedMVDef, err := r.makeMonoVertexDefinition(monoVertexRollout, existingMonoVertex.GetName(), monoVertexRollout.Spec.MonoVertex.Metadata, controllerInstanceID)
+	// Don't set the controller instance binding: the instance a MonoVertex is bound to isn't part of the Rollout
+	// definition, and CheckForDifferences only requires the existing MonoVertex to contain the Rollout's metadata.
+	rolloutBasedMVDef, err := r.makeMonoVertexDefinition(monoVertexRollout, existingMonoVertex.GetName(), monoVertexRollout.Spec.MonoVertex.Metadata, nil)
 	if err != nil {
 		return false, err
 	}
-	numaflowtypes.CopyControllerInstanceBinding(rolloutBasedMVDef, existingMonoVertex)
 
 	rolloutDefinedMetadata, _ := rolloutBasedMVDef.Object["metadata"].(map[string]interface{})
 	return r.CheckForDifferences(ctx, monoVertexRollout, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata, existingChildUpgradeState)

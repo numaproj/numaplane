@@ -67,32 +67,11 @@ func ControllerInstanceIDFromResource(obj *unstructured.Unstructured) string {
 	return obj.GetLabels()[common.LabelKeyControllerInstanceID]
 }
 
-// CopyControllerInstanceBinding copies the live child's instance annotation and label onto dest
-// so comparisons against the Rollout definition do not treat those identity fields as a spec delta.
-func CopyControllerInstanceBinding(dest, src *unstructured.Unstructured) {
-	if dest == nil || src == nil {
-		return
+// HasControllerInstanceLabel reports whether Numaplane has bound this resource to a controller instance.
+func HasControllerInstanceLabel(obj *unstructured.Unstructured) bool {
+	if obj == nil {
+		return false
 	}
-
-	destAnnotations := dest.GetAnnotations()
-	if destAnnotations == nil {
-		destAnnotations = map[string]string{}
-	}
-	if srcID, found := src.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]; found {
-		destAnnotations[common.AnnotationKeyNumaflowInstanceID] = srcID
-	} else {
-		delete(destAnnotations, common.AnnotationKeyNumaflowInstanceID)
-	}
-	dest.SetAnnotations(destAnnotations)
-
-	destLabels := dest.GetLabels()
-	if destLabels == nil {
-		destLabels = map[string]string{}
-	}
-	if srcID, found := src.GetLabels()[common.LabelKeyControllerInstanceID]; found {
-		destLabels[common.LabelKeyControllerInstanceID] = srcID
-	} else {
-		delete(destLabels, common.LabelKeyControllerInstanceID)
-	}
-	dest.SetLabels(destLabels)
+	_, found := obj.GetLabels()[common.LabelKeyControllerInstanceID]
+	return found
 }

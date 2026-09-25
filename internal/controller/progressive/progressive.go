@@ -614,6 +614,11 @@ func checkForDifferences(
 }
 
 func controllerInstanceBindingDiffers(desired, existing *unstructured.Unstructured) bool {
+	// Numaplane's label is what marks a binding as ours. A Numaflow instance annotation on its own belongs to a
+	// Kind we don't bind (ISBService) or was set outside of Numaplane, and replacing the child over it would be wrong.
+	if !numaflowtypes.HasControllerInstanceLabel(desired) && !numaflowtypes.HasControllerInstanceLabel(existing) {
+		return false
+	}
 	// Compare the effective Numaflow instance ID. Annotation and label can be out of
 	// sync on live children; treating them as independent keys caused false replacements.
 	return numaflowtypes.ControllerInstanceIDFromResource(desired) != numaflowtypes.ControllerInstanceIDFromResource(existing)

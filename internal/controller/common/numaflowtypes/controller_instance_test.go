@@ -67,33 +67,3 @@ func TestWithControllerInstanceID(t *testing.T) {
 		assert.ErrorContains(t, err, "not a valid Kubernetes label value")
 	})
 }
-
-func TestCopyControllerInstanceBinding(t *testing.T) {
-	t.Run("copies annotation and label from the live child", func(t *testing.T) {
-		src := &unstructured.Unstructured{}
-		src.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "live"})
-		src.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "live"})
-		dest := &unstructured.Unstructured{}
-		dest.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "desired"})
-		dest.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "desired"})
-
-		CopyControllerInstanceBinding(dest, src)
-
-		assert.Equal(t, "live", dest.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID])
-		assert.Equal(t, "live", dest.GetLabels()[common.LabelKeyControllerInstanceID])
-	})
-
-	t.Run("removes dest binding when the live child has none", func(t *testing.T) {
-		src := &unstructured.Unstructured{}
-		dest := &unstructured.Unstructured{}
-		dest.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "desired"})
-		dest.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "desired"})
-
-		CopyControllerInstanceBinding(dest, src)
-
-		_, hasAnnotation := dest.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
-		_, hasLabel := dest.GetLabels()[common.LabelKeyControllerInstanceID]
-		assert.False(t, hasAnnotation)
-		assert.False(t, hasLabel)
-	})
-}
