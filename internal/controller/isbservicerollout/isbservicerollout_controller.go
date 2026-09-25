@@ -943,7 +943,11 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
-	return r.makeISBServiceDefinition(isbServiceRollout, isbsvcName, metadata)
+	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	return r.makeISBServiceDefinition(isbServiceRollout, isbsvcName, metadata, &controllerInstanceID)
 }
 
 // templates are used to dynamically evaluate child spec, metadata, as well as Riders
@@ -962,6 +966,8 @@ func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 	isbServiceRollout *apiv1.ISBServiceRollout,
 	isbsvcName string,
 	metadata apiv1.Metadata,
+	// nil means the caller doesn't want the controller instance binding set at all
+	controllerInstanceID *string,
 ) (*unstructured.Unstructured, error) {
 
 	args := r.getTemplateArguments(isbsvcName, isbServiceRollout.Namespace)
@@ -984,6 +990,12 @@ func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 	newISBServiceDef.SetName(isbsvcName)
 	newISBServiceDef.SetNamespace(isbServiceRollout.Namespace)
 	newISBServiceDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)})
+
+	if controllerInstanceID != nil {
+		if err := numaflowtypes.WithControllerInstanceID(newISBServiceDef, *controllerInstanceID); err != nil {
+			return nil, err
+		}
+	}
 
 	return newISBServiceDef, nil
 }

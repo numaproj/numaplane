@@ -28,7 +28,11 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	if err != nil {
 		return nil, err
 	}
-	isbsvc, err := r.makeISBServiceDefinition(isbsvcRollout, name, metadata)
+	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, isbsvcRollout.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	isbsvc, err := r.makeISBServiceDefinition(isbsvcRollout, name, metadata, &controllerInstanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +191,9 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(
 	existingChildUpgradeState common.UpgradeState) (bool, error) {
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
-	rolloutBasedISBSvcDef, err := r.makeISBServiceDefinition(isbsvcRollout, existingISBSvc.GetName(), isbsvcRollout.Spec.InterStepBufferService.Metadata)
+	// Don't set the controller instance binding: the instance an ISBService is bound to isn't part of the
+	// Rollout definition, and CheckForDifferences only requires the existing child to contain the Rollout's metadata.
+	rolloutBasedISBSvcDef, err := r.makeISBServiceDefinition(isbsvcRollout, existingISBSvc.GetName(), isbsvcRollout.Spec.InterStepBufferService.Metadata, nil)
 	if err != nil {
 		return false, err
 	}
