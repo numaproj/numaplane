@@ -827,19 +827,19 @@ func Test_ExtractScaleMinMax(t *testing.T) {
 }
 
 func TestControllerInstanceBindingDiffers(t *testing.T) {
-	t.Run("desired child dropped the binding", func(t *testing.T) {
+	t.Run("empty desired annotation is not a difference when the live child is bound", func(t *testing.T) {
 		desired := &unstructured.Unstructured{}
 		existing := &unstructured.Unstructured{}
 		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"})
 		existing.SetLabels(map[string]string{common.LabelKeyControllerInstanceID: "old"})
-		assert.True(t, controllerInstanceBindingDiffers(desired, existing))
+		assert.False(t, controllerInstanceBindingDiffers(desired, existing))
 	})
 
-	t.Run("unbind is detected from the annotation alone", func(t *testing.T) {
+	t.Run("extra instance annotation on the live child is not a difference", func(t *testing.T) {
 		desired := &unstructured.Unstructured{}
 		existing := &unstructured.Unstructured{}
 		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "old"})
-		assert.True(t, controllerInstanceBindingDiffers(desired, existing))
+		assert.False(t, controllerInstanceBindingDiffers(desired, existing))
 	})
 
 	t.Run("instance changed", func(t *testing.T) {

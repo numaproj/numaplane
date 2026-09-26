@@ -602,8 +602,8 @@ func checkForDifferences(
 	if err != nil {
 		return false, err
 	}
-	// Subset comparison cannot see extra keys on the live child, so unbind (desired omitted,
-	// existing still bound) is detected here.
+	// Subset comparison ignores an extra instance annotation on the live child. A non-empty
+	// desired annotation that differs from the live child is still a replacement.
 	if controllerInstanceBindingDiffers(newChildDef, existingChildDef) {
 		childNeedsUpdating = true
 	}
@@ -647,7 +647,13 @@ func controllerInstanceBindingDiffers(desired, existing *unstructured.Unstructur
 	// Compare only the Numaflow instance annotation. The Numaplane lookup label is bookkeeping
 	// and is restored by Direct Apply; requiring it here would recycle a child that already
 	// has the correct annotation.
-	return instanceAnnotation(desired) != instanceAnnotation(existing)
+	// An empty desired annotation is not a difference: live children can already carry
+	// numaflow.numaproj.io/instance, and replacing them for that extra annotation is wrong.
+	desiredID := instanceAnnotation(desired)
+	if desiredID == "" {
+		return false
+	}
+	return desiredID != instanceAnnotation(existing)
 }
 
 // instanceAnnotation returns the Numaflow controller-selection annotation, or "" if absent.
