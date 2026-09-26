@@ -262,6 +262,11 @@ func PipelineWithISBServiceName(pipeline *unstructured.Unstructured, isbsvcName 
 	return nil
 }
 
+// PipelineWithControllerInstanceID binds a Pipeline to a NumaflowController instance.
+func PipelineWithControllerInstanceID(pipeline *unstructured.Unstructured, instanceID string) error {
+	return WithControllerInstanceID(pipeline, instanceID)
+}
+
 func PipelineWithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
 	err := unstructured.SetNestedField(pipeline.Object, phase, "spec", "lifecycle", "desiredPhase")
 	if err != nil {

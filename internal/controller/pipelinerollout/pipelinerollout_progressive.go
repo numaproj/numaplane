@@ -51,7 +51,11 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 		}
 	}
 
-	pipeline, err := r.makePipelineDefinition(pipelineRollout, name, isbsvc.GetName(), metadata)
+	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, pipelineRollout.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	pipeline, err := r.makePipelineDefinition(pipelineRollout, name, isbsvc.GetName(), metadata, &controllerInstanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -319,9 +323,9 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 		return false, err
 	}
 
-	// In order to effectively compare, we need to create a Pipeline Definition from the PipelineRollout which uses the same name and isbsvc name as our current Pipeline
-	// (so that won't be interpreted as a difference)
-	rolloutBasedPipelineDef, err := r.makePipelineDefinition(pipelineRollout, existingPipeline.GetName(), isbsvcName, pipelineRollout.Spec.Pipeline.Metadata)
+	// Don't set the controller instance binding: the instance a Pipeline is bound to isn't part of the Rollout
+	// definition, and CheckForDifferences only requires the existing Pipeline to contain the Rollout's metadata.
+	rolloutBasedPipelineDef, err := r.makePipelineDefinition(pipelineRollout, existingPipeline.GetName(), isbsvcName, pipelineRollout.Spec.Pipeline.Metadata, nil)
 	if err != nil {
 		return false, err
 	}

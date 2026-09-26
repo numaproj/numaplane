@@ -592,10 +592,20 @@ func checkForDifferences(
 	if err != nil {
 		return false, err
 	}
+	// Overlay the derived Numaflow instance annotation from the desired child (NFC InstanceID),
+	// the same way spec already uses a derived ISBService name. Leave the generated Numaplane
+	// controller-instance label out of this map so a missing bookkeeping label is not treated
+	// as a progressive replacement.
+	applyDesiredControllerInstanceAnnotation(templatedMetadata, newChildDef)
 	// now compare the spec from the existing child with the new child, plus verify the desired metadata is present
 	childNeedsUpdating, err := controller.CheckForDifferences(ctx, rolloutObject, existingChildDef, newChildDef.Object, templatedMetadata, existingChildUpgradeState)
 	if err != nil {
 		return false, err
+	}
+	// Subset comparison ignores an extra instance annotation on the live child. A non-empty
+	// desired annotation that differs from the live child is still a replacement.
+	if controllerInstanceBindingDiffers(newChildDef, existingChildDef) {
+		childNeedsUpdating = true
 	}
 	if childNeedsUpdating {
 		needsUpdating = childNeedsUpdating
@@ -608,6 +618,50 @@ func checkForDifferences(
 		}
 	}
 	return needsUpdating, nil
+}
+
+// applyDesiredControllerInstanceAnnotation copies numaflow.numaproj.io/instance from the
+// desired child onto required Rollout metadata so the subset check requires Y (NFC InstanceID)
+// instead of a stale X from Spec.Pipeline/MonoVertex.Metadata. If the desired child has no
+// instance annotation, that key is removed from required metadata.
+func applyDesiredControllerInstanceAnnotation(requiredMetadata map[string]interface{}, desired *unstructured.Unstructured) {
+	if requiredMetadata == nil || desired == nil {
+		return
+	}
+
+	annKey := common.AnnotationKeyNumaflowInstanceID
+	annotations, _ := requiredMetadata["annotations"].(map[string]interface{})
+	if annotations == nil {
+		annotations = map[string]interface{}{}
+		requiredMetadata["annotations"] = annotations
+	}
+
+	if v, found := desired.GetAnnotations()[annKey]; found {
+		annotations[annKey] = v
+		return
+	}
+	delete(annotations, annKey)
+}
+
+func controllerInstanceBindingDiffers(desired, existing *unstructured.Unstructured) bool {
+	// Compare only the Numaflow instance annotation. The Numaplane lookup label is bookkeeping
+	// and is restored by Direct Apply; requiring it here would recycle a child that already
+	// has the correct annotation.
+	// An empty desired annotation is not a difference: live children can already carry
+	// numaflow.numaproj.io/instance, and replacing them for that extra annotation is wrong.
+	desiredID := instanceAnnotation(desired)
+	if desiredID == "" {
+		return false
+	}
+	return desiredID != instanceAnnotation(existing)
+}
+
+// instanceAnnotation returns the Numaflow controller-selection annotation, or "" if absent.
+func instanceAnnotation(obj *unstructured.Unstructured) string {
+	if obj == nil {
+		return ""
+	}
+	return obj.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
 }
 
 // Do any Riders need updating? (including additions, modifications, or deletions)

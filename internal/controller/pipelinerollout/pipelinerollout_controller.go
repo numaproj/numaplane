@@ -1112,6 +1112,11 @@ func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 		}
 	}
 
+	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, pipelineRollout.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
 	if err != nil {
 		return nil, err
@@ -1125,7 +1130,7 @@ func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 		return nil, err
 	}
 
-	pipelineDef, err := r.makePipelineDefinition(pipelineRollout, pipelineName, isbsvc.GetName(), metadata)
+	pipelineDef, err := r.makePipelineDefinition(pipelineRollout, pipelineName, isbsvc.GetName(), metadata, &controllerInstanceID)
 	return pipelineDef, err
 }
 
@@ -1162,6 +1167,8 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineName string,
 	isbsvcName string,
 	metadata apiv1.Metadata,
+	// nil means the caller doesn't want the controller instance binding set at all
+	controllerInstanceID *string,
 ) (*unstructured.Unstructured, error) {
 
 	args := r.getTemplateArguments(pipelineName, pipelineRollout.Namespace)
@@ -1187,6 +1194,12 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 
 	if err := numaflowtypes.PipelineWithISBServiceName(pipelineDef, isbsvcName); err != nil {
 		return nil, err
+	}
+
+	if controllerInstanceID != nil {
+		if err := numaflowtypes.PipelineWithControllerInstanceID(pipelineDef, *controllerInstanceID); err != nil {
+			return nil, err
+		}
 	}
 
 	return pipelineDef, nil
