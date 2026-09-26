@@ -724,7 +724,7 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 		return nil, err
 	}
 
-	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+	controllerInstanceID, err := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
 	if err != nil {
 		return nil, err
 	}
