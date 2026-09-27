@@ -79,16 +79,15 @@ If it's a new release branch, simply create a branch from `main`.
 3. Push to remote branch, and make sure all the CI jobs pass.
 4. Run `make prepare-release VERSION=v{x.y.z}` to update version in manifests, where `x.y.z` is the expected new version.
 5. Follow the output of last step, to confirm if all the changes are expected, and then run `make release VERSION=v{x.y.z}`.
-6. Follow the output, push a new tag to the release branch, GitHub actions will automatically build and publish the new release,
-   this will take around 10 minutes.
-7. Test the new release, make sure everything is running as expected, and then recreate a `stable` tag against the latest release.
+6. Follow the output, push a new tag to the release branch, GitHub actions will automatically build and publish the new release.
+7. Recreate a `stable` tag against the latest release.
    ```shell
    git tag -d stable
    git tag -a stable -m stable
    git push -d {your-remote} stable
    git push {your-remote} stable
    ```
-8. Find the new release tag, and edit the release notes.
+8. If the new release didn't get created in Github, create it using the new git tag.
 
 
 ## License
