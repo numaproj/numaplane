@@ -267,8 +267,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' isbservice yet; need to wait for recyclable isbservices to be deleted")
 			requeueDelay = common.DefaultRequeueDelay
 		} else {
-			// create an object as it doesn't exist
-			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
+			// The first promoted child stays on the promoted controller. A later reconcile compares
+			// it with the desired controller, including a trial instance, and Progressive creates
+			// the trial child separately.
+			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, false)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 			}
@@ -292,9 +294,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		}
 
 	} else {
-		// Object already exists
-		// perform logic related to updating
-		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
+		// Object already exists. The desired definition uses the trial controller when one
+		// exists, so a controller-instance change is visible to Progressive. That path leaves
+		// the live promoted child unchanged and creates the trial child separately.
+		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, true)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 		}
@@ -925,10 +928,14 @@ func (r *ISBServiceRolloutReconciler) ErrorHandler(ctx context.Context, isbServi
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
-// Create an InterstepBufferService definition of "promoted" state
+// makeTargetISBServiceDef builds the promoted-slot ISBService definition.
+// useDesiredController is false for the initial promoted child, which stays on the promoted
+// controller. It is true when comparing an existing promoted child with desired state: the trial
+// controller ID, when set, is the difference Progressive uses to create a separate trial child.
 func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	ctx context.Context,
 	isbServiceRollout *apiv1.ISBServiceRollout,
+	useDesiredController bool,
 ) (*unstructured.Unstructured, error) {
 	// if a "promoted" InterstepBufferService exists, gets its name; otherwise create a new name
 	isbsvcName, err := ctlrcommon.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
@@ -943,7 +950,11 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
-	controllerInstanceID, err := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
+	resolveControllerInstanceID := ctlrcommon.GetPromotedControllerInstanceID
+	if useDesiredController {
+		resolveControllerInstanceID = ctlrcommon.GetDesiredControllerInstanceID
+	}
+	controllerInstanceID, err := resolveControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
 	if err != nil {
 		return nil, err
 	}

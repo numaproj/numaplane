@@ -237,7 +237,10 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(promotedMonovertices.Items[0].GetName())
 	}
 
-	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout)
+	// Initial creation stays on the promoted controller. Once that child exists, the desired
+	// definition includes the trial controller so a controller upgrade can start Progressive.
+	compareWithDesiredController := len(promotedMonovertices.Items) > 0
+	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, compareWithDesiredController)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -714,17 +717,25 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 	return metav1.ConditionTrue, ""
 }
 
-// create the definition for the MonoVertex child of the Rollout which is labeled "promoted"
+// makeTargetMonoVertexDefinition builds the promoted-slot MonoVertex definition.
+// useDesiredController is false for the initial promoted child, which stays on the promoted
+// controller. It is true when comparing an existing promoted child with desired state: the trial
+// controller ID, when set, is the difference Progressive uses to create a separate trial child.
 func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
+	useDesiredController bool,
 ) (*unstructured.Unstructured, error) {
 	monoVertexName, err := ctlrcommon.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
 	if err != nil {
 		return nil, err
 	}
 
-	controllerInstanceID, err := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+	resolveControllerInstanceID := ctlrcommon.GetPromotedControllerInstanceID
+	if useDesiredController {
+		resolveControllerInstanceID = ctlrcommon.GetDesiredControllerInstanceID
+	}
+	controllerInstanceID, err := resolveControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
 	if err != nil {
 		return nil, err
 	}
