@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -134,6 +135,96 @@ func TestGetTargetPipelineDependenciesConsistencyGating(t *testing.T) {
 			require.NotNil(t, isbsvc)
 			assert.Equal(t, tt.expectedISBSvcName, isbsvc.GetName())
 			assert.Equal(t, tt.expectedControllerID, controllerInstanceID)
+		})
+	}
+}
+
+func TestGetTargetPipelineDependenciesWithoutControllerBinding(t *testing.T) {
+	const (
+		namespace         = "test"
+		isbsvcRolloutName = "default"
+		rolloutInstanceID = "rollout-supplied"
+	)
+
+	pipelineSpec, err := json.Marshal(numaflowv1.PipelineSpec{InterStepBufferServiceName: isbsvcRolloutName})
+	require.NoError(t, err)
+	pipelineRollout := &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: "pipeline", Namespace: namespace},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: apiv1.Pipeline{
+				Spec: runtime.RawExtension{Raw: pipelineSpec},
+			},
+		},
+	}
+	isbsvcRollout := &apiv1.ISBServiceRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: isbsvcRolloutName, Namespace: namespace},
+	}
+	newISBSvc := func(name string, state common.UpgradeState) *numaflowv1.InterStepBufferService {
+		return &numaflowv1.InterStepBufferService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+				Labels: map[string]string{
+					common.LabelKeyParentRollout: isbsvcRolloutName,
+					common.LabelKeyUpgradeState:  string(state),
+				},
+				Annotations: map[string]string{
+					common.AnnotationKeyNumaflowInstanceID: rolloutInstanceID,
+				},
+			},
+		}
+	}
+	unsetController := &apiv1.NumaflowControllerRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: namespace},
+	}
+
+	tests := []struct {
+		name               string
+		objects            []client.Object
+		expectedISBSvcName string
+	}{
+		{
+			name: "uses promoted ISBService effective ID when no controller rollout exists",
+			objects: []client.Object{
+				isbsvcRollout,
+				newISBSvc("default-0", common.LabelValueUpgradePromoted),
+			},
+			expectedISBSvcName: "default-0",
+		},
+		{
+			name: "uses trial ISBService effective ID for an ISBService-only upgrade",
+			objects: []client.Object{
+				isbsvcRollout,
+				newISBSvc("default-0", common.LabelValueUpgradePromoted),
+				newISBSvc("default-1", common.LabelValueUpgradeTrial),
+			},
+			expectedISBSvcName: "default-1",
+		},
+		{
+			name: "uses promoted ISBService effective ID when controller instanceID is unset",
+			objects: []client.Object{
+				isbsvcRollout,
+				unsetController,
+				newISBSvc("default-0", common.LabelValueUpgradePromoted),
+			},
+			expectedISBSvcName: "default-0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			require.NoError(t, apiv1.AddToScheme(scheme))
+			require.NoError(t, numaflowv1.AddToScheme(scheme))
+			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
+			reconciler := &PipelineRolloutReconciler{client: client}
+
+			isbsvc, controllerInstanceID, err := reconciler.getTargetPipelineDependencies(context.Background(), pipelineRollout)
+
+			require.NoError(t, err)
+			require.NotNil(t, isbsvc)
+			assert.Equal(t, tt.expectedISBSvcName, isbsvc.GetName())
+			assert.Equal(t, rolloutInstanceID, controllerInstanceID)
 		})
 	}
 }

@@ -1257,6 +1257,8 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 // getTargetPipelineDependencies resolves the ISBService and controller instance as one consistent pair.
 // A trial ISBService is only selected when its Numaflow instance annotation matches the desired controller
 // instance. Otherwise the promoted pair is retained until both trial dependencies have converged.
+// When no controller instance is bound, the ISBService's own effective instance ID is used instead of
+// comparing its annotation to an empty controller ID.
 func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
@@ -1269,10 +1271,17 @@ func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
 	if trialControllerInstanceID != "" {
 		desiredControllerInstanceID = trialControllerInstanceID
 	}
+	// InstanceID is optional. With no NumaflowControllerRollout, or with instanceID unset, both IDs are empty.
+	// A Rollout-supplied instance annotation is then the source of truth on the ISBService. Comparing that
+	// annotation to "" rejects every pair and blocks Pipeline creation.
+	noControllerBinding := promotedControllerInstanceID == "" && trialControllerInstanceID == ""
 
 	trialISBSvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
 	if err != nil {
 		return nil, "", err
+	}
+	if noControllerBinding && trialISBSvc != nil {
+		return trialISBSvc, numaflowtypes.ControllerInstanceIDFromResource(trialISBSvc), nil
 	}
 	// An ISBService-only upgrade may use a trial ISBService with the promoted controller. During a controller
 	// upgrade, the trial ISBService is selected only after it has moved to the trial controller as well.
@@ -1287,6 +1296,9 @@ func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
 	}
 	if promotedISBSvc == nil {
 		return nil, "", nil
+	}
+	if noControllerBinding {
+		return promotedISBSvc, numaflowtypes.ControllerInstanceIDFromResource(promotedISBSvc), nil
 	}
 
 	if promotedISBSvc.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID] != promotedControllerInstanceID {
