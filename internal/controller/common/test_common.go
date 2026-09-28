@@ -60,7 +60,7 @@ var (
 	DefaultTestMonoVertexRolloutName            = "monovertexrollout-test"
 	DefaultTestMonoVertexName                   = DefaultTestMonoVertexRolloutName + "-0"
 	DefaultTestNumaflowControllerRolloutName    = "numaflow-controller"
-	DefaultTestNumaflowControllerName           = "numaflow-controller" // TODO: change to add "-0" suffix after Progressive
+	DefaultTestNumaflowControllerName           = DefaultTestNumaflowControllerRolloutName + "-0"
 	DefaultTestNumaflowControllerDeploymentName = "numaflow-controller"
 )
 
@@ -159,9 +159,20 @@ func CreateStatefulSetInK8S(ctx context.Context, t *testing.T, k8sClientSet *k8s
 	assert.NoError(t, err)
 }
 
+func CreateNumaflowControllerRolloutInK8S(ctx context.Context, t *testing.T, numaplaneClient client.Client, nfcRollout *apiv1.NumaflowControllerRollout) {
+	rolloutCopy := *nfcRollout
+	err := numaplaneClient.Create(ctx, nfcRollout)
+	assert.NoError(t, err)
+	nfcRollout.Status = rolloutCopy.Status
+	err = numaplaneClient.Status().Update(ctx, nfcRollout)
+	assert.NoError(t, err)
+}
+
 func CreateNumaflowControllerInK8S(ctx context.Context, t *testing.T, numaplaneClient client.Client, numaflowController *apiv1.NumaflowController) {
+	status := numaflowController.Status // Create() drops the Status subresource, so save it off to update it separately
 	err := numaplaneClient.Create(ctx, numaflowController)
 	assert.NoError(t, err)
+	numaflowController.Status = status
 	err = numaplaneClient.Status().Update(ctx, numaflowController)
 	assert.NoError(t, err)
 }

@@ -1036,8 +1036,10 @@ spec:
                 properties:
                   instanceID:
                     description: |-
-                      NOTE: keeping the instanceID also in the NumaflowControllerRollout in case users want to
-                      create multiple Numaflow controllers within the same namespace
+                      InstanceID seeds the instance of the first NumaflowController child created for this Rollout.
+                      Once a child exists, its instance is fixed for its lifetime: renaming the underlying Deployment would
+                      orphan every Pipeline and MonoVertex bound to it, since Numaflow does not allow their instance annotation
+                      to change. Children created by a Progressive upgrade derive their own instance (see ControllerInstanceRef).
                     type: string
                   version:
                     type: string
@@ -1134,7 +1136,10 @@ spec:
                     instanceID:
                       description: |-
                         InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
-                        controller instance.
+                        controller instance. A trial child derives it as "<version>-<nameCount>" (with the version reduced to
+                        lowercase letters, digits, and dashes so it stays valid inside Service names), so re-trialing the same
+                        version after a failed trial still yields a distinct instance. The controller that existed before
+                        Progressive was introduced keeps an empty instance.
                       type: string
                     name:
                       description: Name of the child NumaflowController CR, e.g. "numaflow-controller-2".
@@ -1174,6 +1179,12 @@ spec:
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
+              nameCount:
+                description: |-
+                  NameCount is used as a suffix for the name of the managed NumaflowController children, to uniquely
+                  identify each child.
+                format: int32
+                type: integer
               observedGeneration:
                 description: ObservedGeneration stores the generation value observed
                   when setting the current Phase
@@ -1205,6 +1216,116 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  promotedNumaflowControllerStatus:
+                    description: PromotedNumaflowControllerStatus stores information
+                      regarding the current "promoted" NumaflowController
+                    properties:
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  upgradingNumaflowControllerStatus:
+                    description: UpgradingNumaflowControllerStatus represents either
+                      the current or otherwise the most recent "upgrading" NumaflowController
+                    properties:
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      basicAssessmentEndTime:
+                        description: BasicAssessmentEndTime indicates the time after
+                          which no more basic resource health check assessments will
+                          be performed
+                        format: date-time
+                        type: string
+                      basicAssessmentResult:
+                        description: BasicAssessmentResult indicates the result of
+                          the basic resource health check assessment
+                        type: string
+                      basicAssessmentStartTime:
+                        description: BasicAssessmentStartTime indicates the time at/after
+                          which the basic resource health check assessment result
+                          will be computed
+                        format: date-time
+                        type: string
+                      childStatus:
+                        description: ChildStatus is the full dump of child status
+                          object
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      discontinued:
+                        description: |-
+                          Discontinued indicates if the upgrade was stopped prematurely.
+                          This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
+                          in the middle of an upgrade
+                        type: boolean
+                      failureReasons:
+                        description: FailureReasons is an array of strings indicating
+                          the reasons for failure
+                        items:
+                          type: string
+                        type: array
+                      forcedSuccess:
+                        description: ForcedSuccess indicates if this promotion was
+                          forced to complete
+                        type: boolean
+                      forcedSuccessReason:
+                        description: ForcedSuccessReason indicates the reason for
+                          the forced success
+                        type: string
+                      initializationComplete:
+                        description: InitializationComplete determines if the upgrade
+                          process has completed (if it hasn't, we will come back and
+                          try it again)
+                        type: boolean
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
+                      trialWindowStartTime:
+                        description: TrialWindowStartTime indicates the time at which
+                          the trial window starts
+                        format: date-time
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade
@@ -2766,10 +2887,11 @@ data:
     overall\n  # 3. required consecutive success period - every check in this window
     must be success\n  # 4. check interval\n  defaultAssessmentSchedule:\n    - kind:
     Pipeline\n      schedule: \"60,360,60,10\"\n    - kind: MonoVertex\n      schedule:
-    \"60,360,60,10\"\n    - kind: InterstepBufferService\n      schedule: \"0,0,0,10\"\n\n
-    \ # We will stop waiting if any AnalysisRun is still Running after this number
-    of seconds\n  analysisRunTimeout: 1200\n\n# types of Resources which may be configured
-    as Riders to \"ride along\" with the child resource\npermittedRiders: \"group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler;group=policy,kind=PodDisruptionBudget\"\n\npipeline:\n
+    \"60,360,60,10\"\n    - kind: InterstepBufferService\n      schedule: \"0,0,0,10\"\n
+    \   - kind: NumaflowController\n      schedule: \"0,0,0,10\"\n\n  # We will stop
+    waiting if any AnalysisRun is still Running after this number of seconds\n  analysisRunTimeout:
+    1200\n\n# types of Resources which may be configured as Riders to \"ride along\"
+    with the child resource\npermittedRiders: \"group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler;group=policy,kind=PodDisruptionBudget\"\n\npipeline:\n
     \ # The following fields are related to recycling Pipelines:\n  \n  # percentile
     of original number of pods running applied to recyclable pipelines while draining\n
     \ recycleScaleFactor: 33\n\n  # if a recyclable Pipeline is in \"Failed\" phase

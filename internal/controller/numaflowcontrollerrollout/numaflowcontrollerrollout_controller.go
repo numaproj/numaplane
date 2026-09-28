@@ -44,6 +44,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -232,49 +233,100 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		ppnd.GetPauseModule().NewPauseRequest(controllerKey)
 	}
 
-	newNumaflowControllerDef, err := generateNewNumaflowControllerDef(nfcRollout)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error generating NumaflowController: %v", err)
-	}
-
-	// Using an unstructured object since USDE needs unstructured type to extract paths and perform comparisons.
+	// Using unstructured objects since USDE needs unstructured type to extract paths and perform comparisons.
 	// Also, keeping the code consistent between ISBSvcRollout and NumaflowControllerRollout for easier maintainability
 	// and to be able to possibly reduce code duplication at some point.
-	existingNumaflowControllerDef, err := kubernetes.GetResource(ctx, r.client, newNumaflowControllerDef.GroupVersionKind(),
-		k8stypes.NamespacedName{Namespace: newNumaflowControllerDef.GetNamespace(), Name: newNumaflowControllerDef.GetName()})
+
+	// check if there's a "promoted" NumaflowController yet
+	existingNumaflowControllerDef, err := r.findPromotedNumaflowController(ctx, nfcRollout)
 	if err != nil {
-		// create an object as it doesn't exist
-		if apierrors.IsNotFound(err) {
-			numaLogger.Debugf("NumaflowController %s/%s doesn't exist so creating", nfcRollout.Namespace, nfcRollout.Name)
-			nfcRollout.Status.MarkPending()
+		return ctrl.Result{}, fmt.Errorf("error looking for promoted NumaflowController: %v", err)
+	}
 
-			if err = kubernetes.CreateResource(ctx, r.client, newNumaflowControllerDef); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error creating NumaflowController: %v", err)
-			}
+	requeueDelay := time.Duration(0)
+	if existingNumaflowControllerDef == nil {
+		// create it as it doesn't exist
+		newNumaflowControllerDef, err := r.makeTargetNumaflowControllerDef(ctx, nfcRollout, nil)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error generating NumaflowController: %v", err)
+		}
 
-			nfcRollout.Status.MarkDeployed(nfcRollout.Generation)
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "create").Observe(time.Since(startTime).Seconds())
-			return ctrl.Result{}, nil
-		} else {
-			return ctrl.Result{}, fmt.Errorf("error getting NumaflowController: %v", err)
+		numaLogger.Debugf("NumaflowController %s/%s doesn't exist so creating", newNumaflowControllerDef.GetNamespace(), newNumaflowControllerDef.GetName())
+		nfcRollout.Status.MarkPending()
+
+		if err = kubernetes.CreateResource(ctx, r.client, newNumaflowControllerDef); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error creating NumaflowController: %v", err)
+		}
+
+		nfcRollout.Status.MarkDeployed(nfcRollout.Generation)
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "create").Observe(time.Since(startTime).Seconds())
+	} else {
+		// Object already exists: perform logic related to updating
+		// The desired definition keeps the existing child's name and instance: a child's instance never changes in
+		// place, so under Progressive a version change results in a separate "trial" child on its own instance.
+		newNumaflowControllerDef, err := r.makeTargetNumaflowControllerDef(ctx, nfcRollout, existingNumaflowControllerDef)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error generating NumaflowController: %v", err)
+		}
+		newNumaflowControllerDef = r.merge(existingNumaflowControllerDef, newNumaflowControllerDef)
+		requeueDelay, err = r.processExistingNumaflowController(ctx, nfcRollout, existingNumaflowControllerDef, newNumaflowControllerDef, syncStartTime)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error processing existing NumaflowController: %v", err)
 		}
 	}
 
-	// Object already exists: perform logic related to updating
-	newNumaflowControllerDef = r.merge(existingNumaflowControllerDef, newNumaflowControllerDef)
-	needsRequeue, err := r.processExistingNumaflowController(ctx, nfcRollout, existingNumaflowControllerDef, newNumaflowControllerDef, syncStartTime)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error processing existing NumaflowController: %v", err)
+	// reflect the live "promoted" and "trial" controller instances in the Status, for dependents to resolve which instance to bind to
+	if err := r.updateControllerInstancesStatus(ctx, nfcRollout); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error updating controller instances Status: %v", err)
 	}
+
 	// if the NumaflowController is being deleted, we need to auto-heal it.
 	if autoHealNumaflowController {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	if needsRequeue {
-		return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+	if requeueDelay > 0 {
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// findPromotedNumaflowController returns the "promoted" NumaflowController child of the Rollout, or nil if there is none.
+// A NumaflowController created before Progressive support carries the Rollout's own name and no upgrade-state label; if one is
+// found, it is adopted as the promoted child by labeling it, keeping its name and (empty) instance so its Pipelines and
+// MonoVertices stay bound to it.
+func (r *NumaflowControllerRolloutReconciler) findPromotedNumaflowController(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout) (*unstructured.Unstructured, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	promotedNumaflowController, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, nfcRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
+	if err != nil {
+		return nil, err
+	}
+	if promotedNumaflowController != nil {
+		return promotedNumaflowController, nil
+	}
+
+	legacyNumaflowController, err := kubernetes.GetResource(ctx, r.client, apiv1.NumaflowControllerGroupVersionKind,
+		k8stypes.NamespacedName{Namespace: nfcRollout.Namespace, Name: nfcRollout.Name})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error getting NumaflowController %s/%s: %w", nfcRollout.Namespace, nfcRollout.Name, err)
+	}
+	if _, labeled := legacyNumaflowController.GetLabels()[common.LabelKeyUpgradeState]; labeled {
+		// it has been through an upgrade already (e.g. it is "recyclable"), so it is not ours to adopt
+		return nil, nil
+	}
+
+	numaLogger.WithValues("numaflowcontroller", legacyNumaflowController.GetName()).Info("adopting pre-existing NumaflowController as the promoted child")
+	if err := kubernetes.SetAndPatchLabels(ctx, r.client, legacyNumaflowController, map[string]string{
+		common.LabelKeyParentRollout: nfcRollout.Name,
+		common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+	}); err != nil {
+		return nil, fmt.Errorf("error labeling pre-existing NumaflowController %s/%s as promoted: %w", legacyNumaflowController.GetNamespace(), legacyNumaflowController.GetName(), err)
+	}
+	return legacyNumaflowController, nil
 }
 
 // GetChildTypeString is used for logging
@@ -304,22 +356,22 @@ func (r *NumaflowControllerRolloutReconciler) merge(existingNumaflowController, 
 
 // process an existing NumaflowController
 // return:
-// - true if needs a requeue
+// - a requeue delay greater than 0 if requeue is needed
 // - error if any
 func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout,
-	existingNumaflowControllerDef, newNumaflowControllerDef *unstructured.Unstructured, syncStartTime time.Time) (bool, error) {
+	existingNumaflowControllerDef, newNumaflowControllerDef *unstructured.Unstructured, syncStartTime time.Time) (time.Duration, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	// update our Status with the NumaflowController's Status
 	err := r.processNumaflowControllerStatus(ctx, nfcRollout, existingNumaflowControllerDef)
 	if err != nil {
-		return false, fmt.Errorf("error determining the NumaflowController status: %v", err)
+		return 0, fmt.Errorf("error determining the NumaflowController status: %v", err)
 	}
 
-	_, numaflowControllerIsUpdating, err := r.isNumaflowControllerUpdating(ctx, nfcRollout, existingNumaflowControllerDef)
+	numaflowControllerIsUpdating, err := r.isNumaflowControllerUpdating(ctx, existingNumaflowControllerDef)
 	if err != nil {
-		return false, fmt.Errorf("error determining if NumaflowController is updating: %v", err)
+		return 0, fmt.Errorf("error determining if NumaflowController is updating: %v", err)
 	}
 
 	// determine if we're trying to update the NumaflowController spec
@@ -327,7 +379,7 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 	// if not, it will require PPND or Progressive
 	numaflowControllerNeedsToUpdate, upgradeStrategyType, _, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newNumaflowControllerDef, existingNumaflowControllerDef, []riders.Rider{}, unstructured.UnstructuredList{})
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 
 	numaLogger.
@@ -354,15 +406,27 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 			r.inProgressStrategyMgr.SetStrategy(ctx, nfcRollout, inProgressStrategy)
 		}
 		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
-			// TODO: Progressive strategy
-			// for now, we just do "Apply" strategy
-			upgradeStrategyType = apiv1.UpgradeStrategyApply
-			//inProgressStrategy = apiv1.UpgradeStrategyProgressive
-			//r.inProgressStrategyMgr.SetStrategy(ctx, nfcRollout, inProgressStrategy)
+			inProgressStrategy = apiv1.UpgradeStrategyProgressive
+			r.inProgressStrategyMgr.SetStrategy(ctx, nfcRollout, inProgressStrategy)
 		}
 		if upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			inProgressStrategy = apiv1.UpgradeStrategyApply
 		}
+	}
+
+	// don't risk out-of-date cache while performing PPND or Progressive strategy - get
+	// the most current version of the NumaflowController just in case
+	if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+		existingNumaflowControllerDef, err = kubernetes.GetLiveResource(ctx, newNumaflowControllerDef, "numaflowcontrollers")
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.WithValues("numaflowControllerDefinition", *newNumaflowControllerDef).Warn("NumaflowController not found.")
+				return 0, nil
+			} else {
+				return 0, fmt.Errorf("error getting NumaflowController for status processing: %v", err)
+			}
+		}
+		newNumaflowControllerDef = r.merge(existingNumaflowControllerDef, newNumaflowControllerDef)
 	}
 
 	switch inProgressStrategy {
@@ -378,28 +442,42 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 		},
 			pipelinerollout.PipelineROReconciler.EnqueuePipeline)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, nfcRollout)
 		} else {
 			// requeue if done with PPND is false
-			return true, nil
+			return common.DefaultRequeueDelay, nil
 		}
+	case apiv1.UpgradeStrategyProgressive:
+		numaLogger.Debug("processing NumaflowController with Progressive")
+
+		// The promoted NumaflowController is never modified: a version change results in a separate "trial" child on
+		// its own instance, which ISBServiceRollouts and MonoVertexRollouts then upgrade onto. Once all of them succeed,
+		// the trial child is promoted and the old one marked "recyclable"; if any of them fail, the trial is discontinued.
+		assessmentComplete, failed, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, nfcRollout, existingNumaflowControllerDef, numaflowControllerNeedsToUpdate, r, r.client)
+		if err != nil {
+			return 0, fmt.Errorf("error processing NumaflowController with progressive: %s", err.Error())
+		}
+		if assessmentComplete && !failed {
+			r.inProgressStrategyMgr.UnsetStrategy(ctx, nfcRollout)
+		}
+		return progressiveRequeueDelay, nil
 	case apiv1.UpgradeStrategyApply:
 		// update NumaflowController
 		err = r.updateNumaflowController(ctx, nfcRollout, newNumaflowControllerDef)
 		if err != nil {
-			return false, fmt.Errorf("error updating NumaflowController, %s: %v", inProgressStrategy, err)
+			return 0, fmt.Errorf("error updating NumaflowController, %s: %v", inProgressStrategy, err)
 		}
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	case apiv1.UpgradeStrategyNoOp:
 		break
 	default:
-		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
+		return 0, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
 
-	return false, nil
+	return 0, nil
 }
 
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowController(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout, newNumaflowControllerDef *unstructured.Unstructured) error {
@@ -440,30 +518,16 @@ func (r *NumaflowControllerRolloutReconciler) updatePauseMetric(nfcRollout *apiv
 }
 
 // return:
-// - whether NumaflowController needs to update
-// - whether it's in the process of being updated
+// - whether the NumaflowController is in the process of being updated
 // - error if any
-func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerUpdating(ctx context.Context, numaflowControllerRollout *apiv1.NumaflowControllerRollout, existingNumaflowControllerDef *unstructured.Unstructured) (bool, bool, error) {
+func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerUpdating(ctx context.Context, existingNumaflowControllerDef *unstructured.Unstructured) (bool, error) {
 
 	numaflowControllerReconciled, _, err := r.isNumaflowControllerReconciled(ctx, existingNumaflowControllerDef)
 	if err != nil {
-		return false, false, err
+		return false, err
 	}
 
-	existingSpecAsMap, found, err := unstructured.NestedMap(existingNumaflowControllerDef.Object, "spec")
-	if err != nil || !found {
-		return false, false, err
-	}
-
-	newSpecAsMap := make(map[string]interface{})
-	err = util.StructToStruct(&numaflowControllerRollout.Spec.Controller, &newSpecAsMap)
-	if err != nil {
-		return false, false, err
-	}
-
-	NumaflowControllerNeedsToUpdate := !util.CompareStructNumTypeAgnostic(existingSpecAsMap, newSpecAsMap)
-
-	return NumaflowControllerNeedsToUpdate, !numaflowControllerReconciled, nil
+	return !numaflowControllerReconciled, nil
 }
 
 // determine if the NumaflowController, including its underlying Deployment, has been reconciled
@@ -582,7 +646,34 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 }
 
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatus(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout) error {
-	return r.client.Status().Update(ctx, nfcRollout)
+	numaLogger := logger.FromContext(ctx)
+
+	err := r.client.Status().Update(ctx, nfcRollout)
+
+	if err != nil && apierrors.IsConflict(err) {
+		// there was a Resource Version conflict error (i.e. an update was made to NumaflowControllerRollout after the version we retrieved), so retry using the latest Resource Version:
+		// get the NumaflowControllerRollout live resource and attach our Status to it.
+		// The reason this is okay is because we are the only ones who write the Status, and because we retrieved the live version of this NumaflowControllerRollout at the beginning of the reconciliation
+		// Therefore, we know that the Status is totally current.
+		liveNFCRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllerRollouts(nfcRollout.Namespace).Get(ctx, nfcRollout.Name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.Debugf("NumaflowControllerRollout not found, %v", err)
+				return nil
+			}
+			return fmt.Errorf("error getting the live NumaflowControllerRollout after attempting to update the NumaflowControllerRollout Status: %w", err)
+		}
+		status := nfcRollout.Status // save off the Status
+		*nfcRollout = *liveNFCRollout
+		numaLogger.Debug("resource version conflict error after getting latest NumaflowControllerRollout Status: try again with latest resource version")
+		nfcRollout.Status = status
+		err = r.client.Status().Update(ctx, nfcRollout)
+		if err != nil {
+			return fmt.Errorf("consecutive errors attempting to update NumaflowControllerRollout Status: %w", err)
+		}
+		return nil
+	}
+	return err
 }
 
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatusToFailed(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout, err error) error {
@@ -598,27 +689,62 @@ func (r *NumaflowControllerRolloutReconciler) ErrorHandler(ctx context.Context, 
 	r.recorder.Eventf(nfcRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
-func generateNewNumaflowControllerDef(nfcRollout *apiv1.NumaflowControllerRollout) (*unstructured.Unstructured, error) {
+// makeTargetNumaflowControllerDef builds the "promoted" NumaflowController definition.
+// If existingPromoted is nil, this is the first child of the Rollout: it gets a new name and the instance seeded by
+// Spec.Controller.InstanceID. Otherwise, it keeps the existing child's name and instance: a child's instance never
+// changes in place since the Pipelines and MonoVertices bound to it cannot follow it.
+func (r *NumaflowControllerRolloutReconciler) makeTargetNumaflowControllerDef(
+	ctx context.Context,
+	nfcRollout *apiv1.NumaflowControllerRollout,
+	existingPromoted *unstructured.Unstructured,
+) (*unstructured.Unstructured, error) {
+	if existingPromoted != nil {
+		instanceID, _, _ := unstructured.NestedString(existingPromoted.Object, "spec", "instanceID")
+		return makeNumaflowControllerDefinition(nfcRollout, existingPromoted.GetName(), instanceID, common.LabelValueUpgradePromoted)
+	}
+
+	name, err := ctlrcommon.GetChildName(ctx, nfcRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
+	if err != nil {
+		return nil, err
+	}
+	return makeNumaflowControllerDefinition(nfcRollout, name, nfcRollout.Spec.Controller.InstanceID, common.LabelValueUpgradePromoted)
+}
+
+// makeNumaflowControllerDefinition builds a NumaflowController child of the Rollout with the given name, instance and upgrade state
+func makeNumaflowControllerDefinition(
+	nfcRollout *apiv1.NumaflowControllerRollout,
+	name string,
+	instanceID string,
+	upgradeState common.UpgradeState,
+) (*unstructured.Unstructured, error) {
 	newNumaflowControllerDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
-	newNumaflowControllerDef.SetName(nfcRollout.Name)
+	newNumaflowControllerDef.SetGroupVersionKind(apiv1.NumaflowControllerGroupVersionKind)
+	newNumaflowControllerDef.SetName(name)
 	newNumaflowControllerDef.SetNamespace(nfcRollout.Namespace)
 	newNumaflowControllerDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(nfcRollout.GetObjectMeta(), apiv1.NumaflowControllerRolloutGroupVersionKind)})
-	newNumaflowControllerDef.SetGroupVersionKind(apiv1.NumaflowControllerGroupVersionKind)
 
-	// Update spec of NumaflowController to match the NumaflowControllerRollout spec
+	labels := map[string]string{
+		common.LabelKeyParentRollout: nfcRollout.Name,
+		common.LabelKeyUpgradeState:  string(upgradeState),
+	}
+	if instanceID != "" {
+		labels[common.LabelKeyControllerInstanceID] = instanceID
+	}
+	newNumaflowControllerDef.SetLabels(labels)
+
+	// Update spec of NumaflowController to match the NumaflowControllerRollout spec, except for the instance which is bound to the child
 	var numaflowControllerSpec map[string]interface{}
 	if err := util.StructToStruct(nfcRollout.Spec.Controller, &numaflowControllerSpec); err != nil {
 		return nil, err
 	}
+	if instanceID != "" {
+		numaflowControllerSpec["instanceID"] = instanceID
+	} else {
+		delete(numaflowControllerSpec, "instanceID")
+	}
 	newNumaflowControllerDef.Object["spec"] = numaflowControllerSpec
 
 	return newNumaflowControllerDef, nil
-}
-
-func (r *NumaflowControllerRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, nc *unstructured.Unstructured) ([]riders.Rider, error) {
-	desiredRiders := []riders.Rider{}
-	// TODO
-	return desiredRiders, nil
 }
 
 // areDependentResourcesDeleted checks if dependent resources are deleted.

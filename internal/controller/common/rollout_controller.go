@@ -239,10 +239,10 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 // If no NumaflowControllerRollout exists yet in the namespace, this returns empty IDs rather than an error: InstanceID
 // is optional and today is commonly unset, so the absence of a controller rollout is not itself an error case
 // for Pipeline/MonoVertex reconciliation.
-// The promoted instance falls back to the legacy spec field while ControllerInstances is not populated,
-// preserving the existing single-controller behavior.
-// TODO: once NumaflowControllerRollout manages children with promoted/trial upgrade-state labels, resolve the
-// children directly and read their InstanceIDs instead of using Status.ControllerInstances / the legacy spec field.
+// Status.ControllerInstances is populated by the NumaflowControllerRollout reconciler from its live promoted/trial
+// children. The promoted instance falls back to the spec field only while the Status has not been populated yet
+// (e.g. the Rollout was just created), preserving the existing single-controller behavior. Once a promoted child is
+// listed, its InstanceID is authoritative even when empty: a child's instance never changes in place.
 func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace string) (string, string, error) {
 	var nfcRolloutList apiv1.NumaflowControllerRolloutList
 	if err := c.List(ctx, &nfcRolloutList, &client.ListOptions{Namespace: namespace}); err != nil {
@@ -271,7 +271,7 @@ func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace st
 	}
 
 	promotedInstanceID := instanceIDs[common.LabelValueUpgradePromoted]
-	if promotedInstanceID == "" {
+	if !foundStates[common.LabelValueUpgradePromoted] {
 		promotedInstanceID = nfcRollout.Spec.Controller.InstanceID
 	}
 	trialInstanceID := instanceIDs[common.LabelValueUpgradeTrial]

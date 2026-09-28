@@ -28,6 +28,8 @@ data:
           schedule: "60,360,60,10"
         - kind: InterstepBufferService
           schedule: "0,0,0,10"
+        - kind: NumaflowController
+          schedule: "0,0,0,10"
 
       # We will stop waiting if any AnalysisRun is still Running after this number of seconds
       analysisRunTimeout: 1200

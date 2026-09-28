@@ -18,14 +18,18 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 type Controller struct {
-	// NOTE: keeping the instanceID also in the NumaflowControllerRollout in case users want to
-	// create multiple Numaflow controllers within the same namespace
+	// InstanceID seeds the instance of the first NumaflowController child created for this Rollout.
+	// Once a child exists, its instance is fixed for its lifetime: renaming the underlying Deployment would
+	// orphan every Pipeline and MonoVertex bound to it, since Numaflow does not allow their instance annotation
+	// to change. Children created by a Progressive upgrade derive their own instance (see ControllerInstanceRef).
 	InstanceID string `json:"instanceID,omitempty"`
 	Version    string `json:"version"`
 }
@@ -53,8 +57,32 @@ type NumaflowControllerRolloutStatus struct {
 	Status             `json:",inline"`
 	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
 
+	// NameCount is used as a suffix for the name of the managed NumaflowController children, to uniquely
+	// identify each child.
+	NameCount *int32 `json:"nameCount,omitempty"`
+
+	// ProgressiveStatus stores fields related to the Progressive strategy
+	ProgressiveStatus NumaflowControllerProgressiveStatus `json:"progressiveStatus,omitempty"`
+
 	// ControllerInstances holds one entry for each live NumaflowController child, whether promoted or trial.
 	ControllerInstances []ControllerInstanceRef `json:"controllerInstances,omitempty"`
+}
+
+type NumaflowControllerProgressiveStatus struct {
+	// UpgradingNumaflowControllerStatus represents either the current or otherwise the most recent "upgrading" NumaflowController
+	UpgradingNumaflowControllerStatus *UpgradingNumaflowControllerStatus `json:"upgradingNumaflowControllerStatus,omitempty"`
+	// PromotedNumaflowControllerStatus stores information regarding the current "promoted" NumaflowController
+	PromotedNumaflowControllerStatus *PromotedNumaflowControllerStatus `json:"promotedNumaflowControllerStatus,omitempty"`
+}
+
+// UpgradingNumaflowControllerStatus describes the status of an upgrading child
+type UpgradingNumaflowControllerStatus struct {
+	UpgradingChildStatus `json:",inline"`
+}
+
+// PromotedNumaflowControllerStatus describes the status of a promoted child
+type PromotedNumaflowControllerStatus struct {
+	PromotedChildStatus `json:",inline"`
 }
 
 // ControllerInstanceRef represents a live NumaflowController child, either promoted or trial.
@@ -63,7 +91,10 @@ type ControllerInstanceRef struct {
 	Name string `json:"name"`
 
 	// InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
-	// controller instance.
+	// controller instance. A trial child derives it as "<version>-<nameCount>" (with the version reduced to
+	// lowercase letters, digits, and dashes so it stays valid inside Service names), so re-trialing the same
+	// version after a failed trial still yields a distinct instance. The controller that existed before
+	// Progressive was introduced keeps an empty instance.
 	InstanceID string `json:"instanceID"`
 
 	Version string `json:"version"`
@@ -102,6 +133,110 @@ type NumaflowControllerRolloutList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []NumaflowControllerRollout `json:"items"`
+}
+
+func (nfcRollout *NumaflowControllerRollout) GetRolloutGVR() metav1.GroupVersionResource {
+	return metav1.GroupVersionResource{
+		Group:    NumaflowControllerRolloutGroupVersionResource.Group,
+		Version:  NumaflowControllerRolloutGroupVersionResource.Version,
+		Resource: NumaflowControllerRolloutGroupVersionResource.Resource,
+	}
+}
+
+func (nfcRollout *NumaflowControllerRollout) GetRolloutGVK() schema.GroupVersionKind {
+	return NumaflowControllerRolloutGroupVersionKind
+}
+
+func (nfcRollout *NumaflowControllerRollout) GetChildGVR() metav1.GroupVersionResource {
+	return metav1.GroupVersionResource{
+		Group:    NumaflowControllerGroupVersionResource.Group,
+		Version:  NumaflowControllerGroupVersionResource.Version,
+		Resource: NumaflowControllerGroupVersionResource.Resource,
+	}
+}
+
+func (nfcRollout *NumaflowControllerRollout) GetChildGVK() schema.GroupVersionKind {
+	return NumaflowControllerGroupVersionKind
+}
+
+func (nfcRollout *NumaflowControllerRollout) GetRolloutObjectMeta() *metav1.ObjectMeta {
+	return &nfcRollout.ObjectMeta
+}
+
+func (nfcRollout *NumaflowControllerRollout) GetRolloutStatus() *Status {
+	return &nfcRollout.Status.Status
+}
+
+// GetProgressiveStrategy is a function of the progressiveRolloutObject.
+// The controller only exposes an assessment schedule; force-promotion goes through the child's
+// force-promote label, so ForcePromote is always false here.
+func (nfcRollout *NumaflowControllerRollout) GetProgressiveStrategy() ProgressiveStrategy {
+	if nfcRollout.Spec.Strategy == nil || nfcRollout.Spec.Strategy.Progressive == nil {
+		return ProgressiveStrategy{}
+	}
+	return ProgressiveStrategy{AssessmentSchedule: nfcRollout.Spec.Strategy.Progressive.AssessmentSchedule}
+}
+
+// GetUpgradingChildStatus is a function of the progressiveRolloutObject
+func (nfcRollout *NumaflowControllerRollout) GetUpgradingChildStatus() *UpgradingChildStatus {
+	if nfcRollout.Status.ProgressiveStatus.UpgradingNumaflowControllerStatus == nil {
+		return nil
+	}
+	return &nfcRollout.Status.ProgressiveStatus.UpgradingNumaflowControllerStatus.UpgradingChildStatus
+}
+
+// GetPromotedChildStatus is a function of the progressiveRolloutObject
+func (nfcRollout *NumaflowControllerRollout) GetPromotedChildStatus() *PromotedChildStatus {
+	if nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus == nil {
+		return nil
+	}
+	return &nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus.PromotedChildStatus
+}
+
+// ResetUpgradingChildStatus is a function of the progressiveRolloutObject
+// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
+func (nfcRollout *NumaflowControllerRollout) ResetUpgradingChildStatus(upgradingChild *unstructured.Unstructured) error {
+	nfcRollout.Status.ProgressiveStatus.UpgradingNumaflowControllerStatus = &UpgradingNumaflowControllerStatus{
+		UpgradingChildStatus: UpgradingChildStatus{
+			Name:                   upgradingChild.GetName(),
+			BasicAssessmentEndTime: nil,
+			AssessmentResult:       AssessmentResultUnknown,
+		},
+	}
+	return nil
+}
+
+// SetUpgradingChildStatus is a function of the progressiveRolloutObject
+func (nfcRollout *NumaflowControllerRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) {
+	if nfcRollout.Status.ProgressiveStatus.UpgradingNumaflowControllerStatus == nil {
+		nfcRollout.Status.ProgressiveStatus.UpgradingNumaflowControllerStatus = &UpgradingNumaflowControllerStatus{}
+	}
+	nfcRollout.Status.ProgressiveStatus.UpgradingNumaflowControllerStatus.UpgradingChildStatus = *status.DeepCopy()
+}
+
+// ResetPromotedChildStatus is a function of the progressiveRolloutObject
+// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
+func (nfcRollout *NumaflowControllerRollout) ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error {
+	nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus = &PromotedNumaflowControllerStatus{
+		PromotedChildStatus: PromotedChildStatus{
+			Name: promotedChild.GetName(),
+		},
+	}
+	return nil
+}
+
+// SetPromotedChildStatus is a function of the progressiveRolloutObject
+func (nfcRollout *NumaflowControllerRollout) SetPromotedChildStatus(status *PromotedChildStatus) {
+	if nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus == nil {
+		nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus = &PromotedNumaflowControllerStatus{}
+	}
+	nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus.PromotedChildStatus = *status.DeepCopy()
+}
+
+// GetChildMetadata is a function of the progressiveRolloutObject. The Rollout carries no user-defined
+// metadata for its NumaflowController children.
+func (nfcRollout *NumaflowControllerRollout) GetChildMetadata() Metadata {
+	return Metadata{}
 }
 
 func init() {
