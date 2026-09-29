@@ -177,6 +177,22 @@ func CreateNumaflowControllerInK8S(ctx context.Context, t *testing.T, numaplaneC
 	assert.NoError(t, err)
 }
 
+// CreateTestNumaflowController returns a NumaflowController child of the NumaflowControllerRollout rolloutName, labeled with
+// upgradeState and bound to instanceID
+func CreateTestNumaflowController(namespace string, rolloutName string, name string, upgradeState common.UpgradeState, instanceID string) *apiv1.NumaflowController {
+	return &apiv1.NumaflowController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				common.LabelKeyParentRollout: rolloutName,
+				common.LabelKeyUpgradeState:  string(upgradeState),
+			},
+		},
+		Spec: apiv1.NumaflowControllerSpec{InstanceID: instanceID, Version: "1.2.3"},
+	}
+}
+
 func CreateDeploymentInK8S(ctx context.Context, t *testing.T, k8sClientSet *k8sclientgo.Clientset, deployment *appsv1.Deployment) {
 	resultDeployment, err := k8sClientSet.AppsV1().Deployments(DefaultTestNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 	assert.NoError(t, err)

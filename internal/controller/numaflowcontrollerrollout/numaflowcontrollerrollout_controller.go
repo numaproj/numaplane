@@ -275,7 +275,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		}
 	}
 
-	// reflect the live "promoted" and "trial" controller instances in the Status, for dependents to resolve which instance to bind to
+	// reflect the live "promoted" and "trial" controller instances in the Status
 	if err := r.updateControllerInstancesStatus(ctx, nfcRollout); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error updating controller instances Status: %v", err)
 	}

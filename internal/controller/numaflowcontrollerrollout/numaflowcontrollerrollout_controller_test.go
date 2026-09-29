@@ -659,9 +659,8 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 				assert.Equal(t, expected.instanceID, nfc.Labels[common.LabelKeyControllerInstanceID], "instance label of %q", nfc.Name)
 			}
 
-			// Check Status.ControllerInstances and how dependents resolve the instances from it
+			// Check Status.ControllerInstances, and how dependents resolve the instances from the children's labels
 			assert.Equal(t, tc.expectedControllerInstances, nfcRollout.Status.ControllerInstances)
-			assert.NoError(t, r.updateNumaflowControllerRolloutStatus(ctx, nfcRollout))
 			promotedInstanceID, trialInstanceID, err := ctlrcommon.GetControllerInstanceIDs(ctx, client, ctlrcommon.DefaultTestNamespace)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedControllerInstanceIDs, [2]string{promotedInstanceID, trialInstanceID})

@@ -469,7 +469,8 @@ func (r *NumaflowControllerRolloutReconciler) GetTemplateArguments(child *unstru
 }
 
 // updateControllerInstancesStatus reflects the live promoted and trial NumaflowController children in
-// Status.ControllerInstances. Dependents resolve the controller instance to bind to from this list.
+// Status.ControllerInstances. This is informational: dependents resolve the controller instance to bind to from the
+// children's upgrade-state labels (see ctlrcommon.GetControllerInstanceIDs).
 // ReferencingInterStepBufferServices and ReferencingMonovertices are consulted by Recycle only (#1021).
 func (r *NumaflowControllerRolloutReconciler) updateControllerInstancesStatus(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout) error {
 	children, err := kubernetes.ListResources(ctx, r.client, apiv1.NumaflowControllerGroupVersionKind, nfcRollout.Namespace,
