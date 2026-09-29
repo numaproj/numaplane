@@ -929,13 +929,13 @@ func (r *ISBServiceRolloutReconciler) ErrorHandler(ctx context.Context, isbServi
 }
 
 // makeTargetISBServiceDef builds the promoted-slot ISBService definition.
-// useDesiredController is false for the initial promoted child, which stays on the promoted
-// controller. It is true when comparing an existing promoted child with desired state: the trial
-// controller ID, when set, is the difference Progressive uses to create a separate trial child.
+// requireProgressiveNumaflowController is false for the initial promoted child, which stays on the
+// promoted controller. It is true when comparing an existing promoted child with desired state: the
+// trial controller ID, when set, is the difference Progressive uses to create a separate trial child.
 func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	ctx context.Context,
 	isbServiceRollout *apiv1.ISBServiceRollout,
-	useDesiredController bool,
+	requireProgressiveNumaflowController bool,
 ) (*unstructured.Unstructured, error) {
 	// if a "promoted" InterstepBufferService exists, gets its name; otherwise create a new name
 	isbsvcName, err := ctlrcommon.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
@@ -951,7 +951,7 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
 	resolveControllerInstanceID := ctlrcommon.GetPromotedControllerInstanceID
-	if useDesiredController {
+	if requireProgressiveNumaflowController {
 		resolveControllerInstanceID = ctlrcommon.GetDesiredControllerInstanceID
 	}
 	controllerInstanceID, err := resolveControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
