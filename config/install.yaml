@@ -1034,13 +1034,6 @@ spec:
             properties:
               controller:
                 properties:
-                  instanceID:
-                    description: |-
-                      InstanceID seeds the instance of the first NumaflowController child created for this Rollout.
-                      Once a child exists, its instance is fixed for its lifetime: renaming the underlying Deployment would
-                      orphan every Pipeline and MonoVertex bound to it, since Numaflow does not allow their instance annotation
-                      to change. Children created by a Progressive upgrade derive their own instance (see ControllerInstanceRef).
-                    type: string
                   version:
                     type: string
                 required:

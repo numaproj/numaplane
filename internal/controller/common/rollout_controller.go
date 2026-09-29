@@ -236,13 +236,11 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 }
 
 // GetControllerInstanceIDs finds the promoted and trial controller instances from one consistent status snapshot.
-// If no NumaflowControllerRollout exists yet in the namespace, this returns empty IDs rather than an error: InstanceID
-// is optional and today is commonly unset, so the absence of a controller rollout is not itself an error case
-// for Pipeline/MonoVertex reconciliation.
+// If no NumaflowControllerRollout exists yet in the namespace, this returns empty IDs rather than an error: the
+// absence of a controller rollout is not itself an error case for Pipeline/MonoVertex reconciliation.
 // Status.ControllerInstances is populated by the NumaflowControllerRollout reconciler from its live promoted/trial
-// children. The promoted instance falls back to the spec field only while the Status has not been populated yet
-// (e.g. the Rollout was just created), preserving the existing single-controller behavior. Once a promoted child is
-// listed, its InstanceID is authoritative even when empty: a child's instance never changes in place.
+// children. Until then (e.g. the Rollout was just created), the promoted instance is empty, which is the instance
+// of the Rollout's first child.
 func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace string) (string, string, error) {
 	var nfcRolloutList apiv1.NumaflowControllerRolloutList
 	if err := c.List(ctx, &nfcRolloutList, &client.ListOptions{Namespace: namespace}); err != nil {
@@ -271,9 +269,6 @@ func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace st
 	}
 
 	promotedInstanceID := instanceIDs[common.LabelValueUpgradePromoted]
-	if !foundStates[common.LabelValueUpgradePromoted] {
-		promotedInstanceID = nfcRollout.Spec.Controller.InstanceID
-	}
 	trialInstanceID := instanceIDs[common.LabelValueUpgradeTrial]
 	for _, instanceID := range []string{promotedInstanceID, trialInstanceID} {
 		if instanceID == "" {

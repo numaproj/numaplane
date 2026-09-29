@@ -42,26 +42,20 @@ func TestGetControllerInstanceID(t *testing.T) {
 		return builder
 	}
 
-	t.Run("preserves legacy promoted instance", func(t *testing.T) {
+	t.Run("returns empty promoted instance before status is populated", func(t *testing.T) {
 		rollout := &apiv1.NumaflowControllerRollout{
 			ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: "test"},
-			Spec: apiv1.NumaflowControllerRolloutSpec{
-				Controller: apiv1.Controller{InstanceID: "legacy"},
-			},
 		}
 
 		instanceID, err := GetPromotedControllerInstanceID(context.Background(), newClient(rollout).Build(), "test")
 
 		require.NoError(t, err)
-		assert.Equal(t, "legacy", instanceID)
+		assert.Equal(t, "", instanceID)
 	})
 
-	t.Run("prefers promoted status instance", func(t *testing.T) {
+	t.Run("uses promoted status instance", func(t *testing.T) {
 		rollout := &apiv1.NumaflowControllerRollout{
 			ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: "test"},
-			Spec: apiv1.NumaflowControllerRolloutSpec{
-				Controller: apiv1.Controller{InstanceID: "legacy"},
-			},
 			Status: apiv1.NumaflowControllerRolloutStatus{
 				ControllerInstances: []apiv1.ControllerInstanceRef{
 					{InstanceID: "promoted-1", State: string(numaplanecommon.LabelValueUpgradePromoted)},
@@ -73,26 +67,6 @@ func TestGetControllerInstanceID(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "promoted-1", instanceID)
-	})
-
-	t.Run("keeps empty promoted status instance over spec", func(t *testing.T) {
-		// the promoted child predates Progressive and runs on the empty instance; changing the spec later must not rebind dependents
-		rollout := &apiv1.NumaflowControllerRollout{
-			ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: "test"},
-			Spec: apiv1.NumaflowControllerRolloutSpec{
-				Controller: apiv1.Controller{InstanceID: "legacy"},
-			},
-			Status: apiv1.NumaflowControllerRolloutStatus{
-				ControllerInstances: []apiv1.ControllerInstanceRef{
-					{Name: "controller", InstanceID: "", State: string(numaplanecommon.LabelValueUpgradePromoted)},
-				},
-			},
-		}
-
-		instanceID, err := GetPromotedControllerInstanceID(context.Background(), newClient(rollout).Build(), "test")
-
-		require.NoError(t, err)
-		assert.Equal(t, "", instanceID)
 	})
 
 	t.Run("selects trial as desired instance", func(t *testing.T) {
@@ -115,8 +89,10 @@ func TestGetControllerInstanceID(t *testing.T) {
 	t.Run("rejects instance IDs that cannot be labels", func(t *testing.T) {
 		rollout := &apiv1.NumaflowControllerRollout{
 			ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: "test"},
-			Spec: apiv1.NumaflowControllerRolloutSpec{
-				Controller: apiv1.Controller{InstanceID: "invalid/id"},
+			Status: apiv1.NumaflowControllerRolloutStatus{
+				ControllerInstances: []apiv1.ControllerInstanceRef{
+					{InstanceID: "invalid/id", State: string(numaplanecommon.LabelValueUpgradePromoted)},
+				},
 			},
 		}
 

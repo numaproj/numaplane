@@ -26,12 +26,7 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 type Controller struct {
-	// InstanceID seeds the instance of the first NumaflowController child created for this Rollout.
-	// Once a child exists, its instance is fixed for its lifetime: renaming the underlying Deployment would
-	// orphan every Pipeline and MonoVertex bound to it, since Numaflow does not allow their instance annotation
-	// to change. Children created by a Progressive upgrade derive their own instance (see ControllerInstanceRef).
-	InstanceID string `json:"instanceID,omitempty"`
-	Version    string `json:"version"`
+	Version string `json:"version"`
 }
 
 // NumaflowControllerRolloutSpec defines the desired state of NumaflowControllerRollout

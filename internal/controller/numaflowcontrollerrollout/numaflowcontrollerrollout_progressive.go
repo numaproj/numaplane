@@ -60,7 +60,7 @@ const maxControllerInstanceIDLength = validation.DNS1035LabelMaxLength - len("nu
 // ("<rolloutName>-<nameCount>") running version. The result is "<sanitized version>-<nameCount>", so a later
 // trial of the same version, after a failed one was recycled, still gets a distinct instance.
 // It returns "" when childName does not end in "-<number>": that is the name of the controller which
-// predates Progressive, and it keeps its empty instance (see Controller.InstanceID).
+// predates Progressive, and it keeps its empty instance.
 func DeriveControllerInstanceID(version string, childName string) string {
 	index := strings.LastIndex(childName, "-")
 	if index <= 0 || index == len(childName)-1 {

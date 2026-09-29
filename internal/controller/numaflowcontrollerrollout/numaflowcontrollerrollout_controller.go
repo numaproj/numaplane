@@ -690,9 +690,9 @@ func (r *NumaflowControllerRolloutReconciler) ErrorHandler(ctx context.Context, 
 }
 
 // makeTargetNumaflowControllerDef builds the "promoted" NumaflowController definition.
-// If existingPromoted is nil, this is the first child of the Rollout: it gets a new name and the instance seeded by
-// Spec.Controller.InstanceID. Otherwise, it keeps the existing child's name and instance: a child's instance never
-// changes in place since the Pipelines and MonoVertices bound to it cannot follow it.
+// If existingPromoted is nil, this is the first child of the Rollout: it gets a new name and the empty instance.
+// Otherwise, it keeps the existing child's name and instance: a child's instance never changes in place since the
+// Pipelines and MonoVertices bound to it cannot follow it.
 func (r *NumaflowControllerRolloutReconciler) makeTargetNumaflowControllerDef(
 	ctx context.Context,
 	nfcRollout *apiv1.NumaflowControllerRollout,
@@ -707,7 +707,7 @@ func (r *NumaflowControllerRolloutReconciler) makeTargetNumaflowControllerDef(
 	if err != nil {
 		return nil, err
 	}
-	return makeNumaflowControllerDefinition(nfcRollout, name, nfcRollout.Spec.Controller.InstanceID, common.LabelValueUpgradePromoted)
+	return makeNumaflowControllerDefinition(nfcRollout, name, "", common.LabelValueUpgradePromoted)
 }
 
 // makeNumaflowControllerDefinition builds a NumaflowController child of the Rollout with the given name, instance and upgrade state
