@@ -33,7 +33,7 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-func TestGetTargetPipelineDependenciesConsistencyGating(t *testing.T) {
+func TestGetTargetPipelineDependencies(t *testing.T) {
 	const (
 		namespace          = "test"
 		isbsvcRolloutName  = "default"
@@ -55,7 +55,7 @@ func TestGetTargetPipelineDependenciesConsistencyGating(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: isbsvcRolloutName, Namespace: namespace},
 	}
 	newISBSvc := func(name string, state common.UpgradeState, instanceID string) *numaflowv1.InterStepBufferService {
-		return &numaflowv1.InterStepBufferService{
+		isbsvc := &numaflowv1.InterStepBufferService{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: namespace,
@@ -63,103 +63,62 @@ func TestGetTargetPipelineDependenciesConsistencyGating(t *testing.T) {
 					common.LabelKeyParentRollout: isbsvcRolloutName,
 					common.LabelKeyUpgradeState:  string(state),
 				},
-				Annotations: map[string]string{
-					common.AnnotationKeyNumaflowInstanceID: instanceID,
-				},
 			},
 		}
+		if instanceID != "" {
+			isbsvc.Annotations = map[string]string{common.AnnotationKeyNumaflowInstanceID: instanceID}
+		}
+		return isbsvc
 	}
 
 	tests := []struct {
-		name                     string
-		hasTrialController       bool
-		hasTrialISBSvc           bool
-		trialISBSvcInstanceID    string
-		promotedISBSvcInstanceID string
-		expectedISBSvcName       string
-		expectedControllerID     string
+		name                 string
+		isbServices          []client.Object
+		expectedISBSvcName   string
+		expectedControllerID string
 	}{
 		{
-			name:                     "selects trial ISBService with its own controller while controller trial is ahead",
-			hasTrialController:       true,
-			hasTrialISBSvc:           true,
-			trialISBSvcInstanceID:    promotedInstanceID,
-			promotedISBSvcInstanceID: promotedInstanceID,
-			expectedISBSvcName:       "default-1",
-			expectedControllerID:     promotedInstanceID,
+			name:                 "uses promoted ISBService and its controller instance",
+			isbServices:          []client.Object{newISBSvc("default-0", common.LabelValueUpgradePromoted, promotedInstanceID)},
+			expectedISBSvcName:   "default-0",
+			expectedControllerID: promotedInstanceID,
 		},
 		{
-			name:                     "selects trial ISBService with promoted controller for ISBService-only upgrade",
-			hasTrialController:       false,
-			hasTrialISBSvc:           true,
-			trialISBSvcInstanceID:    promotedInstanceID,
-			promotedISBSvcInstanceID: promotedInstanceID,
-			expectedISBSvcName:       "default-1",
-			expectedControllerID:     promotedInstanceID,
+			name: "prefers trial ISBService and follows its controller instance",
+			isbServices: []client.Object{
+				newISBSvc("default-0", common.LabelValueUpgradePromoted, promotedInstanceID),
+				newISBSvc("default-1", common.LabelValueUpgradeTrial, trialInstanceID),
+			},
+			expectedISBSvcName:   "default-1",
+			expectedControllerID: trialInstanceID,
 		},
 		{
-			name:                     "selects trial pair after both lookups agree",
-			hasTrialController:       true,
-			hasTrialISBSvc:           true,
-			trialISBSvcInstanceID:    trialInstanceID,
-			promotedISBSvcInstanceID: promotedInstanceID,
-			expectedISBSvcName:       "default-1",
-			expectedControllerID:     trialInstanceID,
+			name: "uses trial ISBService on the promoted controller instance for an ISBService-only upgrade",
+			isbServices: []client.Object{
+				newISBSvc("default-0", common.LabelValueUpgradePromoted, promotedInstanceID),
+				newISBSvc("default-1", common.LabelValueUpgradeTrial, promotedInstanceID),
+			},
+			expectedISBSvcName:   "default-1",
+			expectedControllerID: promotedInstanceID,
 		},
 		{
-			name:                     "follows trial ISBService controller after the controller trial is gone",
-			hasTrialController:       false,
-			hasTrialISBSvc:           true,
-			trialISBSvcInstanceID:    trialInstanceID,
-			promotedISBSvcInstanceID: promotedInstanceID,
-			expectedISBSvcName:       "default-1",
-			expectedControllerID:     trialInstanceID,
+			name:                 "uses the default controller instance when the ISBService has no instance annotation",
+			isbServices:          []client.Object{newISBSvc("default-0", common.LabelValueUpgradePromoted, "")},
+			expectedISBSvcName:   "default-0",
+			expectedControllerID: "",
 		},
 		{
-			name:                     "selects promoted pair while controller trial has no trial ISBService yet",
-			hasTrialController:       true,
-			hasTrialISBSvc:           false,
-			promotedISBSvcInstanceID: promotedInstanceID,
-			expectedISBSvcName:       "default-0",
-			expectedControllerID:     promotedInstanceID,
-		},
-		{
-			name:                     "resolves nothing when promoted ISBService is not on the promoted controller",
-			hasTrialController:       true,
-			hasTrialISBSvc:           false,
-			promotedISBSvcInstanceID: trialInstanceID,
+			name:        "resolves nothing when there is no ISBService",
+			isbServices: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			controllerInstances := []apiv1.ControllerInstanceRef{
-				{InstanceID: promotedInstanceID, State: string(common.LabelValueUpgradePromoted)},
-			}
-			if tt.hasTrialController {
-				controllerInstances = append(controllerInstances, apiv1.ControllerInstanceRef{
-					InstanceID: trialInstanceID,
-					State:      string(common.LabelValueUpgradeTrial),
-				})
-			}
-			controllerRollout := &apiv1.NumaflowControllerRollout{
-				ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: namespace},
-				Status: apiv1.NumaflowControllerRolloutStatus{
-					ControllerInstances: controllerInstances,
-				},
-			}
-
 			scheme := runtime.NewScheme()
 			require.NoError(t, apiv1.AddToScheme(scheme))
 			require.NoError(t, numaflowv1.AddToScheme(scheme))
-			objects := []client.Object{
-				isbsvcRollout,
-				controllerRollout,
-				newISBSvc("default-0", common.LabelValueUpgradePromoted, tt.promotedISBSvcInstanceID),
-			}
-			if tt.hasTrialISBSvc {
-				objects = append(objects, newISBSvc("default-1", common.LabelValueUpgradeTrial, tt.trialISBSvcInstanceID))
-			}
+			objects := append([]client.Object{isbsvcRollout}, tt.isbServices...)
 			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			reconciler := &PipelineRolloutReconciler{client: client}
 
@@ -174,96 +133,6 @@ func TestGetTargetPipelineDependenciesConsistencyGating(t *testing.T) {
 			require.NotNil(t, isbsvc)
 			assert.Equal(t, tt.expectedISBSvcName, isbsvc.GetName())
 			assert.Equal(t, tt.expectedControllerID, controllerInstanceID)
-		})
-	}
-}
-
-func TestGetTargetPipelineDependenciesWithoutControllerBinding(t *testing.T) {
-	const (
-		namespace         = "test"
-		isbsvcRolloutName = "default"
-		rolloutInstanceID = "rollout-supplied"
-	)
-
-	pipelineSpec, err := json.Marshal(numaflowv1.PipelineSpec{InterStepBufferServiceName: isbsvcRolloutName})
-	require.NoError(t, err)
-	pipelineRollout := &apiv1.PipelineRollout{
-		ObjectMeta: metav1.ObjectMeta{Name: "pipeline", Namespace: namespace},
-		Spec: apiv1.PipelineRolloutSpec{
-			Pipeline: apiv1.Pipeline{
-				Spec: runtime.RawExtension{Raw: pipelineSpec},
-			},
-		},
-	}
-	isbsvcRollout := &apiv1.ISBServiceRollout{
-		ObjectMeta: metav1.ObjectMeta{Name: isbsvcRolloutName, Namespace: namespace},
-	}
-	newISBSvc := func(name string, state common.UpgradeState) *numaflowv1.InterStepBufferService {
-		return &numaflowv1.InterStepBufferService{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-				Labels: map[string]string{
-					common.LabelKeyParentRollout: isbsvcRolloutName,
-					common.LabelKeyUpgradeState:  string(state),
-				},
-				Annotations: map[string]string{
-					common.AnnotationKeyNumaflowInstanceID: rolloutInstanceID,
-				},
-			},
-		}
-	}
-	unsetController := &apiv1.NumaflowControllerRollout{
-		ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: namespace},
-	}
-
-	tests := []struct {
-		name               string
-		objects            []client.Object
-		expectedISBSvcName string
-	}{
-		{
-			name: "uses promoted ISBService effective ID when no controller rollout exists",
-			objects: []client.Object{
-				isbsvcRollout,
-				newISBSvc("default-0", common.LabelValueUpgradePromoted),
-			},
-			expectedISBSvcName: "default-0",
-		},
-		{
-			name: "uses trial ISBService effective ID for an ISBService-only upgrade",
-			objects: []client.Object{
-				isbsvcRollout,
-				newISBSvc("default-0", common.LabelValueUpgradePromoted),
-				newISBSvc("default-1", common.LabelValueUpgradeTrial),
-			},
-			expectedISBSvcName: "default-1",
-		},
-		{
-			name: "uses promoted ISBService effective ID when controller instanceID is unset",
-			objects: []client.Object{
-				isbsvcRollout,
-				unsetController,
-				newISBSvc("default-0", common.LabelValueUpgradePromoted),
-			},
-			expectedISBSvcName: "default-0",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			require.NoError(t, apiv1.AddToScheme(scheme))
-			require.NoError(t, numaflowv1.AddToScheme(scheme))
-			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-			reconciler := &PipelineRolloutReconciler{client: client}
-
-			isbsvc, controllerInstanceID, err := reconciler.getTargetPipelineDependencies(context.Background(), pipelineRollout)
-
-			require.NoError(t, err)
-			require.NotNil(t, isbsvc)
-			assert.Equal(t, tt.expectedISBSvcName, isbsvc.GetName())
-			assert.Equal(t, rolloutInstanceID, controllerInstanceID)
 		})
 	}
 }

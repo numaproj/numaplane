@@ -37,7 +37,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 		return nil, err
 	}
 	if isbsvc == nil {
-		return nil, fmt.Errorf("no consistent ISBService and controller instance pairing found for PipelineRollout %s/%s", pipelineRollout.Namespace, pipelineRollout.Name)
+		return nil, fmt.Errorf("no ISBService found for PipelineRollout %s/%s", pipelineRollout.Namespace, pipelineRollout.Name)
 	}
 
 	pipeline, err := r.makePipelineDefinition(pipelineRollout, name, isbsvc.GetName(), metadata, &controllerInstanceID)

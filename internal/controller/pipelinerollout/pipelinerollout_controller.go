@@ -1094,7 +1094,7 @@ func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 		return nil, err
 	}
 	if isbsvc == nil {
-		numaLogger.Debug("no consistent ISBService and controller instance pairing found for Pipeline")
+		numaLogger.Debug("no ISBService found for Pipeline")
 		return nil, nil
 	}
 
@@ -1254,47 +1254,27 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 	return isbsvc, nil
 }
 
-// getTargetPipelineDependencies resolves the ISBService and controller instance as one consistent pair.
-// A trial ISBService is always preferred, together with the controller instance it is bound to. The
-// ISBServiceRollout decides which controller its trial runs on, so the Pipeline follows that choice.
-// Otherwise the promoted ISBService is used, but only if it is bound to the promoted controller.
+// getTargetPipelineDependencies returns the ISBService the Pipeline should use, and the controller instance it runs on.
+// The trial ISBService is preferred over the promoted one. The Pipeline always runs on the same controller instance
+// as its ISBService, so the ISBServiceRollout decides which controller instance the Pipeline follows.
 func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*unstructured.Unstructured, string, error) {
-	trialISBSvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
+	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("failed to find ISBService that's trial: %w", err)
 	}
-	if trialISBSvc != nil {
-		return trialISBSvc, numaflowtypes.ControllerInstanceIDFromResource(trialISBSvc), nil
+	if isbsvc == nil {
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to find ISBService that's promoted: %w", err)
+		}
+		if isbsvc == nil {
+			return nil, "", nil
+		}
 	}
-
-	promotedControllerInstanceID, trialControllerInstanceID, err := ctlrcommon.GetControllerInstanceIDs(ctx, r.client, pipelineRollout.Namespace)
-	if err != nil {
-		return nil, "", err
-	}
-	// spec.controller.instanceID is optional. Both resolved IDs are empty when the namespace has no
-	// NumaflowControllerRollout, or when that field and Status.ControllerInstances are unset.
-	// A Rollout-supplied instance annotation is then the source of truth on the ISBService.
-	// Comparing that annotation to "" rejects every pair and blocks Pipeline creation.
-	noControllerBinding := promotedControllerInstanceID == "" && trialControllerInstanceID == ""
-
-	promotedISBSvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to find ISBService that's promoted: %w", err)
-	}
-	if promotedISBSvc == nil {
-		return nil, "", nil
-	}
-	if noControllerBinding {
-		return promotedISBSvc, numaflowtypes.ControllerInstanceIDFromResource(promotedISBSvc), nil
-	}
-
-	if promotedISBSvc.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID] != promotedControllerInstanceID {
-		return nil, "", nil
-	}
-	return promotedISBSvc, promotedControllerInstanceID, nil
+	return isbsvc, numaflowtypes.ControllerInstanceIDFromResource(isbsvc), nil
 }
 
 // get all isbsvc children of ISBServiceRollout with the given upgrading state label
