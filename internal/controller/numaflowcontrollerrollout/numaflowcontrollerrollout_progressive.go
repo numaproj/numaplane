@@ -390,10 +390,13 @@ func (r *NumaflowControllerRolloutReconciler) UpdateProgressiveMetrics(rolloutOb
 	// no controller-specific progressive metrics yet
 }
 
-// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote.
-// The controller strategy has no ForcePromote setting; force-promotion goes through the child's force-promote label,
-// which the shared progressive package checks on its own.
+// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the NumaflowControllerRollout
 func (r *NumaflowControllerRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
+	nfcRollout := rolloutObject.(*apiv1.NumaflowControllerRollout)
+	// check if ForcePromote is set true in the Progressive strategy
+	if nfcRollout.GetProgressiveStrategy().ForcePromote {
+		return true, progressive.SkipProgressiveAssessmentReasonRolloutConfiguration, nil
+	}
 	return false, progressive.SkipProgressiveAssessmentReasonUndefined, nil
 }
 

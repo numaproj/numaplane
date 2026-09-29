@@ -42,6 +42,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -733,6 +734,47 @@ func Test_CheckForDifferences_IgnoresInstanceID(t *testing.T) {
 	different, err = r.CheckForDifferencesWithRolloutDef(ctx, existing, nfcRollout, common.LabelValueUpgradePromoted)
 	assert.NoError(t, err)
 	assert.False(t, different)
+}
+
+func Test_SkipProgressiveAssessment(t *testing.T) {
+	tests := []struct {
+		name           string
+		strategy       *apiv1.NumaflowControllerRolloutStrategy
+		expectedSkip   bool
+		expectedReason progressive.SkipProgressiveAssessmentReason
+	}{
+		{
+			name:           "no strategy",
+			strategy:       nil,
+			expectedSkip:   false,
+			expectedReason: progressive.SkipProgressiveAssessmentReasonUndefined,
+		},
+		{
+			name:           "forcePromote not set",
+			strategy:       &apiv1.NumaflowControllerRolloutStrategy{Progressive: apiv1.ProgressiveStrategy{AssessmentSchedule: "60,60,10"}},
+			expectedSkip:   false,
+			expectedReason: progressive.SkipProgressiveAssessmentReasonUndefined,
+		},
+		{
+			name:           "forcePromote set",
+			strategy:       &apiv1.NumaflowControllerRolloutStrategy{Progressive: apiv1.ProgressiveStrategy{ForcePromote: true}},
+			expectedSkip:   true,
+			expectedReason: progressive.SkipProgressiveAssessmentReasonRolloutConfiguration,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &NumaflowControllerRolloutReconciler{}
+			nfcRollout := createNumaflowControllerRollout("1.2.3")
+			nfcRollout.Spec.Strategy = tc.strategy
+
+			skip, reason, err := r.SkipProgressiveAssessment(context.Background(), nfcRollout)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedSkip, skip)
+			assert.Equal(t, tc.expectedReason, reason)
+		})
+	}
 }
 
 var monoVertexSpec = numaflowv1.MonoVertexSpec{
