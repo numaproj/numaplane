@@ -31,20 +31,12 @@ type Controller struct {
 
 // NumaflowControllerRolloutSpec defines the desired state of NumaflowControllerRollout
 type NumaflowControllerRolloutSpec struct {
-	Controller Controller          `json:"controller"`
-	Strategy   *ControllerStrategy `json:"strategy,omitempty"`
+	Controller Controller                         `json:"controller"`
+	Strategy   *NumaflowControllerRolloutStrategy `json:"strategy,omitempty"`
 }
 
-// ControllerStrategy defines the strategy to use when upgrading the NumaflowController
-type ControllerStrategy struct {
-	Progressive *ControllerProgressiveStrategy `json:"progressive,omitempty"`
-}
-
-// ControllerProgressiveStrategy defines the configuration for a progressive upgrade of the NumaflowController
-type ControllerProgressiveStrategy struct {
-	// AssessmentSchedule describes the schedule for how often we assess the health of the upgrading controller instance,
-	// in the format "delay,end,period,interval" (see config.AssessmentSchedule)
-	AssessmentSchedule string `json:"assessmentSchedule,omitempty"`
+type NumaflowControllerRolloutStrategy struct {
+	Progressive ProgressiveStrategy `json:"progressive,omitempty"`
 }
 
 // NumaflowControllerRolloutStatus defines the observed state of NumaflowControllerRollout
@@ -162,14 +154,13 @@ func (nfcRollout *NumaflowControllerRollout) GetRolloutStatus() *Status {
 	return &nfcRollout.Status.Status
 }
 
-// GetProgressiveStrategy is a function of the progressiveRolloutObject.
-// The controller only exposes an assessment schedule; force-promotion goes through the child's
-// force-promote label, so ForcePromote is always false here.
+// GetProgressiveStrategy is a function of the progressiveRolloutObject
 func (nfcRollout *NumaflowControllerRollout) GetProgressiveStrategy() ProgressiveStrategy {
-	if nfcRollout.Spec.Strategy == nil || nfcRollout.Spec.Strategy.Progressive == nil {
+	// if the Strategy is not set, return an empty ProgressiveStrategy
+	if nfcRollout.Spec.Strategy == nil {
 		return ProgressiveStrategy{}
 	}
-	return ProgressiveStrategy{AssessmentSchedule: nfcRollout.Spec.Strategy.Progressive.AssessmentSchedule}
+	return nfcRollout.Spec.Strategy.Progressive
 }
 
 // GetUpgradingChildStatus is a function of the progressiveRolloutObject

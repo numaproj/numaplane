@@ -61,18 +61,18 @@ spec:
                 - version
                 type: object
               strategy:
-                description: ControllerStrategy defines the strategy to use when upgrading
-                  the NumaflowController
                 properties:
                   progressive:
-                    description: ControllerProgressiveStrategy defines the configuration
-                      for a progressive upgrade of the NumaflowController
                     properties:
                       assessmentSchedule:
                         description: |-
-                          AssessmentSchedule describes the schedule for how often we assess the health of the upgrading controller instance,
-                          in the format "delay,end,period,interval" (see config.AssessmentSchedule)
+                          optional string: comma-separated list consisting of:
+                          assessmentDelay, assessmentPeriod, assessmentInterval
                         type: string
+                      forcePromote:
+                        description: if ForcePromote is set, assessment will be skipped
+                          and Progressive upgrade will succeed
+                        type: boolean
                     type: object
                 type: object
             required:
