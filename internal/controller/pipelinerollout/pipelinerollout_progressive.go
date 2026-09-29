@@ -32,7 +32,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 		return nil, err
 	}
 
-	isbsvc, controllerInstanceID, err := r.getTargetPipelineDependencies(ctx, pipelineRollout)
+	isbsvc, controllerInstanceID, err := r.getTargetPipelineDependencies(ctx, pipelineRollout, false)
 	if err != nil {
 		return nil, err
 	}

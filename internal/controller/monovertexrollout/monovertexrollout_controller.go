@@ -239,8 +239,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	// Initial creation stays on the promoted controller. Once that child exists, the desired
 	// definition includes the trial controller so a controller upgrade can start Progressive.
-	requireProgressiveNumaflowController := len(promotedMonovertices.Items) > 0
-	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requireProgressiveNumaflowController)
+	requirePromotedNumaflowController := len(promotedMonovertices.Items) == 0
+	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requirePromotedNumaflowController)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -718,22 +718,22 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 }
 
 // makeTargetMonoVertexDefinition builds the promoted-slot MonoVertex definition.
-// requireProgressiveNumaflowController is false for the initial promoted child, which stays on the
-// promoted controller. It is true when comparing an existing promoted child with desired state: the
+// requirePromotedNumaflowController is true for the initial promoted child, which stays on the
+// promoted controller. It is false when comparing an existing promoted child with desired state: the
 // trial controller ID, when set, is the difference Progressive uses to create a separate trial child.
 func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
-	requireProgressiveNumaflowController bool,
+	requirePromotedNumaflowController bool,
 ) (*unstructured.Unstructured, error) {
 	monoVertexName, err := ctlrcommon.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
 	if err != nil {
 		return nil, err
 	}
 
-	resolveControllerInstanceID := ctlrcommon.GetPromotedControllerInstanceID
-	if requireProgressiveNumaflowController {
-		resolveControllerInstanceID = ctlrcommon.GetDesiredControllerInstanceID
+	resolveControllerInstanceID := ctlrcommon.GetDesiredControllerInstanceID
+	if requirePromotedNumaflowController {
+		resolveControllerInstanceID = ctlrcommon.GetPromotedControllerInstanceID
 	}
 	controllerInstanceID, err := resolveControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
 	if err != nil {

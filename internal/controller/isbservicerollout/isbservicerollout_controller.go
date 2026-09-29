@@ -270,7 +270,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			// The first promoted child stays on the promoted controller. A later reconcile compares
 			// it with the desired controller, including a trial instance, and Progressive creates
 			// the trial child separately.
-			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, false)
+			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, true)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 			}
@@ -297,7 +297,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// Object already exists. The desired definition uses the trial controller when one
 		// exists, so a controller-instance change is visible to Progressive. That path leaves
 		// the live promoted child unchanged and creates the trial child separately.
-		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, true)
+		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, false)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 		}
@@ -929,13 +929,13 @@ func (r *ISBServiceRolloutReconciler) ErrorHandler(ctx context.Context, isbServi
 }
 
 // makeTargetISBServiceDef builds the promoted-slot ISBService definition.
-// requireProgressiveNumaflowController is false for the initial promoted child, which stays on the
-// promoted controller. It is true when comparing an existing promoted child with desired state: the
+// requirePromotedNumaflowController is true for the initial promoted child, which stays on the
+// promoted controller. It is false when comparing an existing promoted child with desired state: the
 // trial controller ID, when set, is the difference Progressive uses to create a separate trial child.
 func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	ctx context.Context,
 	isbServiceRollout *apiv1.ISBServiceRollout,
-	requireProgressiveNumaflowController bool,
+	requirePromotedNumaflowController bool,
 ) (*unstructured.Unstructured, error) {
 	// if a "promoted" InterstepBufferService exists, gets its name; otherwise create a new name
 	isbsvcName, err := ctlrcommon.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
@@ -950,9 +950,9 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
-	resolveControllerInstanceID := ctlrcommon.GetPromotedControllerInstanceID
-	if requireProgressiveNumaflowController {
-		resolveControllerInstanceID = ctlrcommon.GetDesiredControllerInstanceID
+	resolveControllerInstanceID := ctlrcommon.GetDesiredControllerInstanceID
+	if requirePromotedNumaflowController {
+		resolveControllerInstanceID = ctlrcommon.GetPromotedControllerInstanceID
 	}
 	controllerInstanceID, err := resolveControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
 	if err != nil {

@@ -400,7 +400,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return 0, nil, fmt.Errorf("error looking for promoted pipeline: %v", err)
 	}
-	newPipelineDef, err := r.makeTargetPipelineDefinition(ctx, pipelineRollout)
+	// Initial creation stays on the promoted ISBService, so a promoted Pipeline never uses a trial ISBService.
+	// Once that child exists, the desired definition uses the trial ISBService so Progressive can create a trial Pipeline.
+	requirePromotedISBService := len(promotedPipelines.Items) == 0
+	newPipelineDef, err := r.makeTargetPipelineDefinition(ctx, pipelineRollout, requirePromotedISBService)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -1083,13 +1086,17 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 }
 
 // if we did, we can create the pipeline definition and return it
+// requirePromotedISBService is true for the initial promoted child, which stays on the promoted ISBService. It is false
+// when comparing an existing promoted child with desired state: the trial ISBService, when one exists, is the difference
+// Progressive uses to create a separate trial child.
 func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
+	requirePromotedISBService bool,
 ) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	isbsvc, controllerInstanceID, err := r.getTargetPipelineDependencies(ctx, pipelineRollout)
+	isbsvc, controllerInstanceID, err := r.getTargetPipelineDependencies(ctx, pipelineRollout, requirePromotedISBService)
 	if err != nil {
 		return nil, err
 	}
@@ -1255,15 +1262,21 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 }
 
 // getTargetPipelineDependencies returns the ISBService the Pipeline should use, and the controller instance it runs on.
-// The trial ISBService is preferred over the promoted one. The Pipeline always runs on the same controller instance
-// as its ISBService, so the ISBServiceRollout decides which controller instance the Pipeline follows.
+// If requirePromotedISBService is set, only the promoted ISBService is used; otherwise the trial ISBService is preferred
+// over the promoted one. The Pipeline always runs on the same controller instance as its ISBService, so the ISBServiceRollout
+// decides which controller instance the Pipeline follows.
 func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
+	requirePromotedISBService bool,
 ) (*unstructured.Unstructured, string, error) {
-	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to find ISBService that's trial: %w", err)
+	var isbsvc *unstructured.Unstructured
+	var err error
+	if !requirePromotedISBService {
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to find ISBService that's trial: %w", err)
+		}
 	}
 	if isbsvc == nil {
 		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)

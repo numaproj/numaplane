@@ -72,10 +72,11 @@ func TestGetTargetPipelineDependencies(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                 string
-		isbServices          []client.Object
-		expectedISBSvcName   string
-		expectedControllerID string
+		name                      string
+		isbServices               []client.Object
+		requirePromotedISBService bool
+		expectedISBSvcName        string
+		expectedControllerID      string
 	}{
 		{
 			name:                 "uses promoted ISBService and its controller instance",
@@ -102,6 +103,21 @@ func TestGetTargetPipelineDependencies(t *testing.T) {
 			expectedControllerID: promotedInstanceID,
 		},
 		{
+			name: "ignores trial ISBService when the promoted one is required",
+			isbServices: []client.Object{
+				newISBSvc("default-0", common.LabelValueUpgradePromoted, promotedInstanceID),
+				newISBSvc("default-1", common.LabelValueUpgradeTrial, trialInstanceID),
+			},
+			requirePromotedISBService: true,
+			expectedISBSvcName:        "default-0",
+			expectedControllerID:      promotedInstanceID,
+		},
+		{
+			name:                      "resolves nothing when only a trial ISBService exists and the promoted one is required",
+			isbServices:               []client.Object{newISBSvc("default-1", common.LabelValueUpgradeTrial, trialInstanceID)},
+			requirePromotedISBService: true,
+		},
+		{
 			name:                 "uses the default controller instance when the ISBService has no instance annotation",
 			isbServices:          []client.Object{newISBSvc("default-0", common.LabelValueUpgradePromoted, "")},
 			expectedISBSvcName:   "default-0",
@@ -122,7 +138,7 @@ func TestGetTargetPipelineDependencies(t *testing.T) {
 			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			reconciler := &PipelineRolloutReconciler{client: client}
 
-			isbsvc, controllerInstanceID, err := reconciler.getTargetPipelineDependencies(context.Background(), pipelineRollout)
+			isbsvc, controllerInstanceID, err := reconciler.getTargetPipelineDependencies(context.Background(), pipelineRollout, tt.requirePromotedISBService)
 
 			require.NoError(t, err)
 			if tt.expectedISBSvcName == "" {
