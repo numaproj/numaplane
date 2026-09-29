@@ -1255,43 +1255,30 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 }
 
 // getTargetPipelineDependencies resolves the ISBService and controller instance as one consistent pair.
-// A trial ISBService is only selected when its Numaflow instance annotation matches the desired controller
-// instance. Otherwise the promoted pair is retained until both trial dependencies have converged.
-// When no controller instance is bound, the ISBService's own effective instance ID is used instead of
-// comparing its annotation to an empty controller ID.
+// A trial ISBService is always preferred, together with the controller instance it is bound to. The
+// ISBServiceRollout decides which controller its trial runs on, so the Pipeline follows that choice.
+// Otherwise the promoted ISBService is used, but only if it is bound to the promoted controller.
 func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*unstructured.Unstructured, string, error) {
-	promotedControllerInstanceID, trialControllerInstanceID, err := ctlrcommon.GetControllerInstanceIDs(ctx, r.client, pipelineRollout.Namespace)
+	trialISBSvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
 	if err != nil {
 		return nil, "", err
 	}
-	desiredControllerInstanceID := promotedControllerInstanceID
-	if trialControllerInstanceID != "" {
-		desiredControllerInstanceID = trialControllerInstanceID
+	if trialISBSvc != nil {
+		return trialISBSvc, numaflowtypes.ControllerInstanceIDFromResource(trialISBSvc), nil
+	}
+
+	promotedControllerInstanceID, trialControllerInstanceID, err := ctlrcommon.GetControllerInstanceIDs(ctx, r.client, pipelineRollout.Namespace)
+	if err != nil {
+		return nil, "", err
 	}
 	// spec.controller.instanceID is optional. Both resolved IDs are empty when the namespace has no
 	// NumaflowControllerRollout, or when that field and Status.ControllerInstances are unset.
 	// A Rollout-supplied instance annotation is then the source of truth on the ISBService.
 	// Comparing that annotation to "" rejects every pair and blocks Pipeline creation.
-	// This stays: an existing controller keeps an empty instance ID. A trial controller is a
-	// separate, non-empty ID, so this branch is not the trial path.
 	noControllerBinding := promotedControllerInstanceID == "" && trialControllerInstanceID == ""
-
-	trialISBSvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
-	if err != nil {
-		return nil, "", err
-	}
-	if noControllerBinding && trialISBSvc != nil {
-		return trialISBSvc, numaflowtypes.ControllerInstanceIDFromResource(trialISBSvc), nil
-	}
-	// An ISBService-only upgrade may use a trial ISBService with the promoted controller. During a controller
-	// upgrade, the trial ISBService is selected only after it has moved to the trial controller as well.
-	if trialISBSvc != nil &&
-		trialISBSvc.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID] == desiredControllerInstanceID {
-		return trialISBSvc, desiredControllerInstanceID, nil
-	}
 
 	promotedISBSvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
 	if err != nil {

@@ -71,32 +71,63 @@ func TestGetTargetPipelineDependenciesConsistencyGating(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                  string
-		hasTrialController    bool
-		trialISBSvcInstanceID string
-		expectedISBSvcName    string
-		expectedControllerID  string
+		name                     string
+		hasTrialController       bool
+		hasTrialISBSvc           bool
+		trialISBSvcInstanceID    string
+		promotedISBSvcInstanceID string
+		expectedISBSvcName       string
+		expectedControllerID     string
 	}{
 		{
-			name:                  "retains promoted pair while controller trial is ahead",
-			hasTrialController:    true,
-			trialISBSvcInstanceID: promotedInstanceID,
-			expectedISBSvcName:    "default-0",
-			expectedControllerID:  promotedInstanceID,
+			name:                     "selects trial ISBService with its own controller while controller trial is ahead",
+			hasTrialController:       true,
+			hasTrialISBSvc:           true,
+			trialISBSvcInstanceID:    promotedInstanceID,
+			promotedISBSvcInstanceID: promotedInstanceID,
+			expectedISBSvcName:       "default-1",
+			expectedControllerID:     promotedInstanceID,
 		},
 		{
-			name:                  "selects trial ISBService with promoted controller for ISBService-only upgrade",
-			hasTrialController:    false,
-			trialISBSvcInstanceID: promotedInstanceID,
-			expectedISBSvcName:    "default-1",
-			expectedControllerID:  promotedInstanceID,
+			name:                     "selects trial ISBService with promoted controller for ISBService-only upgrade",
+			hasTrialController:       false,
+			hasTrialISBSvc:           true,
+			trialISBSvcInstanceID:    promotedInstanceID,
+			promotedISBSvcInstanceID: promotedInstanceID,
+			expectedISBSvcName:       "default-1",
+			expectedControllerID:     promotedInstanceID,
 		},
 		{
-			name:                  "selects trial pair after both lookups agree",
-			hasTrialController:    true,
-			trialISBSvcInstanceID: trialInstanceID,
-			expectedISBSvcName:    "default-1",
-			expectedControllerID:  trialInstanceID,
+			name:                     "selects trial pair after both lookups agree",
+			hasTrialController:       true,
+			hasTrialISBSvc:           true,
+			trialISBSvcInstanceID:    trialInstanceID,
+			promotedISBSvcInstanceID: promotedInstanceID,
+			expectedISBSvcName:       "default-1",
+			expectedControllerID:     trialInstanceID,
+		},
+		{
+			name:                     "follows trial ISBService controller after the controller trial is gone",
+			hasTrialController:       false,
+			hasTrialISBSvc:           true,
+			trialISBSvcInstanceID:    trialInstanceID,
+			promotedISBSvcInstanceID: promotedInstanceID,
+			expectedISBSvcName:       "default-1",
+			expectedControllerID:     trialInstanceID,
+		},
+		{
+			name:                     "selects promoted pair while controller trial has no trial ISBService yet",
+			hasTrialController:       true,
+			hasTrialISBSvc:           false,
+			promotedISBSvcInstanceID: promotedInstanceID,
+			expectedISBSvcName:       "default-0",
+			expectedControllerID:     promotedInstanceID,
+		},
+		{
+			name:                     "resolves nothing when promoted ISBService is not on the promoted controller",
+			hasTrialController:       true,
+			hasTrialISBSvc:           false,
+			promotedISBSvcInstanceID: trialInstanceID,
 		},
 	}
 
@@ -121,17 +152,25 @@ func TestGetTargetPipelineDependenciesConsistencyGating(t *testing.T) {
 			scheme := runtime.NewScheme()
 			require.NoError(t, apiv1.AddToScheme(scheme))
 			require.NoError(t, numaflowv1.AddToScheme(scheme))
-			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+			objects := []client.Object{
 				isbsvcRollout,
 				controllerRollout,
-				newISBSvc("default-0", common.LabelValueUpgradePromoted, promotedInstanceID),
-				newISBSvc("default-1", common.LabelValueUpgradeTrial, tt.trialISBSvcInstanceID),
-			).Build()
+				newISBSvc("default-0", common.LabelValueUpgradePromoted, tt.promotedISBSvcInstanceID),
+			}
+			if tt.hasTrialISBSvc {
+				objects = append(objects, newISBSvc("default-1", common.LabelValueUpgradeTrial, tt.trialISBSvcInstanceID))
+			}
+			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			reconciler := &PipelineRolloutReconciler{client: client}
 
 			isbsvc, controllerInstanceID, err := reconciler.getTargetPipelineDependencies(context.Background(), pipelineRollout)
 
 			require.NoError(t, err)
+			if tt.expectedISBSvcName == "" {
+				assert.Nil(t, isbsvc)
+				assert.Empty(t, controllerInstanceID)
+				return
+			}
 			require.NotNil(t, isbsvc)
 			assert.Equal(t, tt.expectedISBSvcName, isbsvc.GetName())
 			assert.Equal(t, tt.expectedControllerID, controllerInstanceID)
