@@ -266,23 +266,20 @@ func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace st
 
 // getControllerInstanceIDOfUpgradeState returns the instance ID of the NumaflowController child of nfcRollout in the given
 // upgrade state, or "" if there is none.
-// FindMostCurrentChildOfUpgradeState is not used since it marks extra children recyclable, which is only the
-// NumaflowControllerRollout reconciler's job; dependents return an error instead and retry.
+// If there is more than one, the most current one is used: when a trial succeeds, it is labeled "promoted" before the
+// previous promoted child is marked "recyclable", so for a moment both are "promoted".
 func getControllerInstanceIDOfUpgradeState(ctx context.Context, c client.Client, nfcRollout *apiv1.NumaflowControllerRollout, upgradeState common.UpgradeState) (string, error) {
-	children, err := FindChildrenOfUpgradeState(ctx, nfcRollout, upgradeState, nil, false, c)
+	child, err := FindMostCurrentChildOfUpgradeState(ctx, nfcRollout, upgradeState, nil, false, c)
 	if err != nil {
-		return "", fmt.Errorf("failed to list %q NumaflowControllers in namespace %q: %w", upgradeState, nfcRollout.Namespace, err)
+		return "", fmt.Errorf("failed to find %q NumaflowController in namespace %q: %w", upgradeState, nfcRollout.Namespace, err)
 	}
-	if len(children.Items) == 0 {
+	if child == nil {
 		return "", nil
 	}
-	if len(children.Items) > 1 {
-		return "", fmt.Errorf("expected at most 1 %q controller instance in namespace %q, found %d", upgradeState, nfcRollout.Namespace, len(children.Items))
-	}
 
-	instanceID, _, err := unstructured.NestedString(children.Items[0].Object, "spec", "instanceID")
+	instanceID, _, err := unstructured.NestedString(child.Object, "spec", "instanceID")
 	if err != nil {
-		return "", fmt.Errorf("failed to read spec.instanceID of NumaflowController %s/%s: %w", nfcRollout.Namespace, children.Items[0].GetName(), err)
+		return "", fmt.Errorf("failed to read spec.instanceID of NumaflowController %s/%s: %w", nfcRollout.Namespace, child.GetName(), err)
 	}
 	if instanceID == "" {
 		return "", nil

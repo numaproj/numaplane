@@ -275,9 +275,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		}
 	}
 
-	// reflect the live "promoted" and "trial" controller instances in the Status
-	if err := r.updateControllerInstancesStatus(ctx, nfcRollout); err != nil {
-		return ctrl.Result{}, fmt.Errorf("error updating controller instances Status: %v", err)
+	// reflect the live "promoted" controller instance in the Status
+	if err := r.updatePromotedControllerStatus(ctx, nfcRollout); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error updating promoted NumaflowController Status: %v", err)
 	}
 
 	// if the NumaflowController is being deleted, we need to auto-heal it.

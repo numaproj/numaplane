@@ -50,9 +50,6 @@ type NumaflowControllerRolloutStatus struct {
 
 	// ProgressiveStatus stores fields related to the Progressive strategy
 	ProgressiveStatus NumaflowControllerProgressiveStatus `json:"progressiveStatus,omitempty"`
-
-	// ControllerInstances holds one entry for each live NumaflowController child, whether promoted or trial.
-	ControllerInstances []ControllerInstanceRef `json:"controllerInstances,omitempty"`
 }
 
 type NumaflowControllerProgressiveStatus struct {
@@ -64,38 +61,34 @@ type NumaflowControllerProgressiveStatus struct {
 
 // UpgradingNumaflowControllerStatus describes the status of an upgrading child
 type UpgradingNumaflowControllerStatus struct {
-	UpgradingChildStatus `json:",inline"`
+	UpgradingChildStatus     `json:",inline"`
+	ControllerInstanceStatus `json:",inline"`
 }
 
 // PromotedNumaflowControllerStatus describes the status of a promoted child
 type PromotedNumaflowControllerStatus struct {
-	PromotedChildStatus `json:",inline"`
+	PromotedChildStatus      `json:",inline"`
+	ControllerInstanceStatus `json:",inline"`
 }
 
-// ControllerInstanceRef represents a live NumaflowController child, either promoted or trial.
-type ControllerInstanceRef struct {
-	// Name of the child NumaflowController CR, e.g. "numaflow-controller-2".
-	Name string `json:"name"`
-
+// ControllerInstanceStatus describes the controller instance that a NumaflowController child runs
+type ControllerInstanceStatus struct {
 	// InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
 	// controller instance. A trial child derives it as "<version>-<nameCount>" (with the version reduced to
 	// lowercase letters, digits, and dashes so it stays valid inside Service names), so re-trialing the same
 	// version after a failed trial still yields a distinct instance. The controller that existed before
 	// Progressive was introduced keeps an empty instance.
-	InstanceID string `json:"instanceID"`
+	InstanceID string `json:"instanceID,omitempty"`
 
-	Version string `json:"version"`
+	// Version is the Numaflow Controller version that the child runs
+	Version string `json:"version,omitempty"`
+}
 
-	// State reuses the existing common.UpgradeState values: "promoted" or "trial".
-	State string `json:"state"`
-
-	// ReferencingInterStepBufferServices and ReferencingMonovertices are live counts of ISBServices and MonoVertices,
-	// respectively, currently bound to this instance. Pipelines are not counted directly: a Pipeline's ISBSvc is not
-	// deleted while that Pipeline still references it, so counting ISBServices already transitively captures
-	// Pipeline usage. Both fields are consulted exclusively by Recycle() as a deletion-safety gate, once a controller
-	// instance has already been marked recyclable.
-	ReferencingInterStepBufferServices int32 `json:"referencingInterStepBufferServices"`
-	ReferencingMonovertices            int32 `json:"referencingMonovertices"`
+// ControllerInstanceStatusOf returns the ControllerInstanceStatus of a NumaflowController child
+func ControllerInstanceStatusOf(numaflowController *unstructured.Unstructured) ControllerInstanceStatus {
+	instanceID, _, _ := unstructured.NestedString(numaflowController.Object, "spec", "instanceID")
+	version, _, _ := unstructured.NestedString(numaflowController.Object, "spec", "version")
+	return ControllerInstanceStatus{InstanceID: instanceID, Version: version}
 }
 
 // +genclient
@@ -188,6 +181,7 @@ func (nfcRollout *NumaflowControllerRollout) ResetUpgradingChildStatus(upgrading
 			BasicAssessmentEndTime: nil,
 			AssessmentResult:       AssessmentResultUnknown,
 		},
+		ControllerInstanceStatus: ControllerInstanceStatusOf(upgradingChild),
 	}
 	return nil
 }
@@ -207,6 +201,7 @@ func (nfcRollout *NumaflowControllerRollout) ResetPromotedChildStatus(promotedCh
 		PromotedChildStatus: PromotedChildStatus{
 			Name: promotedChild.GetName(),
 		},
+		ControllerInstanceStatus: ControllerInstanceStatusOf(promotedChild),
 	}
 	return nil
 }

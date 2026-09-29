@@ -19,6 +19,7 @@ package common
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,20 +91,6 @@ func TestGetControllerInstanceID(t *testing.T) {
 		assert.Empty(t, trial)
 	})
 
-	t.Run("does not read Status.ControllerInstances", func(t *testing.T) {
-		rolloutWithStatus := controllerRollout.DeepCopy()
-		rolloutWithStatus.Status.ControllerInstances = []apiv1.ControllerInstanceRef{
-			{InstanceID: "stale-trial", State: string(numaplanecommon.LabelValueUpgradeTrial)},
-		}
-		c := newClient(rolloutWithStatus, newController("controller-1", numaplanecommon.LabelValueUpgradePromoted, "promoted-1"))
-
-		promoted, trial, err := GetControllerInstanceIDs(context.Background(), c, namespace)
-
-		require.NoError(t, err)
-		assert.Equal(t, "promoted-1", promoted)
-		assert.Empty(t, trial)
-	})
-
 	t.Run("rejects instance IDs that cannot be labels", func(t *testing.T) {
 		c := newClient(controllerRollout, newController("controller-1", numaplanecommon.LabelValueUpgradePromoted, "invalid/id"))
 
@@ -120,14 +107,20 @@ func TestGetControllerInstanceID(t *testing.T) {
 		assert.Empty(t, trial)
 	})
 
-	t.Run("rejects duplicate trial children", func(t *testing.T) {
-		c := newClient(controllerRollout,
-			newController("controller-1", numaplanecommon.LabelValueUpgradeTrial, "trial-1"),
-			newController("controller-2", numaplanecommon.LabelValueUpgradeTrial, "trial-2"))
+	t.Run("uses the newest of duplicate promoted children and marks the older one recyclable", func(t *testing.T) {
+		older := newController("controller-1", numaplanecommon.LabelValueUpgradePromoted, "promoted-1")
+		older.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
+		newer := newController("controller-2", numaplanecommon.LabelValueUpgradePromoted, "promoted-2")
+		newer.CreationTimestamp = metav1.NewTime(time.Now())
+		c := newClient(controllerRollout, older, newer)
 
-		_, _, err := GetControllerInstanceIDs(context.Background(), c, namespace)
+		instanceID, err := GetPromotedControllerInstanceID(context.Background(), c, namespace)
 
-		assert.ErrorContains(t, err, `expected at most 1 "trial" controller instance`)
+		require.NoError(t, err)
+		assert.Equal(t, "promoted-2", instanceID)
+		updatedOlder := &apiv1.NumaflowController{}
+		require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(older), updatedOlder))
+		assert.Equal(t, string(numaplanecommon.LabelValueUpgradeRecyclable), updatedOlder.GetLabels()[numaplanecommon.LabelKeyUpgradeState])
 	})
 
 	t.Run("rejects multiple controller rollouts in a namespace", func(t *testing.T) {

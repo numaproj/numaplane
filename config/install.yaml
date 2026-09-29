@@ -1119,51 +1119,6 @@ spec:
                   - type
                   type: object
                 type: array
-              controllerInstances:
-                description: ControllerInstances holds one entry for each live NumaflowController
-                  child, whether promoted or trial.
-                items:
-                  description: ControllerInstanceRef represents a live NumaflowController
-                    child, either promoted or trial.
-                  properties:
-                    instanceID:
-                      description: |-
-                        InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
-                        controller instance. A trial child derives it as "<version>-<nameCount>" (with the version reduced to
-                        lowercase letters, digits, and dashes so it stays valid inside Service names), so re-trialing the same
-                        version after a failed trial still yields a distinct instance. The controller that existed before
-                        Progressive was introduced keeps an empty instance.
-                      type: string
-                    name:
-                      description: Name of the child NumaflowController CR, e.g. "numaflow-controller-2".
-                      type: string
-                    referencingInterStepBufferServices:
-                      description: |-
-                        ReferencingInterStepBufferServices and ReferencingMonovertices are live counts of ISBServices and MonoVertices,
-                        respectively, currently bound to this instance. Pipelines are not counted directly: a Pipeline's ISBSvc is not
-                        deleted while that Pipeline still references it, so counting ISBServices already transitively captures
-                        Pipeline usage. Both fields are consulted exclusively by Recycle() as a deletion-safety gate, once a controller
-                        instance has already been marked recyclable.
-                      format: int32
-                      type: integer
-                    referencingMonovertices:
-                      format: int32
-                      type: integer
-                    state:
-                      description: 'State reuses the existing common.UpgradeState
-                        values: "promoted" or "trial".'
-                      type: string
-                    version:
-                      type: string
-                  required:
-                  - instanceID
-                  - name
-                  - referencingInterStepBufferServices
-                  - referencingMonovertices
-                  - state
-                  - version
-                  type: object
-                type: array
               lastFailureTime:
                 description: LastFailureTime records the timestamp of the Last Failure
                   (PhaseFailed)
@@ -1217,8 +1172,20 @@ spec:
                     description: PromotedNumaflowControllerStatus stores information
                       regarding the current "promoted" NumaflowController
                     properties:
+                      instanceID:
+                        description: |-
+                          InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
+                          controller instance. A trial child derives it as "<version>-<nameCount>" (with the version reduced to
+                          lowercase letters, digits, and dashes so it stays valid inside Service names), so re-trialing the same
+                          version after a failed trial still yields a distinct instance. The controller that existed before
+                          Progressive was introduced keeps an empty instance.
+                        type: string
                       name:
                         description: Name of the promoted child
+                        type: string
+                      version:
+                        description: Version is the Numaflow Controller version that
+                          the child runs
                         type: string
                     required:
                     - name
@@ -1277,6 +1244,14 @@ spec:
                           process has completed (if it hasn't, we will come back and
                           try it again)
                         type: boolean
+                      instanceID:
+                        description: |-
+                          InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
+                          controller instance. A trial child derives it as "<version>-<nameCount>" (with the version reduced to
+                          lowercase letters, digits, and dashes so it stays valid inside Service names), so re-trialing the same
+                          version after a failed trial still yields a distinct instance. The controller that existed before
+                          Progressive was introduced keeps an empty instance.
+                        type: string
                       name:
                         description: Name of the upgrading child
                         type: string
@@ -1314,6 +1289,10 @@ spec:
                         description: TrialWindowStartTime indicates the time at which
                           the trial window starts
                         format: date-time
+                        type: string
+                      version:
+                        description: Version is the Numaflow Controller version that
+                          the child runs
                         type: string
                     required:
                     - name

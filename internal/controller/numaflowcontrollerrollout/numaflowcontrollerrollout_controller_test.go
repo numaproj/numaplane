@@ -418,6 +418,8 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 	trialName := ctlrcommon.DefaultTestNumaflowControllerRolloutName + "-1" // numaflow-controller-1
 	trialInstanceID := "3-2-1-1"                                            // derived from version 3.2.1 and name count 1
 	pastTime := metav1.NewTime(time.Now().Add(-time.Minute))
+	originalInstance := apiv1.ControllerInstanceStatus{InstanceID: "", Version: "1.2.3"}
+	trialInstance := apiv1.ControllerInstanceStatus{InstanceID: trialInstanceID, Version: "3.2.1"}
 
 	// the Rollout's Status when the trial child has already been created and initialized, so the next reconciliation assesses it
 	assessingTrialStatus := func() apiv1.NumaflowControllerRolloutStatus {
@@ -433,9 +435,11 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 						AssessmentResult:         apiv1.AssessmentResultUnknown,
 						BasicAssessmentStartTime: &pastTime,
 					},
+					ControllerInstanceStatus: trialInstance,
 				},
 				PromotedNumaflowControllerStatus: &apiv1.PromotedNumaflowControllerStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{Name: promotedName},
+					PromotedChildStatus:      apiv1.PromotedChildStatus{Name: promotedName},
+					ControllerInstanceStatus: originalInstance,
 				},
 			},
 		}
@@ -470,8 +474,10 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 		expectedInProgressStrategy    apiv1.UpgradeStrategy
 		expectedUpgradingAssessment   *apiv1.AssessmentResult // nil means no UpgradingChildStatus expected
 		expectedControllers           map[string]expectedController
-		expectedControllerInstances   []apiv1.ControllerInstanceRef
-		expectedControllerInstanceIDs [2]string // promoted, trial as resolved by dependents
+		expectedPromotedName          string
+		expectedPromotedInstance      apiv1.ControllerInstanceStatus
+		expectedUpgradingInstance     apiv1.ControllerInstanceStatus // only checked if expectedUpgradingAssessment is set
+		expectedControllerInstanceIDs [2]string                      // promoted, trial as resolved by dependents
 	}{
 		{
 			name:                         "new NumaflowController is named and labeled",
@@ -481,9 +487,8 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedControllers: map[string]expectedController{
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradePromoted},
 			},
-			expectedControllerInstances: []apiv1.ControllerInstanceRef{
-				{Name: promotedName, InstanceID: "", Version: "1.2.3", State: string(common.LabelValueUpgradePromoted)},
-			},
+			expectedPromotedName:     promotedName,
+			expectedPromotedInstance: originalInstance,
 		},
 		{
 			name:                         "pre-existing NumaflowController is adopted as promoted",
@@ -494,9 +499,8 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedControllers: map[string]expectedController{
 				ctlrcommon.DefaultTestNumaflowControllerRolloutName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradePromoted},
 			},
-			expectedControllerInstances: []apiv1.ControllerInstanceRef{
-				{Name: ctlrcommon.DefaultTestNumaflowControllerRolloutName, InstanceID: "", Version: "1.2.3", State: string(common.LabelValueUpgradePromoted)},
-			},
+			expectedPromotedName:     ctlrcommon.DefaultTestNumaflowControllerRolloutName,
+			expectedPromotedInstance: originalInstance,
 		},
 		{
 			name:                         "new version creates trial child on its own instance while promoted keeps serving",
@@ -510,10 +514,9 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradePromoted},
 				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradeTrial},
 			},
-			expectedControllerInstances: []apiv1.ControllerInstanceRef{
-				{Name: promotedName, InstanceID: "", Version: "1.2.3", State: string(common.LabelValueUpgradePromoted)},
-				{Name: trialName, InstanceID: trialInstanceID, Version: "3.2.1", State: string(common.LabelValueUpgradeTrial)},
-			},
+			expectedPromotedName:          promotedName,
+			expectedPromotedInstance:      originalInstance,
+			expectedUpgradingInstance:     trialInstance,
 			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
 		},
 		{
@@ -531,9 +534,9 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradeRecyclable},
 				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
 			},
-			expectedControllerInstances: []apiv1.ControllerInstanceRef{
-				{Name: trialName, InstanceID: trialInstanceID, Version: "3.2.1", State: string(common.LabelValueUpgradePromoted)},
-			},
+			expectedPromotedName:          trialName,
+			expectedPromotedInstance:      trialInstance,
+			expectedUpgradingInstance:     trialInstance,
 			expectedControllerInstanceIDs: [2]string{trialInstanceID, ""},
 		},
 		{
@@ -551,10 +554,9 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradePromoted},
 				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradeTrial},
 			},
-			expectedControllerInstances: []apiv1.ControllerInstanceRef{
-				{Name: promotedName, InstanceID: "", Version: "1.2.3", State: string(common.LabelValueUpgradePromoted)},
-				{Name: trialName, InstanceID: trialInstanceID, Version: "3.2.1", State: string(common.LabelValueUpgradeTrial)},
-			},
+			expectedPromotedName:          promotedName,
+			expectedPromotedInstance:      originalInstance,
+			expectedUpgradingInstance:     trialInstance,
 			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
 		},
 		{
@@ -572,9 +574,9 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradeRecyclable},
 				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
 			},
-			expectedControllerInstances: []apiv1.ControllerInstanceRef{
-				{Name: trialName, InstanceID: trialInstanceID, Version: "3.2.1", State: string(common.LabelValueUpgradePromoted)},
-			},
+			expectedPromotedName:          trialName,
+			expectedPromotedInstance:      trialInstance,
+			expectedUpgradingInstance:     trialInstance,
 			expectedControllerInstanceIDs: [2]string{trialInstanceID, ""},
 		},
 		{
@@ -592,10 +594,9 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradePromoted},
 				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradeTrial},
 			},
-			expectedControllerInstances: []apiv1.ControllerInstanceRef{
-				{Name: promotedName, InstanceID: "", Version: "1.2.3", State: string(common.LabelValueUpgradePromoted)},
-				{Name: trialName, InstanceID: trialInstanceID, Version: "3.2.1", State: string(common.LabelValueUpgradeTrial)},
-			},
+			expectedPromotedName:          promotedName,
+			expectedPromotedInstance:      originalInstance,
+			expectedUpgradingInstance:     trialInstance,
 			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
 		},
 	}
@@ -641,6 +642,12 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			} else if assert.NotNil(t, nfcRollout.GetUpgradingChildStatus()) {
 				assert.Equal(t, trialName, nfcRollout.GetUpgradingChildStatus().Name)
 				assert.Equal(t, *tc.expectedUpgradingAssessment, nfcRollout.GetUpgradingChildStatus().AssessmentResult)
+				assert.Equal(t, tc.expectedUpgradingInstance, nfcRollout.Status.ProgressiveStatus.UpgradingNumaflowControllerStatus.ControllerInstanceStatus)
+			}
+			if assert.NotNil(t, nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus) {
+				promotedStatus := nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus
+				assert.Equal(t, tc.expectedPromotedName, promotedStatus.Name)
+				assert.Equal(t, tc.expectedPromotedInstance, promotedStatus.ControllerInstanceStatus)
 			}
 
 			// Check the NumaflowController children
@@ -659,8 +666,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 				assert.Equal(t, expected.instanceID, nfc.Labels[common.LabelKeyControllerInstanceID], "instance label of %q", nfc.Name)
 			}
 
-			// Check Status.ControllerInstances, and how dependents resolve the instances from the children's labels
-			assert.Equal(t, tc.expectedControllerInstances, nfcRollout.Status.ControllerInstances)
+			// Check how dependents resolve the instances from the children's labels
 			promotedInstanceID, trialInstanceID, err := ctlrcommon.GetControllerInstanceIDs(ctx, client, ctlrcommon.DefaultTestNamespace)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedControllerInstanceIDs, [2]string{promotedInstanceID, trialInstanceID})

@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -468,39 +467,24 @@ func (r *NumaflowControllerRolloutReconciler) GetTemplateArguments(child *unstru
 	return map[string]interface{}{}
 }
 
-// updateControllerInstancesStatus reflects the live promoted and trial NumaflowController children in
-// Status.ControllerInstances. This is informational: dependents resolve the controller instance to bind to from the
+// updatePromotedControllerStatus reflects the live promoted NumaflowController child in the promoted status, under any
+// upgrade strategy: Progressive only resets that status when an upgrade starts, and PPND or Apply may change the
+// child's version in place. This is informational: dependents resolve the controller instance to bind to from the
 // children's upgrade-state labels (see ctlrcommon.GetControllerInstanceIDs).
-// ReferencingInterStepBufferServices and ReferencingMonovertices are consulted by Recycle only (#1021).
-func (r *NumaflowControllerRolloutReconciler) updateControllerInstancesStatus(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout) error {
-	children, err := kubernetes.ListResources(ctx, r.client, apiv1.NumaflowControllerGroupVersionKind, nfcRollout.Namespace,
-		client.MatchingLabels{common.LabelKeyParentRollout: nfcRollout.Name})
+// The upgrading status is set when the trial child is created, and a trial's instance and version never change.
+func (r *NumaflowControllerRolloutReconciler) updatePromotedControllerStatus(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout) error {
+	promotedChild, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, nfcRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
 	if err != nil {
-		return fmt.Errorf("error listing NumaflowController children: %w", err)
+		return fmt.Errorf("error looking for promoted NumaflowController: %w", err)
+	}
+	if promotedChild == nil {
+		return nil
 	}
 
-	controllerInstances := make([]apiv1.ControllerInstanceRef, 0, len(children.Items))
-	for _, child := range children.Items {
-		upgradeState := common.UpgradeState(child.GetLabels()[common.LabelKeyUpgradeState])
-		if upgradeState != common.LabelValueUpgradePromoted && upgradeState != common.LabelValueUpgradeTrial {
-			continue
-		}
-		instanceID, _, _ := unstructured.NestedString(child.Object, "spec", "instanceID")
-		version, _, _ := unstructured.NestedString(child.Object, "spec", "version")
-		controllerInstances = append(controllerInstances, apiv1.ControllerInstanceRef{
-			Name:       child.GetName(),
-			InstanceID: instanceID,
-			Version:    version,
-			State:      string(upgradeState),
-		})
+	promotedStatus := nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus
+	if promotedStatus == nil || promotedStatus.Name != promotedChild.GetName() {
+		return nfcRollout.ResetPromotedChildStatus(promotedChild)
 	}
-	// promoted first, then by name, so the status is stable across reconciliations
-	sort.Slice(controllerInstances, func(i, j int) bool {
-		if controllerInstances[i].State != controllerInstances[j].State {
-			return controllerInstances[i].State == string(common.LabelValueUpgradePromoted)
-		}
-		return controllerInstances[i].Name < controllerInstances[j].Name
-	})
-	nfcRollout.Status.ControllerInstances = controllerInstances
+	promotedStatus.ControllerInstanceStatus = apiv1.ControllerInstanceStatusOf(promotedChild)
 	return nil
 }
