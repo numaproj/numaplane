@@ -1271,9 +1271,12 @@ func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
 	if trialControllerInstanceID != "" {
 		desiredControllerInstanceID = trialControllerInstanceID
 	}
-	// InstanceID is optional. With no NumaflowControllerRollout, or with instanceID unset, both IDs are empty.
-	// A Rollout-supplied instance annotation is then the source of truth on the ISBService. Comparing that
-	// annotation to "" rejects every pair and blocks Pipeline creation.
+	// spec.controller.instanceID is optional. Both resolved IDs are empty when the namespace has no
+	// NumaflowControllerRollout, or when that field and Status.ControllerInstances are unset.
+	// A Rollout-supplied instance annotation is then the source of truth on the ISBService.
+	// Comparing that annotation to "" rejects every pair and blocks Pipeline creation.
+	// This stays: an existing controller keeps an empty instance ID. A trial controller is a
+	// separate, non-empty ID, so this branch is not the trial path.
 	noControllerBinding := promotedControllerInstanceID == "" && trialControllerInstanceID == ""
 
 	trialISBSvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
