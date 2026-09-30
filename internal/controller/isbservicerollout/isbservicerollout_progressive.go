@@ -28,7 +28,7 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	if err != nil {
 		return nil, err
 	}
-	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, isbsvcRollout.Namespace)
+	controllerInstanceID, err := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, isbsvcRollout.Namespace)
 	if err != nil {
 		return nil, err
 	}

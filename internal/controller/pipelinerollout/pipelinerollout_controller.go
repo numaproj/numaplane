@@ -400,7 +400,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return 0, nil, fmt.Errorf("error looking for promoted pipeline: %v", err)
 	}
-	newPipelineDef, err := r.makeTargetPipelineDefinition(ctx, pipelineRollout)
+	// Initial creation stays on the promoted ISBService, so a promoted Pipeline never uses a trial ISBService.
+	// Once that child exists, the desired definition uses the trial ISBService so Progressive can create a trial Pipeline.
+	requirePromotedISBService := len(promotedPipelines.Items) == 0
+	newPipelineDef, err := r.makeTargetPipelineDefinition(ctx, pipelineRollout, requirePromotedISBService)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -1083,38 +1086,23 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 }
 
 // if we did, we can create the pipeline definition and return it
+// requirePromotedISBService is true for the initial promoted child, which stays on the promoted ISBService. It is false
+// when comparing an existing promoted child with desired state: the trial ISBService, when one exists, is the difference
+// Progressive uses to create a separate trial child.
 func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
+	requirePromotedISBService bool,
 ) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	// which InterstepBufferServiceName should we use?
-	// If there is an upgrading isbsvc, use that
-	// Otherwise, use the promoted one
-	// TODO: consider case that there's an "upgrading" isbsvc, but the preferred strategy has just changed to something
-	// other than progressive - we may need isbsvc's "in-progress-strategy" to inform pipeline's strategy
-	var isbsvc *unstructured.Unstructured
-	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
+	isbsvc, controllerInstanceID, err := r.getTargetPipelineDependencies(ctx, pipelineRollout, requirePromotedISBService)
 	if err != nil {
 		return nil, err
 	}
-	// if no "upgrading" isbsvc was found, look for the "promoted" one
 	if isbsvc == nil {
-		numaLogger.Debug("no Upgrading isbsvc found for Pipeline, will find promoted one")
-		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
-		if err != nil {
-			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
-		}
-		if isbsvc == nil {
-			numaLogger.Debug("no Upgrading or Promoted isbsvc found for Pipeline")
-			return nil, nil
-		}
-	}
-
-	controllerInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, pipelineRollout.Namespace)
-	if err != nil {
-		return nil, err
+		numaLogger.Debug("no ISBService found for Pipeline")
+		return nil, nil
 	}
 
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
@@ -1271,6 +1259,35 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 		return nil, err
 	}
 	return isbsvc, nil
+}
+
+// getTargetPipelineDependencies returns the ISBService the Pipeline should use, and the controller instance it runs on.
+// If requirePromotedISBService is set, only the promoted ISBService is used; otherwise the trial ISBService is preferred
+// over the promoted one. The Pipeline always runs on the same controller instance as its ISBService, so the ISBServiceRollout
+// decides which controller instance the Pipeline follows.
+func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+	requirePromotedISBService bool,
+) (*unstructured.Unstructured, string, error) {
+	var isbsvc *unstructured.Unstructured
+	var err error
+	if !requirePromotedISBService {
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to find ISBService that's trial: %w", err)
+		}
+	}
+	if isbsvc == nil {
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to find ISBService that's promoted: %w", err)
+		}
+		if isbsvc == nil {
+			return nil, "", nil
+		}
+	}
+	return isbsvc, numaflowtypes.ControllerInstanceIDFromResource(isbsvc), nil
 }
 
 // get all isbsvc children of ISBServiceRollout with the given upgrading state label
