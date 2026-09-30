@@ -597,7 +597,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedPromotedName:          promotedName,
 			expectedPromotedInstance:      originalInstance,
 			expectedUpgradingInstance:     trialInstance,
-			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
+			expectedControllerInstanceIDs: [2]string{"", ""}, // dependents move back off the failed trial
 		},
 	}
 	// dependents for the dependent-driven cases
@@ -693,8 +693,8 @@ func Test_DeriveControllerInstanceID(t *testing.T) {
 		{version: "1.5.2", childName: "numaflow-controller-", expected: ""},
 		{version: "1.5.2", childName: "3", expected: ""},
 		{version: "...", childName: "numaflow-controller-1", expected: "1"},
-		// 43 characters max: "1-1-...-1" truncated to 41 characters, then "-7"
-		{version: strings.Repeat("1.", 40), childName: "numaflow-controller-7", expected: strings.TrimRight(strings.Repeat("1-", 40)[:41], "-") + "-7"},
+		// 33 characters max: "1-1-...-1" truncated to 31 characters, then "-7"
+		{version: strings.Repeat("1.", 40), childName: "numaflow-controller-7", expected: strings.TrimRight(strings.Repeat("1-", 40)[:31], "-") + "-7"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.version+"/"+tc.childName, func(t *testing.T) {

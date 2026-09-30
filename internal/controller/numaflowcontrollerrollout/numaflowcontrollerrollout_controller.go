@@ -455,7 +455,8 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 
 		// The promoted NumaflowController is never modified: a version change results in a separate "trial" child on
 		// its own instance, which ISBServiceRollouts and MonoVertexRollouts then upgrade onto. Once all of them succeed,
-		// the trial child is promoted and the old one marked "recyclable"; if any of them fail, the trial is discontinued.
+		// the trial child is promoted and the old one marked "recyclable"; if any of them fail, the trial is marked failed
+		// and dependents move back to the promoted instance.
 		assessmentComplete, failed, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, nfcRollout, existingNumaflowControllerDef, numaflowControllerNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, fmt.Errorf("error processing NumaflowController with progressive: %s", err.Error())

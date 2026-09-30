@@ -51,9 +51,14 @@ import (
 // RFC 1035 labels: lowercase letters, digits, and dashes only. Dots in a version string would be rejected.
 var instanceIDDisallowedChars = regexp.MustCompile(`[^a-z0-9]+`)
 
+// In Kubernetes, each Service results in a DNS name which is capped to a maximum length.
 // maxControllerInstanceIDLength keeps the longest templated Service name, "numaflow-dex-server-<instance>",
-// within the 63 character limit of an RFC 1035 label
-const maxControllerInstanceIDLength = validation.DNS1035LabelMaxLength - len("numaflow-dex-server-")
+// within the 63 character limit of an RFC 1035 label.
+// controllerInstanceIDCushion leaves room for a longer Service name in a future controller manifest.
+const (
+	controllerInstanceIDCushion   = 10
+	maxControllerInstanceIDLength = validation.DNS1035LabelMaxLength - len("numaflow-dex-server-") - controllerInstanceIDCushion
+)
 
 // DeriveControllerInstanceID returns the instance ID for a trial NumaflowController child named childName
 // ("<rolloutName>-<nameCount>") running version. The result is "<sanitized version>-<nameCount>", so a later

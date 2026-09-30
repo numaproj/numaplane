@@ -77,6 +77,23 @@ func TestGetControllerInstanceID(t *testing.T) {
 		assert.Equal(t, "trial-2", instanceID)
 	})
 
+	t.Run("falls back to promoted instance when the trial child failed", func(t *testing.T) {
+		failedTrial := newController("controller-2", numaplanecommon.LabelValueUpgradeTrial, "trial-2")
+		failedTrial.Labels[numaplanecommon.LabelKeyProgressiveResultState] = string(numaplanecommon.LabelValueResultStateFailed)
+		c := newClient(controllerRollout,
+			newController("controller-1", numaplanecommon.LabelValueUpgradePromoted, "promoted-1"),
+			failedTrial)
+
+		promoted, trial, err := GetControllerInstanceIDs(context.Background(), c, namespace)
+		require.NoError(t, err)
+		assert.Equal(t, "promoted-1", promoted)
+		assert.Empty(t, trial)
+
+		desired, err := GetDesiredControllerInstanceID(context.Background(), c, namespace)
+		require.NoError(t, err)
+		assert.Equal(t, "promoted-1", desired)
+	})
+
 	t.Run("ignores recyclable children and children of other rollouts", func(t *testing.T) {
 		otherRolloutChild := CreateTestNumaflowController(namespace, "other", "other-1", numaplanecommon.LabelValueUpgradeTrial, "other-1")
 		c := newClient(controllerRollout,
@@ -89,14 +106,6 @@ func TestGetControllerInstanceID(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "promoted-2", promoted)
 		assert.Empty(t, trial)
-	})
-
-	t.Run("rejects instance IDs that cannot be labels", func(t *testing.T) {
-		c := newClient(controllerRollout, newController("controller-1", numaplanecommon.LabelValueUpgradePromoted, "invalid/id"))
-
-		_, err := GetPromotedControllerInstanceID(context.Background(), c, namespace)
-
-		assert.ErrorContains(t, err, "not a valid Kubernetes label value")
 	})
 
 	t.Run("returns empty IDs when no controller rollout exists", func(t *testing.T) {

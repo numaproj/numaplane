@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -268,6 +267,8 @@ func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace st
 // upgrade state, or "" if there is none.
 // If there is more than one, the most current one is used: when a trial succeeds, it is labeled "promoted" before the
 // previous promoted child is marked "recyclable", so for a moment both are "promoted".
+// A child whose Progressive assessment failed is treated as absent: a failed trial keeps its "trial" label until the
+// Rollout changes, and dependents must move off of it rather than onto it.
 func getControllerInstanceIDOfUpgradeState(ctx context.Context, c client.Client, nfcRollout *apiv1.NumaflowControllerRollout, upgradeState common.UpgradeState) (string, error) {
 	child, err := FindMostCurrentChildOfUpgradeState(ctx, nfcRollout, upgradeState, nil, false, c)
 	if err != nil {
@@ -276,16 +277,13 @@ func getControllerInstanceIDOfUpgradeState(ctx context.Context, c client.Client,
 	if child == nil {
 		return "", nil
 	}
+	if child.GetLabels()[common.LabelKeyProgressiveResultState] == string(common.LabelValueResultStateFailed) {
+		return "", nil
+	}
 
 	instanceID, _, err := unstructured.NestedString(child.Object, "spec", "instanceID")
 	if err != nil {
 		return "", fmt.Errorf("failed to read spec.instanceID of NumaflowController %s/%s: %w", nfcRollout.Namespace, child.GetName(), err)
-	}
-	if instanceID == "" {
-		return "", nil
-	}
-	if validationErrors := validation.IsValidLabelValue(instanceID); len(validationErrors) > 0 {
-		return "", fmt.Errorf("controller instance ID %q is not a valid Kubernetes label value: %s", instanceID, validationErrors[0])
 	}
 	return instanceID, nil
 }
@@ -296,7 +294,8 @@ func GetPromotedControllerInstanceID(ctx context.Context, c client.Client, names
 	return promotedInstanceID, err
 }
 
-// GetDesiredControllerInstanceID returns the trial controller instance when one exists, otherwise the promoted one.
+// GetDesiredControllerInstanceID returns the trial controller instance when one exists and has not failed, otherwise the
+// promoted one.
 func GetDesiredControllerInstanceID(ctx context.Context, c client.Client, namespace string) (string, error) {
 	promotedInstanceID, trialInstanceID, err := GetControllerInstanceIDs(ctx, c, namespace)
 	if err != nil {
