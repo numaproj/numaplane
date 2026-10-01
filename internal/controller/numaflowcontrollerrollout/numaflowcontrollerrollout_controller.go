@@ -120,8 +120,9 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	ctx = logger.WithLogger(ctx, numaLogger)
 	r.customMetrics.NumaflowControllerRolloutSyncs.WithLabelValues().Inc()
 
-	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
-	if err := r.client.Get(ctx, req.NamespacedName, numaflowControllerRollout); err != nil {
+	// Get the live NumaflowControllerRollout since we need latest Status for Progressive rollout case
+	numaflowControllerRollout, err := getLiveNumaflowControllerRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
+	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
@@ -675,6 +676,16 @@ func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutSta
 		return nil
 	}
 	return err
+}
+
+func getLiveNumaflowControllerRollout(ctx context.Context, name, namespace string) (*apiv1.NumaflowControllerRollout, error) {
+	nfcRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllerRollouts(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nfcRollout, err
+	}
+	nfcRollout.SetGroupVersionKind(apiv1.NumaflowControllerRolloutGroupVersionKind)
+
+	return nfcRollout, nil
 }
 
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatusToFailed(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout, err error) error {
