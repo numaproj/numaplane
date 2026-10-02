@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
 
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -24,10 +26,36 @@ var (
 	numaflowControllerRolloutName = "numaflow-controller"
 )
 
-// verify that the Deployment matches some criteria
+const numaflowControllerDeploymentName = "numaflow-controller"
+
+// promotedNumaflowControllerDeploymentName returns the name of the Deployment run by the promoted NumaflowController child.
+// A child with an instance ID runs "numaflow-controller-<instanceID>"; otherwise the Deployment is "numaflow-controller".
+func promotedNumaflowControllerDeploymentName() (string, error) {
+	controllers, err := numaflowControllerClient.List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s,%s=%s", ParentRolloutLabel, numaflowControllerRolloutName,
+			common.LabelKeyUpgradeState, common.LabelValueUpgradePromoted),
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(controllers.Items) != 1 {
+		return "", fmt.Errorf("expected 1 promoted NumaflowController, found %d", len(controllers.Items))
+	}
+	instanceID := strings.TrimSpace(controllers.Items[0].Spec.InstanceID)
+	if instanceID == "" {
+		return numaflowControllerDeploymentName, nil
+	}
+	return fmt.Sprintf("%s-%s", numaflowControllerDeploymentName, instanceID), nil
+}
+
+// verify that the promoted NumaflowController's Deployment matches some criteria
 func VerifyNumaflowControllerDeployment(namespace string, f func(appsv1.Deployment) bool) {
 	CheckEventually("verifying Numaflow Controller Deployment", func() bool {
-		deployment, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		deploymentName, err := promotedNumaflowControllerDeploymentName()
+		if err != nil {
+			return false
+		}
+		deployment, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
@@ -75,7 +103,11 @@ func VerifyNumaflowControllerRollout(namespace string, f func(apiv1.NumaflowCont
 
 func VerifyNumaflowControllerExists(namespace string) {
 	CheckEventually("Verifying that the Numaflow Controller Deployment exists", func() error {
-		_, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		deploymentName, err := promotedNumaflowControllerDeploymentName()
+		if err != nil {
+			return err
+		}
+		_, err = kubeClient.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 		return err
 	}).Should(Succeed())
 }
@@ -214,15 +246,12 @@ func DeleteNumaflowControllerRollout() {
 	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
 
 	CheckEventually("Verifying Numaflow Controller deletion", func() bool {
-		_, err := kubeClient.AppsV1().Deployments(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		deployments, err := kubeClient.AppsV1().Deployments(Namespace).List(ctx, metav1.ListOptions{LabelSelector: common.LabelKeyNumaplaneInstance})
 		if err != nil {
-			if !errors.IsNotFound(err) {
-				Fail("An unexpected error occurred when fetching the deployment: " + err.Error())
-			}
-			return false
+			Fail("An unexpected error occurred when listing the deployments: " + err.Error())
 		}
-		return true
-	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
+		return len(deployments.Items) > 0
+	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The Numaflow Controller deployments should have been deleted but at least one was found.")
 }
 
 // UpdateNumaflowControllerRollout updates the NumaflowControllerRollout and its dependent PipelineRollouts.

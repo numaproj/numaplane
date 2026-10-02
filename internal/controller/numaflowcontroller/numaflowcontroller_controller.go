@@ -263,7 +263,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 	logResourceInfo(numaLogger, newVersionTargetObjs, false, newVersion)
 
 	// Determine existing managed resources in the cluster, which is used to compute the diff between the desired state and the live state.
-	existingClusterResources, err := r.determineExistingManagedResourceInCluster(ctx, namespace)
+	existingClusterResources, err := r.determineExistingManagedResourceInCluster(ctx, controller, namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to determine existing managed resources in cluster: %w", err)
 	}
@@ -306,8 +306,10 @@ func logResourceInfo(numaLogger *logger.NumaLogger, obj []*unstructured.Unstruct
 	}
 }
 
-// Determine the existing managed resources in the cluster, whose owner references API VERSION is Numaplane.
-func (r *NumaflowControllerReconciler) determineExistingManagedResourceInCluster(ctx context.Context, namespace string) ([]*unstructured.Unstructured, error) {
+// Determine the existing managed resources in the cluster that are owned by the given NumaflowController.
+// Multiple NumaflowControllers can share a namespace during a Progressive upgrade, so resources owned by
+// a sibling must be excluded; otherwise each one prunes the other's resources.
+func (r *NumaflowControllerReconciler) determineExistingManagedResourceInCluster(ctx context.Context, controller *apiv1.NumaflowController, namespace string) ([]*unstructured.Unstructured, error) {
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	if err != nil {
 		return nil, fmt.Errorf("error on getting global config: %w", err)
@@ -326,16 +328,23 @@ func (r *NumaflowControllerReconciler) determineExistingManagedResourceInCluster
 		if err != nil {
 			return targetObjs, fmt.Errorf("error on listing resources for GVK %s: %w", gvk.String(), err)
 		}
-		for _, item := range resourceList.Items {
-			for _, owner := range item.GetOwnerReferences() {
-				if owner.APIVersion == fmt.Sprintf("%s/%s", apiv1.SchemeGroupVersion.Group, apiv1.SchemeGroupVersion.Version) {
-					targetObjs = append(targetObjs, &item)
-				}
-			}
-		}
+		targetObjs = append(targetObjs, filterOwnedBy(resourceList.Items, controller.GetUID())...)
 	}
 
 	return targetObjs, nil
+}
+
+func filterOwnedBy(items []unstructured.Unstructured, ownerUID k8stypes.UID) []*unstructured.Unstructured {
+	var owned []*unstructured.Unstructured
+	for i := range items {
+		for _, owner := range items[i].GetOwnerReferences() {
+			if owner.UID == ownerUID {
+				owned = append(owned, &items[i])
+				break
+			}
+		}
+	}
+	return owned
 }
 
 // applyOwnershipToManifests Applies NumaflowController ownership to

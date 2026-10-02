@@ -55,29 +55,24 @@ spec:
             properties:
               controller:
                 properties:
-                  instanceID:
-                    description: |-
-                      NOTE: keeping the instanceID also in the NumaflowControllerRollout in case users want to
-                      create multiple Numaflow controllers within the same namespace
-                    type: string
                   version:
                     type: string
                 required:
                 - version
                 type: object
               strategy:
-                description: ControllerStrategy defines the strategy to use when upgrading
-                  the NumaflowController
                 properties:
                   progressive:
-                    description: ControllerProgressiveStrategy defines the configuration
-                      for a progressive upgrade of the NumaflowController
                     properties:
                       assessmentSchedule:
                         description: |-
-                          AssessmentSchedule describes the schedule for how often we assess the health of the upgrading controller instance,
-                          in the format "delay,end,period,interval" (see config.AssessmentSchedule)
+                          optional string: comma-separated list consisting of:
+                          assessmentDelay, assessmentPeriod, assessmentInterval
                         type: string
+                      forcePromote:
+                        description: if ForcePromote is set, assessment will be skipped
+                          and Progressive upgrade will succeed
+                        type: boolean
                     type: object
                 type: object
             required:
@@ -145,48 +140,6 @@ spec:
                   - type
                   type: object
                 type: array
-              controllerInstances:
-                description: ControllerInstances holds one entry for each live NumaflowController
-                  child, whether promoted or trial.
-                items:
-                  description: ControllerInstanceRef represents a live NumaflowController
-                    child, either promoted or trial.
-                  properties:
-                    instanceID:
-                      description: |-
-                        InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
-                        controller instance.
-                      type: string
-                    name:
-                      description: Name of the child NumaflowController CR, e.g. "numaflow-controller-2".
-                      type: string
-                    referencingInterStepBufferServices:
-                      description: |-
-                        ReferencingInterStepBufferServices and ReferencingMonovertices are live counts of ISBServices and MonoVertices,
-                        respectively, currently bound to this instance. Pipelines are not counted directly: a Pipeline's ISBSvc is not
-                        deleted while that Pipeline still references it, so counting ISBServices already transitively captures
-                        Pipeline usage. Both fields are consulted exclusively by Recycle() as a deletion-safety gate, once a controller
-                        instance has already been marked recyclable.
-                      format: int32
-                      type: integer
-                    referencingMonovertices:
-                      format: int32
-                      type: integer
-                    state:
-                      description: 'State reuses the existing common.UpgradeState
-                        values: "promoted" or "trial".'
-                      type: string
-                    version:
-                      type: string
-                  required:
-                  - instanceID
-                  - name
-                  - referencingInterStepBufferServices
-                  - referencingMonovertices
-                  - state
-                  - version
-                  type: object
-                type: array
               lastFailureTime:
                 description: LastFailureTime records the timestamp of the Last Failure
                   (PhaseFailed)
@@ -195,6 +148,12 @@ spec:
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
+              nameCount:
+                description: |-
+                  NameCount is used as a suffix for the name of the managed NumaflowController children, to uniquely
+                  identify each child.
+                format: int32
+                type: integer
               observedGeneration:
                 description: ObservedGeneration stores the generation value observed
                   when setting the current Phase
@@ -226,6 +185,140 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  promotedNumaflowControllerStatus:
+                    description: PromotedNumaflowControllerStatus stores information
+                      regarding the current "promoted" NumaflowController
+                    properties:
+                      instanceID:
+                        description: |-
+                          InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
+                          controller instance. A trial child derives it as "<version>-<nameCount>" (with the version reduced to
+                          lowercase letters, digits, and dashes so it stays valid inside Service names), so re-trialing the same
+                          version after a failed trial still yields a distinct instance. The controller that existed before
+                          Progressive was introduced keeps an empty instance.
+                        type: string
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                      version:
+                        description: Version is the Numaflow Controller version that
+                          the child runs
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  upgradingNumaflowControllerStatus:
+                    description: UpgradingNumaflowControllerStatus represents either
+                      the current or otherwise the most recent "upgrading" NumaflowController
+                    properties:
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      basicAssessmentEndTime:
+                        description: BasicAssessmentEndTime indicates the time after
+                          which no more basic resource health check assessments will
+                          be performed
+                        format: date-time
+                        type: string
+                      basicAssessmentResult:
+                        description: BasicAssessmentResult indicates the result of
+                          the basic resource health check assessment
+                        type: string
+                      basicAssessmentStartTime:
+                        description: BasicAssessmentStartTime indicates the time at/after
+                          which the basic resource health check assessment result
+                          will be computed
+                        format: date-time
+                        type: string
+                      childStatus:
+                        description: ChildStatus is the full dump of child status
+                          object
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      discontinued:
+                        description: |-
+                          Discontinued indicates if the upgrade was stopped prematurely.
+                          This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
+                          in the middle of an upgrade
+                        type: boolean
+                      failureReasons:
+                        description: FailureReasons is an array of strings indicating
+                          the reasons for failure
+                        items:
+                          type: string
+                        type: array
+                      forcedSuccess:
+                        description: ForcedSuccess indicates if this promotion was
+                          forced to complete
+                        type: boolean
+                      forcedSuccessReason:
+                        description: ForcedSuccessReason indicates the reason for
+                          the forced success
+                        type: string
+                      initializationComplete:
+                        description: InitializationComplete determines if the upgrade
+                          process has completed (if it hasn't, we will come back and
+                          try it again)
+                        type: boolean
+                      instanceID:
+                        description: |-
+                          InstanceID is stamped into the child controller's spec and into every Pipeline or MonoVertex bound to this
+                          controller instance. A trial child derives it as "<version>-<nameCount>" (with the version reduced to
+                          lowercase letters, digits, and dashes so it stays valid inside Service names), so re-trialing the same
+                          version after a failed trial still yields a distinct instance. The controller that existed before
+                          Progressive was introduced keeps an empty instance.
+                        type: string
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
+                      trialWindowStartTime:
+                        description: TrialWindowStartTime indicates the time at which
+                          the trial window starts
+                        format: date-time
+                        type: string
+                      version:
+                        description: Version is the Numaflow Controller version that
+                          the child runs
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade

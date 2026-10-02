@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -36,13 +37,9 @@ func TestCreateUpgradingISBServiceUsesTrialControllerInstance(t *testing.T) {
 
 	controllerRollout := &apiv1.NumaflowControllerRollout{
 		ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: "test"},
-		Status: apiv1.NumaflowControllerRolloutStatus{
-			ControllerInstances: []apiv1.ControllerInstanceRef{
-				{InstanceID: "controller-1", State: string(common.LabelValueUpgradePromoted)},
-				{InstanceID: "controller-2", State: string(common.LabelValueUpgradeTrial)},
-			},
-		},
 	}
+	promotedController := ctlrcommon.CreateTestNumaflowController("test", "controller", "controller-1", common.LabelValueUpgradePromoted, "controller-1")
+	trialController := ctlrcommon.CreateTestNumaflowController("test", "controller", "controller-2", common.LabelValueUpgradeTrial, "controller-2")
 	isbsvcRollout := &apiv1.ISBServiceRollout{
 		ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "test"},
 		Spec: apiv1.ISBServiceRolloutSpec{
@@ -53,7 +50,7 @@ func TestCreateUpgradingISBServiceUsesTrialControllerInstance(t *testing.T) {
 		},
 	}
 	reconciler := &ISBServiceRolloutReconciler{
-		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(controllerRollout).Build(),
+		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(controllerRollout, promotedController, trialController).Build(),
 	}
 
 	isbsvc, err := reconciler.CreateUpgradingChildDefinition(context.Background(), isbsvcRollout, "default-1")

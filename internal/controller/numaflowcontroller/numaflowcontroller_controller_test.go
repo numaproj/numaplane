@@ -21,9 +21,44 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
+
+func Test_filterOwnedBy(t *testing.T) {
+	newObj := func(name string, ownerUIDs ...k8stypes.UID) unstructured.Unstructured {
+		obj := unstructured.Unstructured{}
+		obj.SetName(name)
+		var refs []metav1.OwnerReference
+		for _, uid := range ownerUIDs {
+			refs = append(refs, metav1.OwnerReference{
+				APIVersion: apiv1.SchemeGroupVersion.String(),
+				Kind:       "NumaflowController",
+				UID:        uid,
+			})
+		}
+		obj.SetOwnerReferences(refs)
+		return obj
+	}
+
+	items := []unstructured.Unstructured{
+		newObj("numaflow-controller", "promoted-uid"),
+		newObj("numaflow-controller-1-8-3-1", "trial-uid"),
+		newObj("unowned"),
+		newObj("numaflow-server", "promoted-uid"),
+	}
+
+	owned := filterOwnedBy(items, "promoted-uid")
+
+	var names []string
+	for _, obj := range owned {
+		names = append(names, obj.GetName())
+	}
+	assert.Equal(t, []string{"numaflow-controller", "numaflow-server"}, names)
+}
 
 func Test_resolveManifestTemplate(t *testing.T) {
 	defaultInstanceID := "123"
