@@ -77,7 +77,7 @@ func TestGetControllerInstanceID(t *testing.T) {
 		assert.Equal(t, "trial-2", instanceID)
 	})
 
-	t.Run("falls back to promoted instance when the trial child failed", func(t *testing.T) {
+	t.Run("still resolves a failed trial child's instance, like a Pipeline resolving a trial ISBService", func(t *testing.T) {
 		failedTrial := newController("controller-2", numaplanecommon.LabelValueUpgradeTrial, "trial-2")
 		failedTrial.Labels[numaplanecommon.LabelKeyProgressiveResultState] = string(numaplanecommon.LabelValueResultStateFailed)
 		c := newClient(controllerRollout,
@@ -87,11 +87,11 @@ func TestGetControllerInstanceID(t *testing.T) {
 		promoted, trial, err := GetControllerInstanceIDs(context.Background(), c, namespace)
 		require.NoError(t, err)
 		assert.Equal(t, "promoted-1", promoted)
-		assert.Empty(t, trial)
+		assert.Equal(t, "trial-2", trial)
 
 		desired, err := GetDesiredControllerInstanceID(context.Background(), c, namespace)
 		require.NoError(t, err)
-		assert.Equal(t, "promoted-1", desired)
+		assert.Equal(t, "trial-2", desired)
 	})
 
 	t.Run("ignores recyclable children and children of other rollouts", func(t *testing.T) {

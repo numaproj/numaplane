@@ -594,10 +594,12 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradePromoted},
 				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradeTrial},
 			},
-			expectedPromotedName:          promotedName,
-			expectedPromotedInstance:      originalInstance,
-			expectedUpgradingInstance:     trialInstance,
-			expectedControllerInstanceIDs: [2]string{"", ""}, // dependents move back off the failed trial
+			expectedPromotedName:      promotedName,
+			expectedPromotedInstance:  originalInstance,
+			expectedUpgradingInstance: trialInstance,
+			// a failed trial's instance is still resolved, the same way a Pipeline resolves a trial ISBService
+			// regardless of its assessment: see getControllerInstanceIDOfUpgradeState.
+			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
 		},
 	}
 	// dependents for the dependent-driven cases

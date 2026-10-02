@@ -307,6 +307,8 @@ func (r *NumaflowControllerRolloutReconciler) findPromotedNumaflowController(ctx
 		return promotedNumaflowController, nil
 	}
 
+	// NumaflowControllers created before Progressive rollout was supported don't use the "promoted" label, so find it by name during cutover
+	// TODO: remove later
 	legacyNumaflowController, err := kubernetes.GetResource(ctx, r.client, apiv1.NumaflowControllerGroupVersionKind,
 		k8stypes.NamespacedName{Namespace: nfcRollout.Namespace, Name: nfcRollout.Name})
 	if err != nil {
@@ -744,15 +746,14 @@ func makeNumaflowControllerDefinition(
 	}
 	newNumaflowControllerDef.SetLabels(labels)
 
-	// Update spec of NumaflowController to match the NumaflowControllerRollout spec, except for the instance which is bound to the child
+	// Update spec of NumaflowController to match the NumaflowControllerRollout spec, except for the instance which is bound to the child.
+	// Controller (nfcRollout.Spec.Controller) has no InstanceID field, so it can never produce an "instanceID" key here.
 	var numaflowControllerSpec map[string]interface{}
 	if err := util.StructToStruct(nfcRollout.Spec.Controller, &numaflowControllerSpec); err != nil {
 		return nil, err
 	}
 	if instanceID != "" {
 		numaflowControllerSpec["instanceID"] = instanceID
-	} else {
-		delete(numaflowControllerSpec, "instanceID")
 	}
 	newNumaflowControllerDef.Object["spec"] = numaflowControllerSpec
 
