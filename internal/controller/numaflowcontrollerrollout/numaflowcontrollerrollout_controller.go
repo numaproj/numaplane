@@ -281,6 +281,19 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return ctrl.Result{}, fmt.Errorf("error updating promoted NumaflowController Status: %v", err)
 	}
 
+	// clean up recyclable NumaflowControllers once nothing is bound to them
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, nfcRollout, r, r.client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error deleting recyclable NumaflowControllers: %w", err)
+	}
+	if !allDeleted {
+		if requeueDelay == 0 {
+			requeueDelay = common.DefaultRequeueDelay
+		} else {
+			requeueDelay = min(requeueDelay, common.DefaultRequeueDelay)
+		}
+	}
+
 	// if the NumaflowController is being deleted, we need to auto-heal it.
 	if autoHealNumaflowController {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -459,7 +472,8 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 		// The promoted NumaflowController is never modified: a version change results in a separate "trial" child on
 		// its own instance, which ISBServiceRollouts and MonoVertexRollouts then upgrade onto. Once all of them succeed,
 		// the trial child is promoted and the old one marked "recyclable"; if any of them fail, the trial is marked failed
-		// and dependents move back to the promoted instance.
+		// and dependents move back to the promoted instance. Recycle, called after this, deletes a recyclable child
+		// once no ISBService or MonoVertex is bound to its instance.
 		assessmentComplete, failed, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, nfcRollout, existingNumaflowControllerDef, numaflowControllerNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, fmt.Errorf("error processing NumaflowController with progressive: %s", err.Error())
