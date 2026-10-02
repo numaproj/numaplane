@@ -470,6 +470,8 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 		existingNumaflowControllers   []*apiv1.NumaflowController
 		existingMonoVertexRollout     *apiv1.MonoVertexRollout
 		existingMonoVertex            *numaflowv1.MonoVertex
+		existingPromotedMonoVertex    *numaflowv1.MonoVertex
+		expectedRequeue               bool
 		expectedRolloutPhase          apiv1.Phase
 		expectedInProgressStrategy    apiv1.UpgradeStrategy
 		expectedUpgradingAssessment   *apiv1.AssessmentResult // nil means no UpgradingChildStatus expected
@@ -520,7 +522,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
 		},
 		{
-			name:                         "healthy trial with no dependents is promoted",
+			name:                         "healthy trial with no dependents is promoted and the unreferenced previous controller is deleted",
 			newNumaflowControllerVersion: "3.2.1",
 			initialRolloutStatus:         assessingTrialStatus(),
 			existingNumaflowControllers: []*apiv1.NumaflowController{
@@ -531,8 +533,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedUpgradingAssessment: ptr.To(apiv1.AssessmentResultSuccess),
 			expectedControllers: map[string]expectedController{
-				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradeRecyclable},
-				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
+				trialName: {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
 			},
 			expectedPromotedName:          trialName,
 			expectedPromotedInstance:      trialInstance,
@@ -560,7 +561,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
 		},
 		{
-			name:                         "trial is promoted once dependents succeed on it",
+			name:                         "trial is promoted once dependents succeed on it and the unreferenced previous controller is deleted",
 			newNumaflowControllerVersion: "3.2.1",
 			initialRolloutStatus:         assessingTrialStatus(),
 			existingNumaflowControllers: []*apiv1.NumaflowController{
@@ -571,8 +572,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedUpgradingAssessment: ptr.To(apiv1.AssessmentResultSuccess),
 			expectedControllers: map[string]expectedController{
-				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradeRecyclable},
-				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
+				trialName: {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
 			},
 			expectedPromotedName:          trialName,
 			expectedPromotedInstance:      trialInstance,
@@ -601,11 +601,36 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			// regardless of its assessment: see getControllerInstanceIDOfUpgradeState.
 			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
 		},
+		{
+			name:                         "trial is promoted but the previous controller stays recyclable while a MonoVertex is still bound to it",
+			newNumaflowControllerVersion: "3.2.1",
+			initialRolloutStatus:         assessingTrialStatus(),
+			existingNumaflowControllers: []*apiv1.NumaflowController{
+				createDefaultNumaflowController("1.2.3", apiv1.PhaseDeployed, true),
+				createNumaflowController(trialName, "3.2.1", trialInstanceID, common.LabelValueUpgradeTrial, apiv1.PhaseDeployed, true, healthyChildResourcesCondition()),
+			},
+			existingPromotedMonoVertex: ctlrcommon.CreateTestMonoVertexOfSpec(monoVertexSpec, ctlrcommon.DefaultTestMonoVertexName, numaflowv1.MonoVertexPhaseRunning, numaflowv1.Status{},
+				map[string]string{common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName, common.LabelKeyUpgradeState: string(common.LabelValueUpgradePromoted)},
+				nil),
+			expectedRequeue:             true,
+			expectedRolloutPhase:        apiv1.PhaseDeployed,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
+			expectedUpgradingAssessment: ptr.To(apiv1.AssessmentResultSuccess),
+			expectedControllers: map[string]expectedController{
+				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradeRecyclable},
+				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
+			},
+			expectedPromotedName:          trialName,
+			expectedPromotedInstance:      trialInstance,
+			expectedUpgradingInstance:     trialInstance,
+			expectedControllerInstanceIDs: [2]string{trialInstanceID, ""},
+		},
 	}
 	// dependents for the dependent-driven cases
 	testCases[4].existingMonoVertexRollout, testCases[4].existingMonoVertex = monoVertexRolloutOnInstance(trialInstanceID, apiv1.AssessmentResultUnknown)
 	testCases[5].existingMonoVertexRollout, testCases[5].existingMonoVertex = monoVertexRolloutOnInstance(trialInstanceID, apiv1.AssessmentResultSuccess)
 	testCases[6].existingMonoVertexRollout, testCases[6].existingMonoVertex = monoVertexRolloutOnInstance(trialInstanceID, apiv1.AssessmentResultFailure)
+	testCases[7].existingMonoVertexRollout, testCases[7].existingMonoVertex = monoVertexRolloutOnInstance(trialInstanceID, apiv1.AssessmentResultSuccess)
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -629,12 +654,18 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 				ctlrcommon.CreateMVRolloutInK8S(ctx, t, client, tc.existingMonoVertexRollout)
 				ctlrcommon.CreateMonoVertexInK8S(ctx, t, numaflowClientSet, tc.existingMonoVertex)
 			}
+			if tc.existingPromotedMonoVertex != nil {
+				ctlrcommon.CreateMonoVertexInK8S(ctx, t, numaflowClientSet, tc.existingPromotedMonoVertex)
+			}
 
 			r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestNumaflowControllerRolloutName}, tc.initialRolloutStatus.UpgradeInProgress)
 
 			// call reconcile()
-			_, err = r.reconcile(ctx, nfcRollout, ctlrcommon.DefaultTestNamespace, time.Now())
+			result, err := r.reconcile(ctx, nfcRollout, ctlrcommon.DefaultTestNamespace, time.Now())
 			assert.NoError(t, err)
+			if tc.expectedRequeue {
+				assert.Positive(t, result.RequeueAfter)
+			}
 
 			////// check results:
 			assert.Equal(t, tc.expectedRolloutPhase, nfcRollout.Status.Phase)
