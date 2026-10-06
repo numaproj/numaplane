@@ -59,3 +59,44 @@ func TestCreateUpgradingMonoVertexUsesTrialControllerInstance(t *testing.T) {
 	assert.Equal(t, "controller-2", monoVertex.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID])
 	assert.Equal(t, "controller-2", monoVertex.GetLabels()[common.LabelKeyControllerInstanceID])
 }
+
+func TestMapNumaflowControllerToMonoVertexRollouts(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	rolloutA := &apiv1.MonoVertexRollout{ObjectMeta: metav1.ObjectMeta{Name: "mv-a", Namespace: "test"}}
+	rolloutB := &apiv1.MonoVertexRollout{ObjectMeta: metav1.ObjectMeta{Name: "mv-b", Namespace: "test"}}
+	otherNamespaceRollout := &apiv1.MonoVertexRollout{ObjectMeta: metav1.ObjectMeta{Name: "mv-c", Namespace: "other"}}
+
+	reconciler := &MonoVertexRolloutReconciler{
+		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(rolloutA, rolloutB, otherNamespaceRollout).Build(),
+	}
+
+	trialController := ctlrcommon.CreateTestNumaflowController("test", "controller", "controller-2", common.LabelValueUpgradeTrial, "controller-2")
+
+	reqs := reconciler.mapNumaflowControllerToMonoVertexRollouts(context.Background(), trialController)
+
+	// every MonoVertexRollout in the NumaflowController's namespace is enqueued, regardless of which controller
+	// instance it is currently bound to - and no rollout from a different namespace is enqueued
+	require.Len(t, reqs, 2)
+	names := []string{reqs[0].Name, reqs[1].Name}
+	assert.ElementsMatch(t, []string{"mv-a", "mv-b"}, names)
+	for _, req := range reqs {
+		assert.Equal(t, "test", req.Namespace)
+	}
+}
+
+func TestMapNumaflowControllerToMonoVertexRollouts_NoRolloutsInNamespace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	reconciler := &MonoVertexRolloutReconciler{
+		client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+	}
+
+	trialController := ctlrcommon.CreateTestNumaflowController("test", "controller", "controller-2", common.LabelValueUpgradeTrial, "controller-2")
+
+	reqs := reconciler.mapNumaflowControllerToMonoVertexRollouts(context.Background(), trialController)
+
+	assert.Empty(t, reqs)
+}

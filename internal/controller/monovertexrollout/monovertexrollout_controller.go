@@ -513,7 +513,35 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(ctx context.Context, mgr 
 		return fmt.Errorf("failed to watch AnalysisRuns: %w", err)
 	}
 
+	// Watch NumaflowControllers: a trial being created, promoted, or failed changes which controller instance
+	// MonoVertices should run on
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowController{},
+		handler.TypedEnqueueRequestsFromMapFunc(r.mapNumaflowControllerToMonoVertexRollouts),
+		predicate.TypedLabelChangedPredicate[*apiv1.NumaflowController]{})); err != nil {
+		return fmt.Errorf("failed to watch NumaflowControllers: %w", err)
+	}
+
 	return nil
+}
+
+// mapNumaflowControllerToMonoVertexRollouts enqueues every MonoVertexRollout in the NumaflowController's namespace.
+// A NumaflowController is only ever created, deleted, or label-updated (upgrade-state / progressive-result-state)
+// as a result of a controller-instance transition (trial created, trial promoted, trial failed/discontinued), any
+// of which can change which controller instance an idle, fully-promoted MonoVertexRollout should be running on.
+// Since at trial-creation time the dependent MonoVertices are still bound to the promoted instance (not the trial
+// instance), we can't narrow this down to "MonoVertexRollouts bound to this NumaflowController" - we have to wake
+// all of them so they can each decide for themselves whether to start a trial.
+func (r *MonoVertexRolloutReconciler) mapNumaflowControllerToMonoVertexRollouts(ctx context.Context, nfc *apiv1.NumaflowController) []reconcile.Request {
+	var rollouts apiv1.MonoVertexRolloutList
+	if err := r.client.List(ctx, &rollouts, client.InNamespace(nfc.GetNamespace())); err != nil {
+		logger.FromContext(ctx).Warnf("Unable to list MonoVertexRollouts in namespace %s: %v", nfc.GetNamespace(), err)
+		return nil
+	}
+	reqs := make([]reconcile.Request, 0, len(rollouts.Items))
+	for _, rollout := range rollouts.Items {
+		reqs = append(reqs, reconcile.Request{NamespacedName: k8stypes.NamespacedName{Namespace: rollout.Namespace, Name: rollout.Name}})
+	}
+	return reqs
 }
 
 func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
