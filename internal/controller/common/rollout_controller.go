@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -235,14 +234,11 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 	}
 }
 
-// GetControllerInstanceIDs finds the promoted and trial controller instances from one consistent status snapshot.
-// If no NumaflowControllerRollout exists yet in the namespace, this returns empty IDs rather than an error: InstanceID
-// is optional and today is commonly unset, so the absence of a controller rollout is not itself an error case
-// for Pipeline/MonoVertex reconciliation.
-// The promoted instance falls back to the legacy spec field while ControllerInstances is not populated,
-// preserving the existing single-controller behavior.
-// TODO: once NumaflowControllerRollout manages children with promoted/trial upgrade-state labels, resolve the
-// children directly and read their InstanceIDs instead of using Status.ControllerInstances / the legacy spec field.
+// GetControllerInstanceIDs finds the promoted and trial controller instances by looking up the NumaflowController
+// children of the namespace's NumaflowControllerRollout by their upgrade-state label.
+// If no NumaflowControllerRollout exists yet in the namespace, this returns empty IDs rather than an error: the
+// absence of a controller rollout is not itself an error case for Pipeline/MonoVertex reconciliation.
+// Until the Rollout's first child exists, the promoted instance is empty, which is the instance of that first child.
 func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace string) (string, string, error) {
 	var nfcRolloutList apiv1.NumaflowControllerRolloutList
 	if err := c.List(ctx, &nfcRolloutList, &client.ListOptions{Namespace: namespace}); err != nil {
@@ -254,36 +250,40 @@ func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace st
 	if len(nfcRolloutList.Items) > 1 {
 		return "", "", fmt.Errorf("expected at most 1 NumaflowControllerRollout in namespace %q, found %d", namespace, len(nfcRolloutList.Items))
 	}
-
 	nfcRollout := &nfcRolloutList.Items[0]
-	instanceIDs := map[common.UpgradeState]string{}
-	foundStates := map[common.UpgradeState]bool{}
-	for _, controllerInstance := range nfcRollout.Status.ControllerInstances {
-		upgradeState := common.UpgradeState(controllerInstance.State)
-		if upgradeState != common.LabelValueUpgradePromoted && upgradeState != common.LabelValueUpgradeTrial {
-			continue
-		}
-		if foundStates[upgradeState] {
-			return "", "", fmt.Errorf("expected at most 1 %q controller instance in namespace %q", upgradeState, namespace)
-		}
-		instanceIDs[upgradeState] = controllerInstance.InstanceID
-		foundStates[upgradeState] = true
-	}
 
-	promotedInstanceID := instanceIDs[common.LabelValueUpgradePromoted]
-	if promotedInstanceID == "" {
-		promotedInstanceID = nfcRollout.Spec.Controller.InstanceID
+	promotedInstanceID, err := getControllerInstanceIDOfUpgradeState(ctx, c, nfcRollout, common.LabelValueUpgradePromoted)
+	if err != nil {
+		return "", "", err
 	}
-	trialInstanceID := instanceIDs[common.LabelValueUpgradeTrial]
-	for _, instanceID := range []string{promotedInstanceID, trialInstanceID} {
-		if instanceID == "" {
-			continue
-		}
-		if validationErrors := validation.IsValidLabelValue(instanceID); len(validationErrors) > 0 {
-			return "", "", fmt.Errorf("controller instance ID %q is not a valid Kubernetes label value: %s", instanceID, validationErrors[0])
-		}
+	trialInstanceID, err := getControllerInstanceIDOfUpgradeState(ctx, c, nfcRollout, common.LabelValueUpgradeTrial)
+	if err != nil {
+		return "", "", err
 	}
 	return promotedInstanceID, trialInstanceID, nil
+}
+
+// getControllerInstanceIDOfUpgradeState returns the instance ID of the NumaflowController child of nfcRollout in the given
+// upgrade state, or "" if there is none.
+// If there is more than one, the most current one is used: when a trial succeeds, it is labeled "promoted" before the
+// previous promoted child is marked "recyclable", so for a moment both are "promoted".
+// This does not special-case a trial whose Progressive assessment has failed: a Pipeline resolving a trial ISBService
+// does not check that either (see PipelineRolloutReconciler.getTargetPipelineDependencies). The NumaflowController's
+// own assessment is driven by its dependents (see assessDependents), not the other way around.
+func getControllerInstanceIDOfUpgradeState(ctx context.Context, c client.Client, nfcRollout *apiv1.NumaflowControllerRollout, upgradeState common.UpgradeState) (string, error) {
+	child, err := FindMostCurrentChildOfUpgradeState(ctx, nfcRollout, upgradeState, nil, false, c)
+	if err != nil {
+		return "", fmt.Errorf("failed to find %q NumaflowController in namespace %q: %w", upgradeState, nfcRollout.Namespace, err)
+	}
+	if child == nil {
+		return "", nil
+	}
+
+	instanceID, _, err := unstructured.NestedString(child.Object, "spec", "instanceID")
+	if err != nil {
+		return "", fmt.Errorf("failed to read spec.instanceID of NumaflowController %s/%s: %w", nfcRollout.Namespace, child.GetName(), err)
+	}
+	return instanceID, nil
 }
 
 // GetPromotedControllerInstanceID returns the promoted controller instance ID.
