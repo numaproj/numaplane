@@ -443,14 +443,71 @@ func (r *NumaflowControllerRolloutReconciler) IncrementChildCount(ctx context.Co
 	return currentNameCount, nil
 }
 
-// Recycle deletes child; returns true if it was in fact deleted
-// This implements a function of the RolloutController interface
-// TODO(#1021): delete the retired controller instance once no ISBService or MonoVertex references it. Until then,
-// a recyclable NumaflowController is left in place, since Pipelines and MonoVertices may still be bound to it.
+// Recycle deletes the NumaflowController child and returns true when it was deleted.
+// This implements a function of the RolloutController interface.
+//
+// GarbageCollectChildren calls Recycle only for children it has already labeled recyclable.
+// Recycle itself only looks at references: it deletes the child when both counts are zero.
+//
+// spec.instanceID selects the instance. ISBServices and MonoVertices bound to it are counted
+// separately, listed live since a deleted instance can't be brought back. Pipelines are covered by the ISBService count,
+// since an ISBService remains while a Pipeline uses it. An empty instance ID is the original or
+// adopted controller. Dependents with no controller-instance-id label and no Numaflow instance
+// annotation are references to that instance. A child that never reaches zero references stays.
 func (r *NumaflowControllerRolloutReconciler) Recycle(ctx context.Context, _ ctlrcommon.RolloutObject, numaflowController *unstructured.Unstructured) (bool, error) {
-	logger.FromContext(ctx).WithValues("numaflowcontroller", fmt.Sprintf("%s/%s", numaflowController.GetNamespace(), numaflowController.GetName())).
-		Debug("not recycling NumaflowController; controller instance retirement is not implemented yet")
-	return false, nil
+	numaLogger := logger.FromContext(ctx).WithValues("numaflowcontroller", fmt.Sprintf("%s/%s", numaflowController.GetNamespace(), numaflowController.GetName()))
+
+	instanceID, _, err := unstructured.NestedString(numaflowController.Object, "spec", "instanceID")
+	if err != nil {
+		return false, fmt.Errorf("can't recycle NumaflowController %s/%s; reading spec.instanceID: %w", numaflowController.GetNamespace(), numaflowController.GetName(), err)
+	}
+
+	isbServices, monoVertices, err := countControllerInstanceReferences(ctx, numaflowController.GetNamespace(), instanceID)
+	if err != nil {
+		return false, fmt.Errorf("can't recycle NumaflowController %s/%s; counting dependents bound to instance %q: %w", numaflowController.GetNamespace(), numaflowController.GetName(), instanceID, err)
+	}
+	if isbServices > 0 || monoVertices > 0 {
+		numaLogger.WithValues("instanceID", instanceID, "isbServices", isbServices, "monoVertices", monoVertices).
+			Debug("can't recycle NumaflowController; dependents are still bound to this controller instance")
+		return false, nil
+	}
+
+	numaLogger.WithValues("instanceID", instanceID).Debug("deleting NumaflowController")
+	if err := kubernetes.DeleteResource(ctx, r.client, numaflowController); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// countControllerInstanceReferences returns the number of ISBServices and the number of MonoVertices
+// in namespace bound to instanceID. The counts stay separate so a caller can tell which kind is holding the instance.
+func countControllerInstanceReferences(ctx context.Context, namespace, instanceID string) (int, int, error) {
+	isbServices, err := countResourcesBoundToControllerInstance(ctx, namespace, instanceID, numaflowv1.ISBGroupVersionResource)
+	if err != nil {
+		return 0, 0, err
+	}
+	monoVertices, err := countResourcesBoundToControllerInstance(ctx, namespace, instanceID, numaflowv1.MonoVertexGroupVersionResource)
+	if err != nil {
+		return 0, 0, err
+	}
+	return isbServices, monoVertices, nil
+}
+
+// countResourcesBoundToControllerInstance counts the live resources of gvr in namespace that ControllerInstanceIDFromResource
+// resolves to instanceID. For the empty instance ID, that is every resource with an empty or missing controller-instance-id
+// label and no Numaflow instance annotation.
+func countResourcesBoundToControllerInstance(ctx context.Context, namespace, instanceID string, gvr schema.GroupVersionResource) (int, error) {
+	list, err := kubernetes.ListLiveResource(ctx, gvr.Group, gvr.Version, gvr.Resource, namespace, "", "")
+	if err != nil {
+		return 0, fmt.Errorf("listing %s in namespace %s bound to controller instance %q: %w", gvr.Resource, namespace, instanceID, err)
+	}
+	count := 0
+	for i := range list.Items {
+		if numaflowtypes.ControllerInstanceIDFromResource(&list.Items[i]) == instanceID {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // GetDesiredRiders gets the list of Riders as specified in the RolloutObject; NumaflowControllerRollout has none
