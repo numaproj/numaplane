@@ -60,6 +60,47 @@ func TestCreateUpgradingISBServiceUsesTrialControllerInstance(t *testing.T) {
 	assert.Equal(t, "controller-2", isbsvc.GetLabels()[common.LabelKeyControllerInstanceID])
 }
 
+func TestCreateUpgradingISBServiceWithoutControllerRollout(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	newRollout := func(annotations map[string]string) *apiv1.ISBServiceRollout {
+		return &apiv1.ISBServiceRollout{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "test"},
+			Spec: apiv1.ISBServiceRolloutSpec{
+				InterStepBufferService: apiv1.InterStepBufferService{
+					Metadata: apiv1.Metadata{Labels: map[string]string{}, Annotations: annotations},
+					Spec:     runtime.RawExtension{Raw: []byte(`{}`)},
+				},
+			},
+		}
+	}
+	reconciler := &ISBServiceRolloutReconciler{
+		client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+	}
+
+	t.Run("leaves the trial unbound when the rollout sets no instance", func(t *testing.T) {
+		isbsvc, err := reconciler.CreateUpgradingChildDefinition(context.Background(), newRollout(map[string]string{}), "default-1")
+
+		require.NoError(t, err)
+		assert.Equal(t, string(common.LabelValueUpgradeTrial), isbsvc.GetLabels()[common.LabelKeyUpgradeState])
+		_, annFound := isbsvc.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
+		_, labelFound := isbsvc.GetLabels()[common.LabelKeyControllerInstanceID]
+		assert.False(t, annFound)
+		assert.False(t, labelFound)
+	})
+
+	t.Run("keeps an instance annotation supplied on the rollout", func(t *testing.T) {
+		isbsvc, err := reconciler.CreateUpgradingChildDefinition(context.Background(), newRollout(map[string]string{
+			common.AnnotationKeyNumaflowInstanceID: "cluster-controller",
+		}), "default-1")
+
+		require.NoError(t, err)
+		assert.Equal(t, "cluster-controller", isbsvc.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID])
+		assert.Equal(t, "cluster-controller", isbsvc.GetLabels()[common.LabelKeyControllerInstanceID])
+	})
+}
+
 func TestMapNumaflowControllerToISBServiceRollouts(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, apiv1.AddToScheme(scheme))

@@ -60,6 +60,47 @@ func TestCreateUpgradingMonoVertexUsesTrialControllerInstance(t *testing.T) {
 	assert.Equal(t, "controller-2", monoVertex.GetLabels()[common.LabelKeyControllerInstanceID])
 }
 
+func TestCreateUpgradingMonoVertexWithoutControllerRollout(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	newRollout := func(annotations map[string]string) *apiv1.MonoVertexRollout {
+		return &apiv1.MonoVertexRollout{
+			ObjectMeta: metav1.ObjectMeta{Name: "mono-vertex", Namespace: "test"},
+			Spec: apiv1.MonoVertexRolloutSpec{
+				MonoVertex: apiv1.MonoVertex{
+					Metadata: apiv1.Metadata{Labels: map[string]string{}, Annotations: annotations},
+					Spec:     runtime.RawExtension{Raw: []byte(`{}`)},
+				},
+			},
+		}
+	}
+	reconciler := &MonoVertexRolloutReconciler{
+		client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+	}
+
+	t.Run("leaves the trial unbound when the rollout sets no instance", func(t *testing.T) {
+		monoVertex, err := reconciler.CreateUpgradingChildDefinition(context.Background(), newRollout(map[string]string{}), "mono-vertex-1")
+
+		require.NoError(t, err)
+		assert.Equal(t, string(common.LabelValueUpgradeTrial), monoVertex.GetLabels()[common.LabelKeyUpgradeState])
+		_, annFound := monoVertex.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
+		_, labelFound := monoVertex.GetLabels()[common.LabelKeyControllerInstanceID]
+		assert.False(t, annFound)
+		assert.False(t, labelFound)
+	})
+
+	t.Run("keeps an instance annotation supplied on the rollout", func(t *testing.T) {
+		monoVertex, err := reconciler.CreateUpgradingChildDefinition(context.Background(), newRollout(map[string]string{
+			common.AnnotationKeyNumaflowInstanceID: "cluster-controller",
+		}), "mono-vertex-1")
+
+		require.NoError(t, err)
+		assert.Equal(t, "cluster-controller", monoVertex.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID])
+		assert.Equal(t, "cluster-controller", monoVertex.GetLabels()[common.LabelKeyControllerInstanceID])
+	})
+}
+
 func TestMapNumaflowControllerToMonoVertexRollouts(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, apiv1.AddToScheme(scheme))

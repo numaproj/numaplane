@@ -152,3 +152,66 @@ func TestGetTargetPipelineDependencies(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateUpgradingPipelineWithoutControllerRollout(t *testing.T) {
+	const (
+		namespace         = "test"
+		isbsvcRolloutName = "default"
+	)
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiv1.AddToScheme(scheme))
+	require.NoError(t, numaflowv1.AddToScheme(scheme))
+
+	pipelineSpec, err := json.Marshal(numaflowv1.PipelineSpec{InterStepBufferServiceName: isbsvcRolloutName})
+	require.NoError(t, err)
+
+	newRollout := func(annotations map[string]string) *apiv1.PipelineRollout {
+		return &apiv1.PipelineRollout{
+			ObjectMeta: metav1.ObjectMeta{Name: "pipeline", Namespace: namespace},
+			Spec: apiv1.PipelineRolloutSpec{
+				Pipeline: apiv1.Pipeline{
+					Metadata: apiv1.Metadata{Annotations: annotations},
+					Spec:     runtime.RawExtension{Raw: pipelineSpec},
+				},
+			},
+		}
+	}
+	isbsvcRollout := &apiv1.ISBServiceRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: isbsvcRolloutName, Namespace: namespace},
+	}
+	promotedISBSvc := &numaflowv1.InterStepBufferService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "default-0",
+			Namespace: namespace,
+			Labels: map[string]string{
+				common.LabelKeyParentRollout: isbsvcRolloutName,
+				common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+			},
+		},
+	}
+	reconciler := &PipelineRolloutReconciler{
+		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(isbsvcRollout, promotedISBSvc).Build(),
+	}
+
+	t.Run("leaves the trial unbound when neither the ISBService nor the rollout sets an instance", func(t *testing.T) {
+		pipeline, err := reconciler.CreateUpgradingChildDefinition(context.Background(), newRollout(nil), "pipeline-1")
+
+		require.NoError(t, err)
+		assert.Equal(t, string(common.LabelValueUpgradeTrial), pipeline.GetLabels()[common.LabelKeyUpgradeState])
+		_, annFound := pipeline.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
+		_, labelFound := pipeline.GetLabels()[common.LabelKeyControllerInstanceID]
+		assert.False(t, annFound)
+		assert.False(t, labelFound)
+	})
+
+	t.Run("keeps an instance annotation supplied on the rollout", func(t *testing.T) {
+		pipeline, err := reconciler.CreateUpgradingChildDefinition(context.Background(), newRollout(map[string]string{
+			common.AnnotationKeyNumaflowInstanceID: "cluster-controller",
+		}), "pipeline-1")
+
+		require.NoError(t, err)
+		assert.Equal(t, "cluster-controller", pipeline.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID])
+		assert.Equal(t, "cluster-controller", pipeline.GetLabels()[common.LabelKeyControllerInstanceID])
+	})
+}
