@@ -2859,7 +2859,7 @@ data:
     overall\n  # 3. required consecutive success period - every check in this window
     must be success\n  # 4. check interval\n  defaultAssessmentSchedule:\n    - kind:
     Pipeline\n      schedule: \"60,360,60,10\"\n    - kind: MonoVertex\n      schedule:
-    \"60,360,60,10\"\n    - kind: InterstepBufferService\n      schedule: \"0,0,0,10\"\n
+    \"60,360,60,10\"\n    - kind: InterstepBufferService\n      schedule: \"0,360,60,10\"\n
     \   - kind: NumaflowController\n      schedule: \"0,0,0,10\"\n\n  # We will stop
     waiting if any AnalysisRun is still Running after this number of seconds\n  analysisRunTimeout:
     1200\n\n# types of Resources which may be configured as Riders to \"ride along\"

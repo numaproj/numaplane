@@ -27,7 +27,8 @@ data:
         - kind: MonoVertex
           schedule: "60,360,60,10"
         - kind: InterstepBufferService
-          schedule: "0,0,0,10"
+          # The window is the InterstepBufferService's own health. Pipeline assessment follows it.
+          schedule: "0,360,60,10"
         - kind: NumaflowController
           schedule: "0,0,0,10"
 

@@ -13,6 +13,7 @@ progressive:
     - kind: MonoVertex
       schedule: "10,180,60,10"
     - kind: InterstepBufferService
+      # End and period stay 0 so e2e does not wait out a health window. The InterstepBufferService must still be healthy once before it can be promoted.
       schedule: "0,0,0,10"
     - kind: NumaflowController
       schedule: "0,0,0,10"
