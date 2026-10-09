@@ -122,6 +122,17 @@ func TestAssessUpgradingChildRequiresISBServiceHealthAndPipelines(t *testing.T) 
 		assert.NotNil(t, rollout.GetUpgradingChildStatus().BasicAssessmentEndTime)
 	})
 
+	t.Run("a non-success observation restarts the consecutive healthy period", func(t *testing.T) {
+		trialStart := now.Add(-time.Minute)
+		rollout := upgradingISBServiceRollout(now, &trialStart, "")
+		pending := testISBService(numaflowv1.ISBSvcPhasePending, "", 1, 1, nil)
+		result, _, err := newAssessmentReconciler().AssessUpgradingChild(ctx, rollout, toUnstructured(t, pending), openWindow)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.AssessmentResultUnknown, result)
+		assert.Nil(t, rollout.GetUpgradingChildStatus().TrialWindowStartTime)
+		assert.Empty(t, rollout.GetUpgradingChildStatus().BasicAssessmentResult)
+	})
+
 	t.Run("a failed phase retries inside the window", func(t *testing.T) {
 		trialStart := now.Add(-10 * time.Second)
 		rollout := upgradingISBServiceRollout(now, &trialStart, "")
@@ -132,6 +143,26 @@ func TestAssessUpgradingChildRequiresISBServiceHealthAndPipelines(t *testing.T) 
 		assert.Nil(t, rollout.GetUpgradingChildStatus().TrialWindowStartTime)
 		assert.Equal(t, []string{"InterstepBufferService phase is Failed: boom"}, rollout.GetUpgradingChildStatus().FailureReasons)
 		assert.NotEmpty(t, rollout.GetUpgradingChildStatus().ChildStatus.Raw)
+	})
+
+	t.Run("an end of zero fails once the assessment start time is past", func(t *testing.T) {
+		rollout := upgradingISBServiceRollout(now.Add(-time.Second), nil, "")
+		schedule := config.AssessmentSchedule{End: 0, Period: 0, Interval: 10 * time.Second}
+		result, _, err := newAssessmentReconciler().AssessUpgradingChild(ctx, rollout, toUnstructured(t, healthyISBService()), schedule)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.AssessmentResultFailure, result)
+		assert.Equal(t, apiv1.AssessmentResultFailure, rollout.GetUpgradingChildStatus().BasicAssessmentResult)
+	})
+
+	t.Run("a failed InterstepBufferService fails the upgrade when the window ends", func(t *testing.T) {
+		rollout := upgradingISBServiceRollout(now.Add(-2*time.Hour), nil, "")
+		failed := testISBService(numaflowv1.ISBSvcPhaseFailed, "jetstream image not found", 1, 1, nil)
+		schedule := config.AssessmentSchedule{End: time.Minute, Period: time.Minute, Interval: 10 * time.Second}
+		result, message, err := newAssessmentReconciler().AssessUpgradingChild(ctx, rollout, toUnstructured(t, failed), schedule)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.AssessmentResultFailure, result)
+		assert.Equal(t, "Basic Resource Health Check failed", message)
+		assert.Equal(t, apiv1.AssessmentResultFailure, rollout.GetUpgradingChildStatus().BasicAssessmentResult)
 	})
 
 	t.Run("the window expiring without sustained health fails the upgrade", func(t *testing.T) {

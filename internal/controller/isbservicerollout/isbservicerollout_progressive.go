@@ -100,9 +100,9 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 }
 
 // assessISBServiceHealthWindow applies the rolling-window health check to the upgrading InterstepBufferService.
-// A single unhealthy observation does not fail the upgrade: the trial window restarts and assessment continues
-// until assessmentSchedule.End. End of 0 means there is no deadline. Success requires the resource to stay
-// healthy for assessmentSchedule.Period (0 means the first healthy observation is enough).
+// Any observation that is not Success restarts the consecutive-success period. The upgrade fails when
+// assessmentSchedule.End passes without that period being completed, including when End is 0.
+// Period 0 means the first healthy observation is enough.
 func assessISBServiceHealthWindow(
 	ctx context.Context,
 	childStatus *apiv1.UpgradingChildStatus,
@@ -112,7 +112,7 @@ func assessISBServiceHealthWindow(
 ) (apiv1.AssessmentResult, string, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	if assessmentSchedule.End > 0 && childStatus.BasicAssessmentStartTime != nil &&
+	if childStatus.BasicAssessmentStartTime != nil &&
 		currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
 		numaLogger.Debugf("Assessment window ended for upgrading child %s", isbsvc.GetName())
 		if len(childStatus.FailureReasons) == 0 {
@@ -143,7 +143,9 @@ func assessISBServiceHealthWindow(
 		return apiv1.AssessmentResultUnknown, "", nil
 	}
 
+	// Pending, Progressing, and not-yet-reconciled are not Success. They must not count toward the consecutive period.
 	if assessment != apiv1.AssessmentResultSuccess {
+		childStatus.TrialWindowStartTime = nil
 		return apiv1.AssessmentResultUnknown, "", nil
 	}
 
