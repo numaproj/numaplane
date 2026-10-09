@@ -268,8 +268,9 @@ func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace st
 // If there is more than one, the most current one is used: when a trial succeeds, it is labeled "promoted" before the
 // previous promoted child is marked "recyclable", so for a moment both are "promoted".
 // This does not special-case a trial whose Progressive assessment has failed: a Pipeline resolving a trial ISBService
-// does not check that either (see PipelineRolloutReconciler.getTargetPipelineDependencies). The NumaflowController's
-// own assessment is driven by its dependents (see assessDependents), not the other way around.
+// does not check that either (see PipelineRolloutReconciler.getTargetPipelineDependencies). Dependents still bind to
+// this instance. Their resource chain assessment reads the trial controller's resource assessment separately
+// (see progressive.TrialControllerResourceAssessment) and can refuse promotion while this controller is unhealthy.
 func getControllerInstanceIDOfUpgradeState(ctx context.Context, c client.Client, nfcRollout *apiv1.NumaflowControllerRollout, upgradeState common.UpgradeState) (string, error) {
 	child, err := FindMostCurrentChildOfUpgradeState(ctx, nfcRollout, upgradeState, nil, false, c)
 	if err != nil {

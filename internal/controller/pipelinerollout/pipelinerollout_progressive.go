@@ -78,7 +78,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		// Check if endTime has arrived, fail immediately
 		if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
 			numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
-			childStatus.AssessmentResult = apiv1.AssessmentResultFailure
+			childStatus.ResourceAssessmentResult = apiv1.AssessmentResultFailure
 			childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 			childStatus.BasicAssessmentResult = apiv1.AssessmentResultFailure
 
@@ -128,7 +128,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			childStatus.TrialWindowStartTime = nil
-			childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
+			childStatus.ResourceAssessmentResult = apiv1.AssessmentResultUnknown
 			childStatus.FailureReasons = failureReasons
 			childStatus.ChildStatus.Raw = pipelineChildStatus
 
@@ -140,7 +140,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		if assessment == apiv1.AssessmentResultSuccess {
 			if !childStatus.IsTrialWindowStartTimeSet() {
 				childStatus.TrialWindowStartTime = &metav1.Time{Time: currentTime}
-				childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
+				childStatus.ResourceAssessmentResult = apiv1.AssessmentResultUnknown
 				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 			}
 
@@ -168,6 +168,65 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
+}
+
+// AssessResourceChain implements progressiveController.
+// A Pipeline is promoted only when its own resource assessment succeeds and every other resource
+// already in its trial chain has succeeded: the trial NumaflowController, the trial ISBService it is
+// rolling onto, the other Pipelines rolling onto that ISBService, and the other ISBServices, Pipelines,
+// and MonoVertices rolling onto that controller.
+// Issue 1050 answers this by also rolling that chain back together. This assessment only refuses promotion.
+func (r *PipelineRolloutReconciler) AssessResourceChain(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+) (apiv1.AssessmentResult, []string, error) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	childStatus := pipelineRollout.GetUpgradingChildStatus()
+	results := []apiv1.AssessmentResult{apiv1.AssessmentResultUnknown}
+	if childStatus != nil {
+		results = []apiv1.AssessmentResult{childStatus.EffectiveResourceAssessment()}
+	}
+	var reasons []string
+
+	controllerResult, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	results, reasons = progressive.AppendChainMember(results, reasons, controllerResult, controllerPresent, controllerReason)
+
+	isbsvcName, _, err := unstructured.NestedString(existingUpgradingChildDef.Object, "spec", "interStepBufferServiceName")
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("reading spec.interStepBufferServiceName of Pipeline %s/%s: %w", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), err)
+	}
+	if isbsvcName == "" {
+		isbsvcName = "default"
+	}
+	isbResult, isbPresent, isbReason, err := progressive.TrialISBServiceResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace(), isbsvcName)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	results, reasons = progressive.AppendChainMember(results, reasons, isbResult, isbPresent, isbReason)
+
+	namespace := existingUpgradingChildDef.GetNamespace()
+	if isbPresent {
+		siblingResults, siblingReasons, err := progressive.PipelinesOnTrialISB(ctx, r.client, namespace, isbsvcName, pipelineRollout.Name)
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, nil, err
+		}
+		results = append(results, siblingResults...)
+		reasons = append(reasons, siblingReasons...)
+	}
+	workloadResults, workloadReasons, trialController, err := progressive.WorkloadsOnTrialController(ctx, r.client, namespace, "PipelineRollout", pipelineRollout.Name)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	if trialController {
+		results = append(results, workloadResults...)
+		reasons = append(reasons, workloadReasons...)
+	}
+
+	return progressive.CombineAssessmentResults(results), reasons, nil
 }
 
 // checkAnalysisTemplates checks if there are any analysis templates to run and runs them if so.

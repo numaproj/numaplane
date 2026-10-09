@@ -75,7 +75,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		// Check if endTime has arrived and basic assessment is not complete yet, in which case we should declare failure
 		if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
 			numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
-			childStatus.AssessmentResult = apiv1.AssessmentResultFailure
+			childStatus.ResourceAssessmentResult = apiv1.AssessmentResultFailure
 			childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 			childStatus.BasicAssessmentResult = apiv1.AssessmentResultFailure
 			return apiv1.AssessmentResultFailure, "Basic Resource Health Check failed", nil
@@ -95,7 +95,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			childStatus.TrialWindowStartTime = nil
-			childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
+			childStatus.ResourceAssessmentResult = apiv1.AssessmentResultUnknown
 			childStatus.FailureReasons = failureReasons
 			childStatus.ChildStatus.Raw = monoVertexChildStatus
 			return apiv1.AssessmentResultUnknown, "", nil
@@ -106,7 +106,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		if assessment == apiv1.AssessmentResultSuccess {
 			if !childStatus.IsTrialWindowStartTimeSet() {
 				childStatus.TrialWindowStartTime = &metav1.Time{Time: currentTime}
-				childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
+				childStatus.ResourceAssessmentResult = apiv1.AssessmentResultUnknown
 				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 			}
 
@@ -134,6 +134,40 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
+}
+
+// AssessResourceChain implements progressiveController.
+// A MonoVertex is promoted only when its own resource assessment succeeds and, when a trial
+// NumaflowController exists, that controller and the other ISBServices, Pipelines, and MonoVertices
+// rolling onto it have succeeded their own resource assessments.
+// Issue 1050 answers this by also rolling that chain back together. This assessment only refuses promotion.
+func (r *MonoVertexRolloutReconciler) AssessResourceChain(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+) (apiv1.AssessmentResult, []string, error) {
+	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	childStatus := mvtxRollout.GetUpgradingChildStatus()
+	results := []apiv1.AssessmentResult{apiv1.AssessmentResultUnknown}
+	if childStatus != nil {
+		results = []apiv1.AssessmentResult{childStatus.EffectiveResourceAssessment()}
+	}
+	var reasons []string
+
+	controllerResult, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	results, reasons = progressive.AppendChainMember(results, reasons, controllerResult, controllerPresent, controllerReason)
+	if controllerPresent {
+		workloadResults, workloadReasons, _, err := progressive.WorkloadsOnTrialController(ctx, r.client, existingUpgradingChildDef.GetNamespace(), "MonoVertexRollout", mvtxRollout.Name)
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, nil, err
+		}
+		results = append(results, workloadResults...)
+		reasons = append(reasons, workloadReasons...)
+	}
+	return progressive.CombineAssessmentResults(results), reasons, nil
 }
 
 // checkAnalysisTemplates checks if there are any analysis templates to run and runs them if so.

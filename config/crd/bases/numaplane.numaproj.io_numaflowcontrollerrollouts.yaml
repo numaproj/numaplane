@@ -216,8 +216,10 @@ spec:
                       the current or otherwise the most recent "upgrading" NumaflowController
                     properties:
                       assessmentResult:
-                        description: AssessmentResult described whether it's failed
-                          or succeeded, or to be determined
+                        description: |-
+                          AssessmentResult is the promotion decision for this child. It mirrors ResourceChainAssessmentResult:
+                          the child is promoted only when this is Success.
+                          ResourceAssessmentResult is this resource on its own and is not, by itself, enough to promote.
                         type: string
                       basicAssessmentEndTime:
                         description: BasicAssessmentEndTime indicates the time after
@@ -275,6 +277,17 @@ spec:
                         type: string
                       name:
                         description: Name of the upgrading child
+                        type: string
+                      resourceAssessmentResult:
+                        description: |-
+                          ResourceAssessmentResult is the assessment of this child resource on its own,
+                          independent of the other resources that must be healthy before it is promoted.
+                        type: string
+                      resourceChainAssessmentResult:
+                        description: |-
+                          ResourceChainAssessmentResult is the assessment of this child together with every resource
+                          that must be healthy before it is promoted. The chain is Success only when every member is Success,
+                          and Failure as soon as any member is Failure.
                         type: string
                       riders:
                         description: Riders stores the list of Riders that have been

@@ -94,13 +94,9 @@ func (r *NumaflowControllerRolloutReconciler) CreateUpgradingChildDefinition(ctx
 	return makeNumaflowControllerDefinition(nfcRollout, name, instanceID, common.LabelValueUpgradeTrial)
 }
 
-// AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
-// This implements a function of the progressiveController interface
-//
-// The trial controller instance itself must be healthy (its Deployment rolled out). Beyond that, the assessment
-// follows the same shape as ISBServiceRollout's: every ISBServiceRollout and MonoVertexRollout in the namespace
-// is expected to run its own trial on this controller instance, and the controller is successful only once all
-// of them have succeeded. Any dependent whose trial on this instance failed fails the controller.
+// AssessUpgradingChild assesses the trial NumaflowController on its own.
+// This implements a function of the progressiveController interface.
+// Promotion uses AssessResourceChain, which also requires the workloads running on this controller instance.
 func (r *NumaflowControllerRolloutReconciler) AssessUpgradingChild(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
@@ -125,18 +121,6 @@ func (r *NumaflowControllerRolloutReconciler) AssessUpgradingChild(
 	if err != nil {
 		return apiv1.AssessmentResultUnknown, "", err
 	}
-	if assessmentResult == apiv1.AssessmentResultSuccess {
-		// the controller itself is healthy; now it must prove itself against the workloads
-		instanceID, _, _ := unstructured.NestedString(existingUpgradingChildDef.Object, "spec", "instanceID")
-		var failedDependents []string
-		assessmentResult, failedDependents, err = r.assessDependents(ctx, existingUpgradingChildDef.GetNamespace(), instanceID)
-		if err != nil {
-			return apiv1.AssessmentResultUnknown, "", err
-		}
-		for _, failedDependent := range failedDependents {
-			failureReasons = append(failureReasons, fmt.Sprintf("%s failed", failedDependent))
-		}
-	}
 
 	if assessmentResult != apiv1.AssessmentResultUnknown {
 		assessmentEndTime := metav1.NewTime(time.Now())
@@ -158,6 +142,37 @@ func (r *NumaflowControllerRolloutReconciler) AssessUpgradingChild(
 	nfcRollout.SetUpgradingChildStatus(childStatus)
 
 	return assessmentResult, strings.Join(failureReasons, "; "), nil
+}
+
+// AssessResourceChain implements progressiveController.
+// The trial controller is promoted only when it is healthy and every ISBServiceRollout, PipelineRollout,
+// and MonoVertexRollout in the namespace has a successful resource assessment for its trial on this instance.
+// Each member contributes its resource assessment, not its chain assessment, so a workload waiting on this
+// controller does not make the controller wait on that workload's chain.
+func (r *NumaflowControllerRolloutReconciler) AssessResourceChain(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+) (apiv1.AssessmentResult, []string, error) {
+	nfcRollout := rolloutObject.(*apiv1.NumaflowControllerRollout)
+	own := apiv1.AssessmentResultUnknown
+	if status := nfcRollout.GetUpgradingChildStatus(); status != nil {
+		own = status.EffectiveResourceAssessment()
+	}
+
+	instanceID, _, err := unstructured.NestedString(existingUpgradingChildDef.Object, "spec", "instanceID")
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("reading spec.instanceID of NumaflowController %s/%s: %w", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), err)
+	}
+	dependentResult, failedDependents, err := r.assessDependents(ctx, existingUpgradingChildDef.GetNamespace(), instanceID)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	var reasons []string
+	for _, failedDependent := range failedDependents {
+		reasons = append(reasons, fmt.Sprintf("%s failed", failedDependent))
+	}
+	return progressive.CombineAssessmentResults([]apiv1.AssessmentResult{own, dependentResult}), reasons, nil
 }
 
 // assessNumaflowControllerHealth assesses the NumaflowController resource on its own:
@@ -190,9 +205,10 @@ func assessNumaflowControllerHealth(numaflowController *unstructured.Unstructure
 	return apiv1.AssessmentResultUnknown, nil, nil
 }
 
-// assessDependents assesses the ISBServiceRollouts and MonoVertexRollouts in the namespace against the trial controller
-// instance. Each must have an upgrading child bound to instanceID; the controller is successful once all of them have
-// succeeded, and failed as soon as one of them has failed.
+// assessDependents assesses the ISBServiceRollouts, PipelineRollouts, and MonoVertexRollouts in the namespace
+// against the trial controller instance. Each must have an upgrading child bound to instanceID. The result is
+// those dependents' resource assessments: Success once all of them have succeeded, and Failure as soon as one
+// of them has failed.
 // Return the AssessmentResult and, if it failed, the names of the dependents that failed.
 func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Context, namespace string, instanceID string) (apiv1.AssessmentResult, []string, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -213,6 +229,14 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 		isbServiceRollout := &isbServiceRollouts.Items[i]
 		dependents = append(dependents, dependent{"ISBServiceRollout", isbServiceRollout.Name, numaflowv1.ISBGroupVersionKind, isbServiceRollout.GetUpgradingChildStatus()})
 	}
+	var pipelineRollouts apiv1.PipelineRolloutList
+	if err := r.client.List(ctx, &pipelineRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
+		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("error listing PipelineRollouts: %w", err)
+	}
+	for i := range pipelineRollouts.Items {
+		pipelineRollout := &pipelineRollouts.Items[i]
+		dependents = append(dependents, dependent{"PipelineRollout", pipelineRollout.Name, numaflowv1.PipelineGroupVersionKind, pipelineRollout.GetUpgradingChildStatus()})
+	}
 	var monoVertexRollouts apiv1.MonoVertexRolloutList
 	if err := r.client.List(ctx, &monoVertexRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
 		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("error listing MonoVertexRollouts: %w", err)
@@ -223,7 +247,7 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 	}
 
 	if len(dependents) == 0 {
-		numaLogger.Warn("Found no ISBServiceRollouts or MonoVertexRollouts in namespace: so NumaflowController is deemed Successful") // not typical but could happen
+		numaLogger.Warn("Found no ISBServiceRollouts, PipelineRollouts, or MonoVertexRollouts in namespace: so NumaflowController is deemed Successful") // not typical but could happen
 		return apiv1.AssessmentResultSuccess, nil, nil
 	}
 
@@ -248,7 +272,7 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 			depLogger.WithValues("child", child.GetName()).Debug("can't assess NumaflowController; dependent's upgrading child is not bound to this controller instance")
 			return apiv1.AssessmentResultUnknown, nil, nil
 		}
-		switch dep.upgradingStatus.AssessmentResult {
+		switch dep.upgradingStatus.EffectiveResourceAssessment() {
 		case apiv1.AssessmentResultFailure:
 			depLogger.Debug("assessing NumaflowController; dependent is failed")
 			failedDependents = append(failedDependents, fmt.Sprintf("%s %s", dep.kind, dep.name))

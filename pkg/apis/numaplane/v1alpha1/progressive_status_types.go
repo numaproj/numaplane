@@ -37,8 +37,19 @@ type UpgradingChildStatus struct {
 	// Name of the upgrading child
 	Name string `json:"name"`
 
-	// AssessmentResult described whether it's failed or succeeded, or to be determined
+	// AssessmentResult is the promotion decision for this child. It mirrors ResourceChainAssessmentResult:
+	// the child is promoted only when this is Success.
+	// ResourceAssessmentResult is this resource on its own and is not, by itself, enough to promote.
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
+
+	// ResourceAssessmentResult is the assessment of this child resource on its own,
+	// independent of the other resources that must be healthy before it is promoted.
+	ResourceAssessmentResult AssessmentResult `json:"resourceAssessmentResult,omitempty"`
+
+	// ResourceChainAssessmentResult is the assessment of this child together with every resource
+	// that must be healthy before it is promoted. The chain is Success only when every member is Success,
+	// and Failure as soon as any member is Failure.
+	ResourceChainAssessmentResult AssessmentResult `json:"resourceChainAssessmentResult,omitempty"`
 
 	// BasicAssessmentStartTime indicates the time at/after which the basic resource health check assessment result will be computed
 	BasicAssessmentStartTime *metav1.Time `json:"basicAssessmentStartTime,omitempty"`
@@ -159,6 +170,22 @@ func (ucs *UpgradingChildStatus) BasicAssessmentEndTimeArrived() bool {
 
 func (ucs *UpgradingChildStatus) IsFailed() bool {
 	return ucs != nil && ucs.AssessmentResult == AssessmentResultFailure
+}
+
+// EffectiveResourceAssessment returns the assessment of this resource on its own.
+// A status written before resource and chain assessments were recorded separately stores only AssessmentResult.
+// For Pipeline and MonoVertex that field was the resource assessment, so it is used until ResourceAssessmentResult is set.
+func (ucs *UpgradingChildStatus) EffectiveResourceAssessment() AssessmentResult {
+	if ucs == nil {
+		return AssessmentResultUnknown
+	}
+	if ucs.ResourceAssessmentResult != "" {
+		return ucs.ResourceAssessmentResult
+	}
+	if ucs.AssessmentResult != "" {
+		return ucs.AssessmentResult
+	}
+	return AssessmentResultUnknown
 }
 
 // AreScaleValuesRestoredToOriginal checks if all vertices have been restored to the original scale values.

@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
@@ -44,8 +47,9 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	return isbsvc, nil
 }
 
-// AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
-// This implements a function of the progressiveController interface
+// AssessUpgradingChild assesses the upgrading ISBService on its own.
+// This implements a function of the progressiveController interface.
+// Pipelines that use this ISBService, and a trial NumaflowController, are part of AssessResourceChain.
 func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
@@ -55,51 +59,61 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
 	numaLogger := logger.FromContext(ctx).WithValues("isbservice", existingUpgradingChildDef.GetName())
-	ctx = logger.WithLogger(ctx, numaLogger)
 
-	// TODO: For now, just assessing the health of the underlying Pipelines
-	// In the future, consider assessing the health of the isbsvc itself using the rolling window algorithm.
-	// Note: until we have health check for isbsvc, we don't need to worry about resource health check start time or end time
-	// If Pipelines are healthy or Pipelines are failed, that's good enough
-
-	assessmentResult, failedPipelines, err := r.assessPipelines(ctx, existingUpgradingChildDef)
-	if err != nil {
-		return assessmentResult, "", err
-	}
-
-	// get childStatus and set if nil
 	childStatus := isbServiceRollout.GetUpgradingChildStatus()
 	if childStatus == nil {
-		err := isbServiceRollout.ResetUpgradingChildStatus(existingUpgradingChildDef)
-		if err != nil {
-			return assessmentResult, "", err
+		if err := isbServiceRollout.ResetUpgradingChildStatus(existingUpgradingChildDef); err != nil {
+			return apiv1.AssessmentResultUnknown, "", err
 		}
+		childStatus = isbServiceRollout.GetUpgradingChildStatus()
 	}
 
-	// set BasicAssessmentEndTime to now
+	assessmentResult, failureReasons, err := assessISBServiceHealth(existingUpgradingChildDef)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", err
+	}
 	if assessmentResult != apiv1.AssessmentResultUnknown {
 		assessmentEndTime := metav1.NewTime(time.Now())
 		childStatus.BasicAssessmentEndTime = &assessmentEndTime
 	}
-	if assessmentResult == apiv1.AssessmentResultFailure {
+	switch assessmentResult {
+	case apiv1.AssessmentResultFailure:
 		isbServiceChildStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
 		if err != nil {
 			return assessmentResult, "", err
 		}
-		var failedPipelineReasons []string
-		for _, failedPipeline := range failedPipelines {
-			failedPipelineReasons = append(failedPipelineReasons, fmt.Sprintf("Pipeline %s failed", failedPipeline))
-		}
-		childStatus.FailureReasons = failedPipelineReasons
+		childStatus.FailureReasons = failureReasons
 		childStatus.ChildStatus.Raw = isbServiceChildStatus
-		return assessmentResult, "", nil
-	}
-	if assessmentResult == apiv1.AssessmentResultSuccess {
-		// clear values for childStatus and failureReason if previously set
+	case apiv1.AssessmentResultSuccess:
 		childStatus.ChildStatus.Raw = nil
 		childStatus.FailureReasons = nil
 	}
-	return assessmentResult, "", nil
+	numaLogger.WithValues("assessment", assessmentResult).Debug("assessed ISBService resource")
+	return assessmentResult, strings.Join(failureReasons, "; "), nil
+}
+
+// assessISBServiceHealth assesses the ISBService resource on its own.
+// Success: phase is Running and its child resources are healthy.
+// Failure: phase is Failed, or child resources are unhealthy for a reason other than still progressing.
+// Unknown: otherwise.
+// This is not the rolling-window health check used for Pipeline and MonoVertex (see issue 494).
+func assessISBServiceHealth(isbsvc *unstructured.Unstructured) (apiv1.AssessmentResult, []string, error) {
+	genericStatus, err := kubernetes.ParseStatus(isbsvc)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("failed to parse Status from ISBService %s/%s: %w", isbsvc.GetNamespace(), isbsvc.GetName(), err)
+	}
+	phase := numaflowv1.ISBSvcPhase(genericStatus.Phase)
+	if phase == numaflowv1.ISBSvcPhaseFailed {
+		return apiv1.AssessmentResultFailure, []string{fmt.Sprintf("ISBService phase is %s", phase)}, nil
+	}
+	childStatus, childReason := numaflowtypes.GetISBServiceChildResourceHealth(genericStatus.Conditions)
+	if childStatus == metav1.ConditionFalse && childReason != apiv1.ProgressingReasonString {
+		return apiv1.AssessmentResultFailure, []string{fmt.Sprintf("ISBService child resources are unhealthy (%s)", childReason)}, nil
+	}
+	if phase == numaflowv1.ISBSvcPhaseRunning && childStatus == metav1.ConditionTrue {
+		return apiv1.AssessmentResultSuccess, nil, nil
+	}
+	return apiv1.AssessmentResultUnknown, nil, nil
 }
 
 // Assess the Pipelines of the upgrading ISBService
@@ -123,7 +137,7 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 		return apiv1.AssessmentResultUnknown, failedPipelines, fmt.Errorf("error getting PipelineRollouts: %s", err.Error())
 	}
 	if len(pipelineRollouts) == 0 {
-		numaLogger.Warn("Found no PipelineRollouts using ISBServiceRollout: so isbsvc is deemed Successful") // not typical but could happen
+		numaLogger.Warn("Found no PipelineRollouts using ISBServiceRollout: pipeline portion of the chain is Successful") // not typical but could happen
 		return apiv1.AssessmentResultSuccess, failedPipelines, nil
 	}
 
@@ -136,14 +150,14 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 			numaLogger.WithValues("pipelineRollout", pipelineRollout.GetName()).Debug("can't assess ISBService; pipeline is not yet upgrading with this ISBService")
 			return apiv1.AssessmentResultUnknown, []string{}, nil
 		}
-		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
+		switch upgradingPipelineStatus.EffectiveResourceAssessment() {
 		case apiv1.AssessmentResultFailure:
-			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline is failed")
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline resource assessment failed")
 			failedPipelines = append(failedPipelines, upgradingPipelineStatus.Name)
 		case apiv1.AssessmentResultUnknown:
-			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline assessment is unknown")
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline resource assessment is unknown")
 		case apiv1.AssessmentResultSuccess:
-			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline succeeded")
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline resource assessment succeeded")
 			successfulPipelines = append(successfulPipelines, upgradingPipelineStatus.Name)
 		}
 	}
@@ -155,6 +169,39 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 	}
 
 	return apiv1.AssessmentResultUnknown, []string{}, nil
+}
+
+// AssessResourceChain implements progressiveController.
+// An ISBService is promoted only when it is healthy itself, every Pipeline rolling onto it has a
+// successful resource assessment, and, when a trial NumaflowController exists, that controller's
+// resource assessment has succeeded.
+func (r *ISBServiceRolloutReconciler) AssessResourceChain(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+) (apiv1.AssessmentResult, []string, error) {
+	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	own := apiv1.AssessmentResultUnknown
+	if status := isbServiceRollout.GetUpgradingChildStatus(); status != nil {
+		own = status.EffectiveResourceAssessment()
+	}
+
+	pipelineResult, failedPipelines, err := r.assessPipelines(ctx, existingUpgradingChildDef)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	var reasons []string
+	for _, failedPipeline := range failedPipelines {
+		reasons = append(reasons, fmt.Sprintf("Pipeline %s failed", failedPipeline))
+	}
+
+	results := []apiv1.AssessmentResult{own, pipelineResult}
+	controllerResult, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	results, reasons = progressive.AppendChainMember(results, reasons, controllerResult, controllerPresent, controllerReason)
+	return progressive.CombineAssessmentResults(results), reasons, nil
 }
 
 // CheckForDifferences checks to see if the isbsvc definition matches the spec and the required metadata
