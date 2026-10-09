@@ -94,8 +94,8 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 
 // assessISBServiceHealth assesses the ISBService resource on its own.
 // Success: phase is Running and its child resources are healthy.
-// Failure: phase is Failed, or child resources are unhealthy for a reason other than still progressing.
-// Unknown: otherwise.
+// Failure: phase is Failed, or child resources are unhealthy for a reason other than still coming up.
+// Unknown: otherwise, including while the StatefulSet is being created or its pods are not ready yet.
 // This is not the rolling-window health check used for Pipeline and MonoVertex (see issue 494).
 func assessISBServiceHealth(isbsvc *unstructured.Unstructured) (apiv1.AssessmentResult, []string, error) {
 	genericStatus, err := kubernetes.ParseStatus(isbsvc)
@@ -107,13 +107,24 @@ func assessISBServiceHealth(isbsvc *unstructured.Unstructured) (apiv1.Assessment
 		return apiv1.AssessmentResultFailure, []string{fmt.Sprintf("ISBService phase is %s", phase)}, nil
 	}
 	childStatus, childReason := numaflowtypes.GetISBServiceChildResourceHealth(genericStatus.Conditions)
-	if childStatus == metav1.ConditionFalse && childReason != apiv1.ProgressingReasonString {
+	if childStatus == metav1.ConditionFalse && !isbChildrenStillComingUp(childReason) {
 		return apiv1.AssessmentResultFailure, []string{fmt.Sprintf("ISBService child resources are unhealthy (%s)", childReason)}, nil
 	}
 	if phase == numaflowv1.ISBSvcPhaseRunning && childStatus == metav1.ConditionTrue {
 		return apiv1.AssessmentResultSuccess, nil, nil
 	}
 	return apiv1.AssessmentResultUnknown, nil, nil
+}
+
+// isbChildrenStillComingUp reports reasons Numaflow sets on ChildrenResourcesHealthy while an ISBService
+// is still starting. Those are not failures: the StatefulSet may not exist yet, or its pods may not be ready.
+func isbChildrenStillComingUp(reason string) bool {
+	switch reason {
+	case apiv1.ProgressingReasonString, "Unavailable", "GetStatefulSetFailed":
+		return true
+	default:
+		return false
+	}
 }
 
 // Assess the Pipelines of the upgrading ISBService

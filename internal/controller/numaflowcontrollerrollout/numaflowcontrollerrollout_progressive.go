@@ -105,9 +105,6 @@ func (r *NumaflowControllerRolloutReconciler) AssessUpgradingChild(
 
 	nfcRollout := rolloutObject.(*apiv1.NumaflowControllerRollout)
 
-	numaLogger := logger.FromContext(ctx).WithValues("numaflowcontroller", existingUpgradingChildDef.GetName())
-	ctx = logger.WithLogger(ctx, numaLogger)
-
 	// get childStatus and set if nil
 	childStatus := nfcRollout.GetUpgradingChildStatus()
 	if childStatus == nil {

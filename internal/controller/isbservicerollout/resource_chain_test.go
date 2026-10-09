@@ -53,14 +53,16 @@ func TestAssessISBServiceHealth(t *testing.T) {
 		require.Equal(t, apiv1.AssessmentResultUnknown, result)
 	})
 
-	t.Run("progressing children stay unknown", func(t *testing.T) {
-		result, _, err := assessISBServiceHealth(isbsvc(numaflowv1.ISBSvcPhaseRunning, &metav1.Condition{
-			Type:   "ChildrenResourcesHealthy",
-			Status: metav1.ConditionFalse,
-			Reason: "Progressing",
-		}))
-		require.NoError(t, err)
-		require.Equal(t, apiv1.AssessmentResultUnknown, result)
+	t.Run("children still coming up stay unknown", func(t *testing.T) {
+		for _, reason := range []string{"Progressing", "Unavailable", "GetStatefulSetFailed"} {
+			result, _, err := assessISBServiceHealth(isbsvc(numaflowv1.ISBSvcPhaseRunning, &metav1.Condition{
+				Type:   "ChildrenResourcesHealthy",
+				Status: metav1.ConditionFalse,
+				Reason: reason,
+			}))
+			require.NoError(t, err)
+			require.Equal(t, apiv1.AssessmentResultUnknown, result, reason)
+		}
 	})
 
 	t.Run("unhealthy children fail", func(t *testing.T) {
