@@ -73,6 +73,21 @@ func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, r
 	}
 }
 
+func (fpc fakeProgressiveController) AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []string, error) {
+	// These tests have no dependent rollouts, so the chain is the resource assessment.
+	if status := rolloutObject.GetUpgradingChildStatus(); status != nil && status.ResourceAssessmentResult != "" {
+		if status.ResourceAssessmentResult == apiv1.AssessmentResultFailure {
+			return apiv1.AssessmentResultFailure, []string{"test-fail-reason"}, nil
+		}
+		return status.ResourceAssessmentResult, nil, nil
+	}
+	result, reason, err := fpc.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, config.AssessmentSchedule{})
+	if result == apiv1.AssessmentResultFailure && reason != "" {
+		return result, []string{reason}, err
+	}
+	return result, nil, err
+}
+
 func (fpc fakeProgressiveController) ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
 	return false, nil
 }
