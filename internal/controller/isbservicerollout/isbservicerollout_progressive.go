@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
@@ -59,6 +57,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
 	numaLogger := logger.FromContext(ctx).WithValues("isbservice", existingUpgradingChildDef.GetName())
+	ctx = logger.WithLogger(ctx, numaLogger)
 
 	childStatus := isbServiceRollout.GetUpgradingChildStatus()
 	if childStatus == nil {
@@ -68,63 +67,142 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 		childStatus = isbServiceRollout.GetUpgradingChildStatus()
 	}
 
-	assessmentResult, failureReasons, err := assessISBServiceHealth(existingUpgradingChildDef)
+	// The InterstepBufferService itself must stay healthy for the consecutive-success period.
+	// Once that basic check has succeeded it is not repeated. Promotion also requires AssessResourceChain.
+	if !childStatus.IsBasicAssessmentResultSet() {
+		return assessISBServiceHealthWindow(ctx, childStatus, existingUpgradingChildDef, assessmentSchedule, time.Now())
+	}
+	if childStatus.BasicAssessmentResult != apiv1.AssessmentResultSuccess {
+		return childStatus.BasicAssessmentResult, "Basic Resource Health Check failed", nil
+	}
+	return apiv1.AssessmentResultSuccess, "", nil
+}
+
+// assessISBServiceHealthWindow applies the rolling-window health check to the upgrading InterstepBufferService.
+// Any observation that is not Success restarts the consecutive-success period. The upgrade fails when
+// assessmentSchedule.End passes without that period being completed, including when End is 0.
+// Period 0 means the first healthy observation is enough.
+func assessISBServiceHealthWindow(
+	ctx context.Context,
+	childStatus *apiv1.UpgradingChildStatus,
+	isbsvc *unstructured.Unstructured,
+	assessmentSchedule config.AssessmentSchedule,
+	currentTime time.Time,
+) (apiv1.AssessmentResult, string, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	if childStatus.BasicAssessmentStartTime != nil &&
+		currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
+		numaLogger.Debugf("Assessment window ended for upgrading child %s", isbsvc.GetName())
+		if len(childStatus.FailureReasons) == 0 {
+			childStatus.FailureReasons = []string{"Basic Resource Health Check failed"}
+		}
+		if err := recordUpgradingChildSnapshot(childStatus, isbsvc, childStatus.FailureReasons); err != nil {
+			return apiv1.AssessmentResultUnknown, "", err
+		}
+		childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+		childStatus.BasicAssessmentResult = apiv1.AssessmentResultFailure
+		return apiv1.AssessmentResultFailure, "Basic Resource Health Check failed", nil
+	}
+
+	assessment, failureReasons, err := assessISBServiceHealth(isbsvc)
 	if err != nil {
 		return apiv1.AssessmentResultUnknown, "", err
 	}
-	if assessmentResult != apiv1.AssessmentResultUnknown {
-		assessmentEndTime := metav1.NewTime(time.Now())
-		childStatus.BasicAssessmentEndTime = &assessmentEndTime
-	}
-	switch assessmentResult {
-	case apiv1.AssessmentResultFailure:
-		isbServiceChildStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
-		if err != nil {
-			return assessmentResult, "", err
+
+	// One failure is ok: drop the consecutive-success window and check again later.
+	if assessment == apiv1.AssessmentResultFailure {
+		numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", isbsvc.GetName())
+		if err := recordUpgradingChildSnapshot(childStatus, isbsvc, failureReasons); err != nil {
+			return apiv1.AssessmentResultUnknown, "", err
 		}
-		childStatus.FailureReasons = failureReasons
-		childStatus.ChildStatus.Raw = isbServiceChildStatus
-	case apiv1.AssessmentResultSuccess:
+		childStatus.TrialWindowStartTime = nil
+		return apiv1.AssessmentResultUnknown, "", nil
+	}
+
+	// Pending, Progressing, and not-yet-reconciled are not Success. They must not count toward the consecutive period.
+	if assessment != apiv1.AssessmentResultSuccess {
+		childStatus.TrialWindowStartTime = nil
+		return apiv1.AssessmentResultUnknown, "", nil
+	}
+
+	if !childStatus.IsTrialWindowStartTimeSet() {
+		childStatus.TrialWindowStartTime = &metav1.Time{Time: currentTime}
+		numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", isbsvc.GetName(), currentTime)
+	}
+	if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
+		childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+		childStatus.BasicAssessmentResult = apiv1.AssessmentResultSuccess
 		childStatus.ChildStatus.Raw = nil
 		childStatus.FailureReasons = nil
+		return apiv1.AssessmentResultSuccess, "", nil
 	}
-	numaLogger.WithValues("assessment", assessmentResult).Debug("assessed ISBService resource")
-	return assessmentResult, strings.Join(failureReasons, "; "), nil
+
+	numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", isbsvc.GetName())
+	return apiv1.AssessmentResultUnknown, "", nil
 }
 
-// assessISBServiceHealth assesses the ISBService resource on its own.
-// Success: phase is Running and its child resources are healthy.
-// Failure: phase is Failed, or child resources are unhealthy for a reason other than still coming up.
-// Unknown: otherwise, including while the StatefulSet is being created or its pods are not ready yet.
-// This is not the rolling-window health check used for Pipeline and MonoVertex (see issue 494).
+// assessISBServiceHealth assesses the InterstepBufferService resource on its own.
+// Success: phase is Running, it has been reconciled at its current generation, and every condition is True.
+// Failure: phase is Failed or Deleting, or a condition is False for a reason other than still coming up.
+// Unknown: otherwise (Pending, not yet reconciled, or still coming up).
 func assessISBServiceHealth(isbsvc *unstructured.Unstructured) (apiv1.AssessmentResult, []string, error) {
-	genericStatus, err := kubernetes.ParseStatus(isbsvc)
+	statusRaw, found, err := unstructured.NestedFieldNoCopy(isbsvc.Object, "status")
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("failed to parse Status from ISBService %s/%s: %w", isbsvc.GetNamespace(), isbsvc.GetName(), err)
+		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("failed to parse Status from InterstepBufferService %s/%s: %w", isbsvc.GetNamespace(), isbsvc.GetName(), err)
 	}
-	phase := numaflowv1.ISBSvcPhase(genericStatus.Phase)
-	if phase == numaflowv1.ISBSvcPhaseFailed {
-		return apiv1.AssessmentResultFailure, []string{fmt.Sprintf("ISBService phase is %s", phase)}, nil
+	if !found || statusRaw == nil {
+		return apiv1.AssessmentResultUnknown, nil, nil
 	}
-	childStatus, childReason := numaflowtypes.GetISBServiceChildResourceHealth(genericStatus.Conditions)
-	if childStatus == metav1.ConditionFalse && !isbChildrenStillComingUp(childReason) {
-		return apiv1.AssessmentResultFailure, []string{fmt.Sprintf("ISBService child resources are unhealthy (%s)", childReason)}, nil
+	var status numaflowv1.InterStepBufferServiceStatus
+	if err := util.StructToStruct(statusRaw, &status); err != nil {
+		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("failed to convert InterstepBufferService Status for %s/%s: %w", isbsvc.GetNamespace(), isbsvc.GetName(), err)
 	}
-	if phase == numaflowv1.ISBSvcPhaseRunning && childStatus == metav1.ConditionTrue {
+
+	if status.Phase == numaflowv1.ISBSvcPhaseFailed || status.Phase == numaflowv1.ISBSvcPhaseDeleting {
+		reason := fmt.Sprintf("InterstepBufferService phase is %s", status.Phase)
+		if status.Message != "" {
+			reason = fmt.Sprintf("%s: %s", reason, status.Message)
+		}
+		return apiv1.AssessmentResultFailure, []string{reason}, nil
+	}
+
+	var failureReasons []string
+	for _, cond := range status.Conditions {
+		if cond.Status == metav1.ConditionFalse && !isbConditionStillComingUp(cond.Reason) {
+			failureReasons = append(failureReasons, fmt.Sprintf("condition %s is False for Reason %q: %s", cond.Type, cond.Reason, cond.Message))
+		}
+	}
+	if len(failureReasons) > 0 {
+		return apiv1.AssessmentResultFailure, failureReasons, nil
+	}
+
+	reconciled := isbsvc.GetGeneration() <= status.ObservedGeneration
+	if reconciled && status.Phase == numaflowv1.ISBSvcPhaseRunning && status.IsReady() {
 		return apiv1.AssessmentResultSuccess, nil, nil
 	}
 	return apiv1.AssessmentResultUnknown, nil, nil
 }
 
-// isbChildrenStillComingUp reports reasons Numaflow sets on ChildrenResourcesHealthy while an ISBService
-// is still starting. Those are not failures: the StatefulSet may not exist yet, or its pods may not be ready.
-func isbChildrenStillComingUp(reason string) bool {
+// isbConditionStillComingUp reports reasons Numaflow sets while an ISBService is still starting.
+// Those are not failures: the StatefulSet may not exist yet, or its pods may not be ready.
+func isbConditionStillComingUp(reason string) bool {
 	switch reason {
-	case apiv1.ProgressingReasonString, "Unavailable", "GetStatefulSetFailed":
+	case string(apiv1.ProgressingReasonString), "Unavailable", "GetStatefulSetFailed":
 		return true
 	default:
 		return false
 	}
+}
+
+func recordUpgradingChildSnapshot(childStatus *apiv1.UpgradingChildStatus, isbsvc *unstructured.Unstructured, reasons []string) error {
+	rawStatus, err := json.Marshal(isbsvc.Object["status"])
+	if err != nil {
+		return err
+	}
+	childStatus.FailureReasons = reasons
+	childStatus.ChildStatus.Raw = rawStatus
+	return nil
 }
 
 // Assess the Pipelines of the upgrading ISBService

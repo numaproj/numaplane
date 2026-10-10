@@ -4,9 +4,9 @@ metadata:
   name: my-isbsvc
   namespace: example-namespace
 spec:
-  strategy:
-    progressive:
-      assessmentSchedule: "0,0,0,10"
+  # strategy:
+  #   progressive: # only required to override the default in numaplane-controller-config
+  #     assessmentSchedule: "0,360,60,10"
   interStepBufferService:
    spec:
       jetstream:

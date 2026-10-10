@@ -13,7 +13,8 @@ progressive:
     - kind: MonoVertex
       schedule: "10,180,60,10"
     - kind: InterstepBufferService
-      schedule: "0,0,0,10"
+      # 180s to become healthy; period 0 so the first healthy check is enough. End must be non-zero or the first check fails.
+      schedule: "0,180,0,10"
     - kind: NumaflowController
       schedule: "0,0,0,10"
   analysisRunTimeout: "1200"

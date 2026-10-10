@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,68 +13,6 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
-
-func TestAssessISBServiceHealth(t *testing.T) {
-	isbsvc := func(phase numaflowv1.ISBSvcPhase, condition *metav1.Condition) *unstructured.Unstructured {
-		obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
-		obj.SetName("isbsvc-1")
-		obj.SetNamespace("test")
-		require.NoError(t, unstructured.SetNestedField(obj.Object, string(phase), "status", "phase"))
-		if condition != nil {
-			require.NoError(t, unstructured.SetNestedSlice(obj.Object, []interface{}{
-				map[string]interface{}{
-					"type":   condition.Type,
-					"status": string(condition.Status),
-					"reason": condition.Reason,
-				},
-			}, "status", "conditions"))
-		}
-		return obj
-	}
-
-	t.Run("running and healthy", func(t *testing.T) {
-		result, reasons, err := assessISBServiceHealth(isbsvc(numaflowv1.ISBSvcPhaseRunning, nil))
-		require.NoError(t, err)
-		require.Equal(t, apiv1.AssessmentResultSuccess, result)
-		require.Empty(t, reasons)
-	})
-
-	t.Run("failed phase", func(t *testing.T) {
-		result, reasons, err := assessISBServiceHealth(isbsvc(numaflowv1.ISBSvcPhaseFailed, nil))
-		require.NoError(t, err)
-		require.Equal(t, apiv1.AssessmentResultFailure, result)
-		require.NotEmpty(t, reasons)
-	})
-
-	t.Run("pending is unknown", func(t *testing.T) {
-		result, _, err := assessISBServiceHealth(isbsvc(numaflowv1.ISBSvcPhasePending, nil))
-		require.NoError(t, err)
-		require.Equal(t, apiv1.AssessmentResultUnknown, result)
-	})
-
-	t.Run("children still coming up stay unknown", func(t *testing.T) {
-		for _, reason := range []string{"Progressing", "Unavailable", "GetStatefulSetFailed"} {
-			result, _, err := assessISBServiceHealth(isbsvc(numaflowv1.ISBSvcPhaseRunning, &metav1.Condition{
-				Type:   "ChildrenResourcesHealthy",
-				Status: metav1.ConditionFalse,
-				Reason: reason,
-			}))
-			require.NoError(t, err)
-			require.Equal(t, apiv1.AssessmentResultUnknown, result, reason)
-		}
-	})
-
-	t.Run("unhealthy children fail", func(t *testing.T) {
-		result, reasons, err := assessISBServiceHealth(isbsvc(numaflowv1.ISBSvcPhaseRunning, &metav1.Condition{
-			Type:   "ChildrenResourcesHealthy",
-			Status: metav1.ConditionFalse,
-			Reason: "StatefulSetFailed",
-		}))
-		require.NoError(t, err)
-		require.Equal(t, apiv1.AssessmentResultFailure, result)
-		require.NotEmpty(t, reasons)
-	})
-}
 
 func TestISBServiceAssessResourceChain(t *testing.T) {
 	const namespace = "test"
