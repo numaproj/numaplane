@@ -161,6 +161,15 @@ func ProcessResource(
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't yet an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
+		// A failed upstream trial holds this update. It stays Pending and does not start another progressive rollout.
+		hold, err := ShouldHoldNewProgressive(ctx, c, rolloutObject)
+		if err != nil {
+			return false, false, 0, err
+		}
+		if hold {
+			rolloutObject.GetRolloutStatus().SetPhase(apiv1.PhasePending, FailedTrialPendingMessage)
+			return false, false, common.DefaultRequeueDelay, nil
+		}
 		// Create it
 		_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
 		if needRequeue {
@@ -448,6 +457,11 @@ func processUpgradingChild(
 			return true, true, 0, err
 		}
 
+		// A failure anywhere in an active controller or ISBService chain rolls the rest of that chain back together.
+		if err = RollbackChain(ctx, c, rolloutObject, existingUpgradingChildDef); err != nil {
+			return true, true, 0, err
+		}
+
 		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 		if err != nil {
 			return true, true, 0, err
@@ -557,8 +571,25 @@ func checkForUpgradeReplacement(
 	}
 
 	if differentFromExistingUpgrading {
+		// While an upstream trial assessment is failed, do not replace this trial with a new one.
+		// Roll it back to the promoted child and leave any remaining spec update Pending.
+		hold, err := ShouldHoldNewProgressive(ctx, c, rolloutObject)
+		if err != nil {
+			return false, false, err
+		}
 
 		if differentFromPromoted {
+			if hold {
+				if _, isController := rolloutObject.(*apiv1.NumaflowControllerRollout); isController {
+					// The failed controller trial stays. It gates dependents until it is rolled back or force-promoted.
+					return false, false, nil
+				}
+				if _, err := rollBackInProgressTrial(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c); err != nil {
+					return false, false, err
+				}
+				// Requeue either to finish restoring the promoted child or to observe the recycled trial.
+				return true, false, nil
+			}
 
 			// recycle the old one
 			reason := common.LabelValueProgressiveReplaced
@@ -587,6 +618,18 @@ func checkForUpgradeReplacement(
 			childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
 		} else {
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName()).Debug("removing 'upgrading' child as Rollout is back to matching 'promoted' child")
+
+			// Restore the promoted child before removing the trial. A chain rollback reaches here once the desired
+			// instance is the previous promoted one, and the promoted child may still be scaled down.
+			if childStatus.IsFailed() || hold {
+				requeue, err := restorePromotedAfterFailedTrial(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c)
+				if err != nil {
+					return false, false, err
+				}
+				if requeue {
+					return true, false, nil
+				}
+			}
 
 			// Discontinue the Progressive upgrade altogether
 			return false, true, Discontinue(ctx, rolloutObject, controller, c)

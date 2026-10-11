@@ -152,6 +152,10 @@ const (
 	// LabelValueDiscontinueProgressive is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to discontinuing Progressive upgrade process
 	LabelValueDiscontinueProgressive UpgradeStateReason = "discontinue-progressive"
 
+	// LabelValueChainRollback is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable"
+	// because a failed progressive trial rolled the resource chain back to the previous promoted child.
+	LabelValueChainRollback UpgradeStateReason = "chain-rollback"
+
 	// LabelValuePurgeOld is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" if there's a strange case in which there are multiple of a given
 	// child and there should only be one
 	// TODO: reevaluate if we really need that

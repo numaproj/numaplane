@@ -94,6 +94,19 @@ func TestGetTargetPipelineDependencies(t *testing.T) {
 			expectedControllerID: trialInstanceID,
 		},
 		{
+			name: "skips a trial ISBService whose assessment failed",
+			isbServices: []client.Object{
+				newISBSvc("default-0", common.LabelValueUpgradePromoted, promotedInstanceID),
+				func() *numaflowv1.InterStepBufferService {
+					failed := newISBSvc("default-1", common.LabelValueUpgradeTrial, trialInstanceID)
+					failed.Labels[common.LabelKeyProgressiveResultState] = string(common.LabelValueResultStateFailed)
+					return failed
+				}(),
+			},
+			expectedISBSvcName:   "default-0",
+			expectedControllerID: promotedInstanceID,
+		},
+		{
 			name: "uses trial ISBService on the promoted controller instance for an ISBService-only upgrade",
 			isbServices: []client.Object{
 				newISBSvc("default-0", common.LabelValueUpgradePromoted, promotedInstanceID),

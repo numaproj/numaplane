@@ -400,6 +400,19 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return 0, nil, fmt.Errorf("error looking for promoted pipeline: %v", err)
 	}
+	// A new PipelineRollout stays Pending while a controller trial assessment is failed, including when its
+	// ISBServiceRollout is also new and has not created an InterstepBufferService yet.
+	if len(promotedPipelines.Items) == 0 {
+		hold, holdErr := ctlrcommon.TrialControllerAssessmentFailed(ctx, r.client, pipelineRollout.Namespace)
+		if holdErr != nil {
+			return 0, nil, holdErr
+		}
+		if hold {
+			pipelineRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
+			return common.DefaultRequeueDelay, nil, nil
+		}
+	}
+
 	// Initial creation stays on the promoted ISBService, so a promoted Pipeline never uses a trial ISBService.
 	// Once that child exists, the desired definition uses the trial ISBService so Progressive can create a trial Pipeline.
 	requirePromotedISBService := len(promotedPipelines.Items) == 0
@@ -418,7 +431,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 	} else {
 
 		if len(promotedPipelines.Items) == 0 {
-
 			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
 			pipelineRollout.Status.MarkPending()
 
@@ -573,6 +585,14 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 		if userPreferredStrategy == config.ProgressiveStrategyID {
 			if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
+				hold, err := progressive.ShouldHoldNewProgressive(ctx, r.client, pipelineRollout)
+				if err != nil {
+					return 0, err
+				}
+				if hold {
+					pipelineRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
+					return common.DefaultRequeueDelay, nil
+				}
 				inProgressStrategy = apiv1.UpgradeStrategyProgressive
 				r.inProgressStrategyMgr.SetStrategy(ctx, pipelineRollout, inProgressStrategy)
 			}
@@ -1263,7 +1283,8 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 
 // getTargetPipelineDependencies returns the ISBService the Pipeline should use, and the controller instance it runs on.
 // If requirePromotedISBService is set, only the promoted ISBService is used; otherwise the trial ISBService is preferred
-// over the promoted one. The Pipeline always runs on the same controller instance as its ISBService, so the ISBServiceRollout
+// over the promoted one. A trial whose progressive assessment has failed is skipped, same as a failed controller trial.
+// The Pipeline always runs on the same controller instance as its ISBService, so the ISBServiceRollout
 // decides which controller instance the Pipeline follows.
 func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
 	ctx context.Context,
@@ -1276,6 +1297,16 @@ func (r *PipelineRolloutReconciler) getTargetPipelineDependencies(
 		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeTrial)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to find ISBService that's trial: %w", err)
+		}
+		if isbsvc != nil {
+			isbRollout, rolloutErr := r.getISBSvcRollout(ctx, pipelineRollout)
+			if rolloutErr != nil {
+				return nil, "", rolloutErr
+			}
+			// A failed trial ISBService is not a target. The Pipeline stays on the promoted one until that trial is resolved.
+			if ctlrcommon.ChildTrialAssessmentFailed(isbsvc, isbRollout.GetUpgradingChildStatus()) {
+				isbsvc = nil
+			}
 		}
 	}
 	if isbsvc == nil {

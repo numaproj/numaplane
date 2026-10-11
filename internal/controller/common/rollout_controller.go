@@ -267,10 +267,9 @@ func GetControllerInstanceIDs(ctx context.Context, c client.Client, namespace st
 // upgrade state, or "" if there is none.
 // If there is more than one, the most current one is used: when a trial succeeds, it is labeled "promoted" before the
 // previous promoted child is marked "recyclable", so for a moment both are "promoted".
-// This does not special-case a trial whose Progressive assessment has failed: a Pipeline resolving a trial ISBService
-// does not check that either (see PipelineRolloutReconciler.getTargetPipelineDependencies). Dependents still bind to
-// this instance. Their resource chain assessment reads the trial controller's resource assessment separately
-// (see progressive.TrialControllerResourceAssessment) and can refuse promotion while this controller is unhealthy.
+// A failed trial is still returned here. GetDesiredControllerInstanceID is what refuses to bind dependents to it.
+// Promotion is decided separately: resource chain assessment reads this trial's own resource assessment
+// (see progressive.TrialControllerResourceAssessment) and withholds promotion while the chain is unhealthy.
 func getControllerInstanceIDOfUpgradeState(ctx context.Context, c client.Client, nfcRollout *apiv1.NumaflowControllerRollout, upgradeState common.UpgradeState) (string, error) {
 	child, err := FindMostCurrentChildOfUpgradeState(ctx, nfcRollout, upgradeState, nil, false, c)
 	if err != nil {
@@ -294,15 +293,73 @@ func GetPromotedControllerInstanceID(ctx context.Context, c client.Client, names
 }
 
 // GetDesiredControllerInstanceID returns the trial controller instance when one exists, otherwise the promoted one.
+// A trial whose progressive assessment has already failed is not desired: dependents stay on the promoted instance
+// until that trial is rolled back or force-promoted.
 func GetDesiredControllerInstanceID(ctx context.Context, c client.Client, namespace string) (string, error) {
 	promotedInstanceID, trialInstanceID, err := GetControllerInstanceIDs(ctx, c, namespace)
 	if err != nil {
 		return "", err
 	}
-	if trialInstanceID != "" {
-		return trialInstanceID, nil
+	if trialInstanceID == "" {
+		return promotedInstanceID, nil
 	}
-	return promotedInstanceID, nil
+	failed, err := TrialControllerAssessmentFailed(ctx, c, namespace)
+	if err != nil {
+		return "", err
+	}
+	if failed {
+		return promotedInstanceID, nil
+	}
+	return trialInstanceID, nil
+}
+
+// TrialControllerAssessmentFailed reports whether the namespace has a live trial NumaflowController whose
+// progressive assessment has failed. No rollout, or no trial child, is not a failed trial: the gate is open.
+func TrialControllerAssessmentFailed(ctx context.Context, c client.Client, namespace string) (bool, error) {
+	nfcRollout, err := getNumaflowControllerRollout(ctx, c, namespace)
+	if err != nil || nfcRollout == nil {
+		return false, err
+	}
+	trialChild, err := FindMostCurrentChildOfUpgradeState(ctx, nfcRollout, common.LabelValueUpgradeTrial, nil, false, c)
+	if err != nil {
+		return false, err
+	}
+	return ChildTrialAssessmentFailed(trialChild, nfcRollout.GetUpgradingChildStatus()), nil
+}
+
+// ChildTrialAssessmentFailed reports whether child is a live trial whose progressive assessment has failed.
+// The result-state label and the parent rollout's upgrading-child status are both checked: the label is patched
+// before the rollout status is saved. A missing child is not a failed trial.
+func ChildTrialAssessmentFailed(child *unstructured.Unstructured, upgrading *apiv1.UpgradingChildStatus) bool {
+	if child == nil {
+		return false
+	}
+	switch common.ResultState(child.GetLabels()[common.LabelKeyProgressiveResultState]) {
+	case common.LabelValueResultStateFailed:
+		return true
+	case common.LabelValueResultStateForcePromoted, common.LabelValueResultStateSucceeded:
+		return false
+	}
+	if upgrading == nil || (upgrading.Name != "" && upgrading.Name != child.GetName()) {
+		return false
+	}
+	// AssessmentResult is the promotion decision and mirrors the resource-chain assessment.
+	// Either one being Failure means this trial must not receive new dependents.
+	return upgrading.IsFailed() || upgrading.ResourceChainAssessmentResult == apiv1.AssessmentResultFailure
+}
+
+func getNumaflowControllerRollout(ctx context.Context, c client.Client, namespace string) (*apiv1.NumaflowControllerRollout, error) {
+	var nfcRolloutList apiv1.NumaflowControllerRolloutList
+	if err := c.List(ctx, &nfcRolloutList, &client.ListOptions{Namespace: namespace}); err != nil {
+		return nil, fmt.Errorf("failed to list NumaflowControllerRollouts in namespace %q: %w", namespace, err)
+	}
+	if len(nfcRolloutList.Items) == 0 {
+		return nil, nil
+	}
+	if len(nfcRolloutList.Items) > 1 {
+		return nil, fmt.Errorf("expected at most 1 NumaflowControllerRollout in namespace %q, found %d", namespace, len(nfcRolloutList.Items))
+	}
+	return &nfcRolloutList.Items[0], nil
 }
 
 // Determine the list of Riders which are needed for the child and create them on the cluster

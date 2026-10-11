@@ -41,7 +41,7 @@ func TestGetControllerInstanceID(t *testing.T) {
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	newClient := func(objects ...client.Object) client.Client {
-		return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+		return fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&apiv1.NumaflowControllerRollout{}).WithObjects(objects...).Build()
 	}
 	controllerRollout := &apiv1.NumaflowControllerRollout{
 		ObjectMeta: metav1.ObjectMeta{Name: rolloutName, Namespace: namespace},
@@ -77,7 +77,7 @@ func TestGetControllerInstanceID(t *testing.T) {
 		assert.Equal(t, "trial-2", instanceID)
 	})
 
-	t.Run("still resolves a failed trial child's instance, like a Pipeline resolving a trial ISBService", func(t *testing.T) {
+	t.Run("does not bind dependents to a trial whose assessment failed", func(t *testing.T) {
 		failedTrial := newController("controller-2", numaplanecommon.LabelValueUpgradeTrial, "trial-2")
 		failedTrial.Labels[numaplanecommon.LabelKeyProgressiveResultState] = string(numaplanecommon.LabelValueResultStateFailed)
 		c := newClient(controllerRollout,
@@ -91,7 +91,25 @@ func TestGetControllerInstanceID(t *testing.T) {
 
 		desired, err := GetDesiredControllerInstanceID(context.Background(), c, namespace)
 		require.NoError(t, err)
-		assert.Equal(t, "trial-2", desired)
+		assert.Equal(t, "promoted-1", desired)
+	})
+
+	t.Run("does not bind dependents when the rollout assessment is failed before the child label is set", func(t *testing.T) {
+		failedRollout := controllerRollout.DeepCopy()
+		c := newClient(failedRollout,
+			newController("controller-1", numaplanecommon.LabelValueUpgradePromoted, "promoted-1"),
+			newController("controller-2", numaplanecommon.LabelValueUpgradeTrial, "trial-2"))
+		failedRollout.Status.ProgressiveStatus.UpgradingNumaflowControllerStatus = &apiv1.UpgradingNumaflowControllerStatus{
+			UpgradingChildStatus: apiv1.UpgradingChildStatus{
+				Name:             "controller-2",
+				AssessmentResult: apiv1.AssessmentResultFailure,
+			},
+		}
+		require.NoError(t, c.Status().Update(context.Background(), failedRollout))
+
+		desired, err := GetDesiredControllerInstanceID(context.Background(), c, namespace)
+		require.NoError(t, err)
+		assert.Equal(t, "promoted-1", desired)
 	})
 
 	t.Run("ignores recyclable children and children of other rollouts", func(t *testing.T) {
