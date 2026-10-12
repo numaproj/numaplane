@@ -182,10 +182,23 @@ func TestPipelineAssessResourceChain(t *testing.T) {
 			expectReasonSub: "PipelineRollout sibling trial sibling-1 resource assessment failed",
 		},
 		{
-			name:     "a failed pipeline on another controller instance does not block this pipeline",
+			name:     "a pipeline that has not moved onto the trial controller keeps this pipeline from promoting",
 			own:      apiv1.AssessmentResultSuccess,
 			objects:  append(trialController(apiv1.AssessmentResultSuccess), siblingOnTrial("other-isb", "other")...),
-			expected: apiv1.AssessmentResultSuccess,
+			expected: apiv1.AssessmentResultUnknown,
+		},
+		{
+			name: "a pipeline that uses this ISBService but has not started keeps this pipeline from promoting",
+			own:  apiv1.AssessmentResultSuccess,
+			objects: append(trialISB(apiv1.AssessmentResultSuccess), &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{Name: "waiting", Namespace: namespace},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{Raw: []byte(`{"interStepBufferServiceName":"isb"}`)},
+					},
+				},
+			}),
+			expected: apiv1.AssessmentResultUnknown,
 		},
 	}
 

@@ -262,8 +262,8 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 
 // AssessResourceChain implements progressiveController.
 // An ISBService is promoted only when it is healthy itself, every Pipeline rolling onto it has a
-// successful resource assessment, and, when a trial NumaflowController exists, that controller's
-// resource assessment has succeeded.
+// successful resource assessment, and, when a trial NumaflowController exists, that controller and
+// the other ISBServices, Pipelines, and MonoVertices on it have succeeded their resource assessments.
 func (r *ISBServiceRolloutReconciler) AssessResourceChain(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
@@ -290,6 +290,14 @@ func (r *ISBServiceRolloutReconciler) AssessResourceChain(
 		return apiv1.AssessmentResultUnknown, nil, err
 	}
 	results, reasons = progressive.AppendChainMember(results, reasons, controllerResult, controllerPresent, controllerReason)
+	if controllerPresent {
+		workloadResults, workloadReasons, _, err := progressive.WorkloadsOnTrialController(ctx, r.client, existingUpgradingChildDef.GetNamespace(), "ISBServiceRollout", isbServiceRollout.Name)
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, nil, err
+		}
+		results = append(results, workloadResults...)
+		reasons = append(reasons, workloadReasons...)
+	}
 	return progressive.CombineAssessmentResults(results), reasons, nil
 }
 
@@ -404,7 +412,8 @@ func (r *ISBServiceRolloutReconciler) UpdateProgressiveMetrics(rolloutObject pro
 	}
 }
 
-// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the ISBServiceRollout
+// SkipProgressiveAssessment reports whether this ISBService's own health should be treated as Success.
+// Progressive strategy forcePromote does that. The chain assessment still runs.
 func (r *ISBServiceRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)

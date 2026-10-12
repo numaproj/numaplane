@@ -2,6 +2,7 @@ package progressive
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -75,11 +76,16 @@ func TrialControllerResourceAssessment(ctx context.Context, c client.Client, nam
 	return upgrading.EffectiveResourceAssessment(), true, resourceFailureReason("NumaflowControllerRollout", nfcRollout.Name, trialChild.GetName(), upgrading), nil
 }
 
-// PipelinesOnTrialISB returns the resource assessments of PipelineRollouts whose upgrading child uses
-// the trial ISBService isbsvcName, excluding excludeRolloutName.
-// A Pipeline that has not started rolling onto this ISBService is omitted. Issue 1050 holds new updates
-// back from starting; this only covers trials already in progress.
+// PipelinesOnTrialISB returns the resource assessments of PipelineRollouts that belong on the trial
+// ISBService isbsvcName, excluding excludeRolloutName.
+// A Pipeline already rolling onto that ISBService contributes its resource assessment.
+// A Pipeline whose spec uses the same ISBServiceRollout, but whose upgrading child is not on this
+// ISBService yet, contributes Unknown so this Pipeline cannot promote ahead of it.
 func PipelinesOnTrialISB(ctx context.Context, c client.Client, namespace, isbsvcName, excludeRolloutName string) ([]apiv1.AssessmentResult, []string, error) {
+	parentRollout, err := trialISBParentRollout(ctx, c, namespace, isbsvcName)
+	if err != nil {
+		return nil, nil, err
+	}
 	var pipelineRollouts apiv1.PipelineRolloutList
 	if err := c.List(ctx, &pipelineRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
 		return nil, nil, fmt.Errorf("listing PipelineRollouts in namespace %q: %w", namespace, err)
@@ -92,7 +98,19 @@ func PipelinesOnTrialISB(ctx context.Context, c client.Client, namespace, isbsvc
 			continue
 		}
 		upgrading := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
-		if upgrading == nil || upgrading.InterStepBufferServiceName != isbsvcName {
+		onThisISB := upgrading != nil && upgrading.InterStepBufferServiceName == isbsvcName
+		usesParent := false
+		if parentRollout != "" {
+			usesParent, err = pipelineRolloutUsesISB(pipelineRollout, parentRollout)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		if !onThisISB && !usesParent {
+			continue
+		}
+		if !onThisISB {
+			results, reasons = appendAssessment(results, reasons, apiv1.AssessmentResultUnknown, "")
 			continue
 		}
 		results, reasons = appendAssessment(results, reasons, upgrading.EffectiveResourceAssessment(), resourceFailureReason("PipelineRollout", pipelineRollout.Name, upgrading.Name, &upgrading.UpgradingChildStatus))
@@ -100,9 +118,42 @@ func PipelinesOnTrialISB(ctx context.Context, c client.Client, namespace, isbsvc
 	return results, reasons, nil
 }
 
+// trialISBParentRollout returns the ISBServiceRollout that owns the named ISBService child.
+// An empty name means the child was not found or has no parent label.
+func trialISBParentRollout(ctx context.Context, c client.Client, namespace, isbsvcName string) (string, error) {
+	isb := &unstructured.Unstructured{}
+	isb.SetGroupVersionKind(numaflowv1.ISBGroupVersionKind)
+	err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: isbsvcName}, isb)
+	if apierrors.IsNotFound(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("getting InterstepBufferService %s/%s: %w", namespace, isbsvcName, err)
+	}
+	return isb.GetLabels()[common.LabelKeyParentRollout], nil
+}
+
+// pipelineRolloutUsesISB reports whether the PipelineRollout spec selects isbRolloutName.
+// An empty interStepBufferServiceName selects the rollout named "default".
+func pipelineRolloutUsesISB(pipelineRollout *apiv1.PipelineRollout, isbRolloutName string) (bool, error) {
+	used := "default"
+	if raw := pipelineRollout.Spec.Pipeline.Spec.Raw; len(raw) > 0 {
+		var pipelineSpec numaflowtypes.PipelineSpec
+		if err := json.Unmarshal(raw, &pipelineSpec); err != nil {
+			return false, fmt.Errorf("reading PipelineRollout %s spec: %w", pipelineRollout.Name, err)
+		}
+		if pipelineSpec.InterStepBufferServiceName != "" {
+			used = pipelineSpec.InterStepBufferServiceName
+		}
+	}
+	return used == isbRolloutName, nil
+}
+
 // WorkloadsOnTrialController returns the resource assessments of ISBService, Pipeline, and MonoVertex
-// trials bound to the trial NumaflowController, excluding the rollout identified by excludeKind and excludeName.
-// present is false when there is no trial controller. A workload that is not yet rolling onto that instance is omitted.
+// rollouts in the namespace, excluding the rollout identified by excludeKind and excludeName.
+// present is false when there is no trial controller.
+// A rollout that has not moved its upgrading child onto that controller instance contributes Unknown,
+// matching the controller's own dependent check, so another workload cannot promote ahead of it.
 func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace, excludeKind, excludeName string) ([]apiv1.AssessmentResult, []string, bool, error) {
 	_, trialChild, err := findTrialController(ctx, c, namespace)
 	if err != nil {
@@ -122,12 +173,17 @@ func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace,
 		if kind == excludeKind && rolloutName == excludeName {
 			return nil
 		}
-		if upgrading == nil {
+		if upgrading == nil || upgrading.Name == "" {
+			results, reasons = appendAssessment(results, reasons, apiv1.AssessmentResultUnknown, "")
 			return nil
 		}
 		onTrial, err := childOnTrialController(ctx, c, namespace, upgrading.Name, gvk, instanceID)
-		if err != nil || !onTrial {
+		if err != nil {
 			return err
+		}
+		if !onTrial {
+			results, reasons = appendAssessment(results, reasons, apiv1.AssessmentResultUnknown, "")
+			return nil
 		}
 		results, reasons = appendAssessment(results, reasons, upgrading.EffectiveResourceAssessment(), resourceFailureReason(kind, rolloutName, upgrading.Name, upgrading))
 		return nil

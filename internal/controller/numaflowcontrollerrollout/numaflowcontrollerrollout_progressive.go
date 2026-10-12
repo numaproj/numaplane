@@ -96,6 +96,7 @@ func (r *NumaflowControllerRolloutReconciler) CreateUpgradingChildDefinition(ctx
 
 // AssessUpgradingChild assesses the trial NumaflowController on its own.
 // This implements a function of the progressiveController interface.
+// A failure stays Unknown until assessmentSchedule.End so a restart does not fail the chain immediately.
 // Promotion uses AssessResourceChain, which also requires the workloads running on this controller instance.
 func (r *NumaflowControllerRolloutReconciler) AssessUpgradingChild(
 	ctx context.Context,
@@ -114,31 +115,67 @@ func (r *NumaflowControllerRolloutReconciler) AssessUpgradingChild(
 		childStatus = nfcRollout.GetUpgradingChildStatus()
 	}
 
-	assessmentResult, failureReasons, err := assessNumaflowControllerHealth(existingUpgradingChildDef)
+	assessmentResult, failureReason, err := assessNumaflowControllerHealthWindow(ctx, childStatus, existingUpgradingChildDef, assessmentSchedule, time.Now())
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", err
+	}
+	nfcRollout.SetUpgradingChildStatus(childStatus)
+
+	return assessmentResult, failureReason, nil
+}
+
+// assessNumaflowControllerHealthWindow applies the assessment schedule to the trial NumaflowController.
+// A healthy controller is Success once it has stayed healthy for assessmentSchedule.Period.
+// Period 0 means the first healthy observation is enough.
+// A failure is retried as Unknown until assessmentSchedule.End, so a restart at the beginning of the
+// upgrade does not fail the chain immediately. End 0 fails on the first failure after the start time.
+func assessNumaflowControllerHealthWindow(
+	ctx context.Context,
+	childStatus *apiv1.UpgradingChildStatus,
+	numaflowController *unstructured.Unstructured,
+	assessmentSchedule config.AssessmentSchedule,
+	currentTime time.Time,
+) (apiv1.AssessmentResult, string, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	assessment, failureReasons, err := assessNumaflowControllerHealth(numaflowController)
 	if err != nil {
 		return apiv1.AssessmentResultUnknown, "", err
 	}
 
-	if assessmentResult != apiv1.AssessmentResultUnknown {
-		assessmentEndTime := metav1.NewTime(time.Now())
-		childStatus.BasicAssessmentEndTime = &assessmentEndTime
-	}
-	switch assessmentResult {
-	case apiv1.AssessmentResultFailure:
-		rawStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
-		if err != nil {
-			return assessmentResult, "", err
+	if assessment == apiv1.AssessmentResultSuccess {
+		if !childStatus.IsTrialWindowStartTimeSet() {
+			childStatus.TrialWindowStartTime = &metav1.Time{Time: currentTime}
 		}
-		childStatus.FailureReasons = failureReasons
-		childStatus.ChildStatus.Raw = rawStatus
-	case apiv1.AssessmentResultSuccess:
-		// clear values for childStatus and failureReason if previously set
-		childStatus.ChildStatus.Raw = nil
-		childStatus.FailureReasons = nil
+		if currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
+			childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+			childStatus.ChildStatus.Raw = nil
+			childStatus.FailureReasons = nil
+			return apiv1.AssessmentResultSuccess, "", nil
+		}
+		numaLogger.Debugf("NumaflowController %s is healthy, but the success period has not passed yet", numaflowController.GetName())
+		return apiv1.AssessmentResultUnknown, "", nil
 	}
-	nfcRollout.SetUpgradingChildStatus(childStatus)
 
-	return assessmentResult, strings.Join(failureReasons, "; "), nil
+	childStatus.TrialWindowStartTime = nil
+	if assessment != apiv1.AssessmentResultFailure {
+		return apiv1.AssessmentResultUnknown, "", nil
+	}
+
+	rawStatus, err := json.Marshal(numaflowController.Object["status"])
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", err
+	}
+	childStatus.FailureReasons = failureReasons
+	childStatus.ChildStatus.Raw = rawStatus
+
+	if childStatus.BasicAssessmentStartTime != nil &&
+		currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
+		childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+		return apiv1.AssessmentResultFailure, strings.Join(failureReasons, "; "), nil
+	}
+	numaLogger.Debugf("NumaflowController %s is unhealthy; waiting until the assessment window ends before failing", numaflowController.GetName())
+	return apiv1.AssessmentResultUnknown, "", nil
 }
 
 // AssessResourceChain implements progressiveController.
@@ -415,7 +452,8 @@ func (r *NumaflowControllerRolloutReconciler) UpdateProgressiveMetrics(rolloutOb
 	// no controller-specific progressive metrics yet
 }
 
-// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the NumaflowControllerRollout
+// SkipProgressiveAssessment reports whether this controller's own health should be treated as Success.
+// Progressive strategy forcePromote does that. The chain assessment still runs.
 func (r *NumaflowControllerRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 	nfcRollout := rolloutObject.(*apiv1.NumaflowControllerRollout)
 	// check if ForcePromote is set true in the Progressive strategy

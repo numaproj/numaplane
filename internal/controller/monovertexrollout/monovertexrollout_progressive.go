@@ -139,8 +139,8 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 // AssessResourceChain implements progressiveController.
 // A MonoVertex is promoted only when its own resource assessment succeeds and, when a trial
 // NumaflowController exists, that controller and the other ISBServices, Pipelines, and MonoVertices
-// rolling onto it have succeeded their own resource assessments.
-// Issue 1050 answers this by also rolling that chain back together. This assessment only refuses promotion.
+// in the namespace have succeeded their own resource assessments. A workload that has not moved
+// onto the trial controller yet leaves this MonoVertex Unknown.
 func (r *MonoVertexRolloutReconciler) AssessResourceChain(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
@@ -911,16 +911,13 @@ func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string
 	return scaleValue
 }
 
-func (r *MonoVertexRolloutReconciler) progressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
-
-	return false
-}
-
-// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the MonoVertexRollout
+// SkipProgressiveAssessment reports whether this MonoVertex's own health should be treated as Success.
+// A MonoVertex that cannot ingest data, and Progressive strategy forcePromote, do that.
+// The chain assessment still runs.
 func (r *MonoVertexRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 
-	// check if MonoVertex definition is set to Paused or scaled to 0, in which case it can't ingest data (so we skip the assessment as an optimization)
+	// check if MonoVertex definition is set to Paused or scaled to 0, in which case it can't ingest data
 	monoVertexSpecMap := make(map[string]interface{})
 	err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpecMap)
 	if err != nil {
@@ -940,13 +937,6 @@ func (r *MonoVertexRolloutReconciler) SkipProgressiveAssessment(ctx context.Cont
 	// check if ForcePromote is set true in the Progressive strategy
 	if monoVertexRollout.GetProgressiveStrategy().ForcePromote {
 		return true, progressive.SkipProgressiveAssessmentReasonRolloutConfiguration, nil
-	}
-	// check if Progressive is unsupported for this Rollout
-	if r.progressiveUnsupported(ctx, rolloutObject) {
-		return true, progressive.SkipProgressiveAssessmentReasonProgressiveUnsupported, nil
-	}
-	if !canIngestData {
-		return true, progressive.SkipProgressiveAssessmentReasonNoDataIngestion, nil
 	}
 
 	return false, progressive.SkipProgressiveAssessmentReasonUndefined, nil

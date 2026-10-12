@@ -172,10 +172,9 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 
 // AssessResourceChain implements progressiveController.
 // A Pipeline is promoted only when its own resource assessment succeeds and every other resource
-// already in its trial chain has succeeded: the trial NumaflowController, the trial ISBService it is
-// rolling onto, the other Pipelines rolling onto that ISBService, and the other ISBServices, Pipelines,
-// and MonoVertices rolling onto that controller.
-// Issue 1050 answers this by also rolling that chain back together. This assessment only refuses promotion.
+// in its trial chain has succeeded: the trial NumaflowController, the trial ISBService it is
+// rolling onto, the other Pipelines that use that ISBService (including ones that have not moved
+// onto it yet), and the other ISBServices, Pipelines, and MonoVertices on that controller.
 func (r *PipelineRolloutReconciler) AssessResourceChain(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
@@ -888,11 +887,13 @@ func (r *PipelineRolloutReconciler) progressiveUnsupported(ctx context.Context, 
 	return false
 }
 
-// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the PipelineRollout
+// SkipProgressiveAssessment reports whether this Pipeline's own health should be treated as Success.
+// A Pipeline that cannot ingest data, and Progressive strategy forcePromote, do that.
+// The chain assessment still runs. An HPA rider is not a reason to skip: the chain still has to pass.
 func (r *PipelineRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 
-	// check if Pipeline definition is set to Paused or scaled to 0, in which case it can't ingest data (so we skip the assessment as an optimization)
+	// check if Pipeline definition is set to Paused or scaled to 0, in which case it can't ingest data
 	pipelineSpecMap := make(map[string]interface{})
 	err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, &pipelineSpecMap)
 	if err != nil {
@@ -908,10 +909,6 @@ func (r *PipelineRolloutReconciler) SkipProgressiveAssessment(ctx context.Contex
 	// check if ForcePromote is set true in the Progressive strategy
 	if pipelineRollout.GetProgressiveStrategy().ForcePromote {
 		return true, progressive.SkipProgressiveAssessmentReasonRolloutConfiguration, nil
-	}
-	// check if Progressive is unsupported for this Rollout
-	if r.progressiveUnsupported(ctx, rolloutObject) {
-		return true, progressive.SkipProgressiveAssessmentReasonProgressiveUnsupported, nil
 	}
 	if !canIngestData {
 		return true, progressive.SkipProgressiveAssessmentReasonNoDataIngestion, nil

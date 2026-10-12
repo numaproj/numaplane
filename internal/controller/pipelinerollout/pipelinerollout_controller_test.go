@@ -1756,7 +1756,7 @@ func Test_SkipProgressiveAssessment(t *testing.T) {
 			expectedSkip:           true,
 		},
 		{
-			name:                   "HPA rider present - should skip",
+			name:                   "HPA rider present - should NOT skip the chain",
 			pipelineSpec:           pipelineSpec,
 			forcePromoteConfigured: false,
 			riders: []apiv1.PipelineRider{
@@ -1769,7 +1769,7 @@ func Test_SkipProgressiveAssessment(t *testing.T) {
 					},
 				},
 			},
-			expectedSkip: true,
+			expectedSkip: false,
 		},
 		{
 			name:                   "ConfigMap rider only (no HPA) - should NOT skip",
@@ -1788,7 +1788,7 @@ func Test_SkipProgressiveAssessment(t *testing.T) {
 			expectedSkip: false,
 		},
 		{
-			name:                   "Mixed riders including HPA - should skip",
+			name:                   "Mixed riders including HPA - should NOT skip the chain",
 			pipelineSpec:           pipelineSpec,
 			forcePromoteConfigured: false,
 			riders: []apiv1.PipelineRider{
@@ -1809,7 +1809,7 @@ func Test_SkipProgressiveAssessment(t *testing.T) {
 					},
 				},
 			},
-			expectedSkip: true,
+			expectedSkip: false,
 		},
 	}
 

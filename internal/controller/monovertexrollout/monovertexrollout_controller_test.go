@@ -1131,8 +1131,8 @@ func Test_reconcile_promotedPodSelector_progressiveCompletion(t *testing.T) {
 	rollout.Status.UpgradeInProgress = progressiveUpgradeStrategy
 	r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestMonoVertexRolloutName}, progressiveUpgradeStrategy)
 
-	// ForcePromote causes SkipProgressiveAssessment to return true, which triggers declareSuccess
-	// and immediately completes the progressive rollout (done=true)
+	// Strategy ForcePromote treats this MonoVertex's own health as Success. With no trial
+	// dependencies the chain succeeds and the progressive rollout completes in this reconcile.
 	rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
 		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 			Progressive: apiv1.ProgressiveStrategy{

@@ -88,7 +88,9 @@ type progressiveController interface {
 	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// SkipProgressiveAssessment checks to see if we should skip progressive assessment for this Rollout
+	// SkipProgressiveAssessment reports whether this resource's own health should be treated as Success
+	// without running its health check. Promotion still waits for AssessResourceChain.
+	// The ArgoCD force-promote label is separate and overrides that chain.
 	SkipProgressiveAssessment(ctx context.Context, rolloutObject ProgressiveRolloutObject) (bool, SkipProgressiveAssessmentReason, error)
 
 	UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject)
@@ -344,25 +346,20 @@ func processUpgradingChild(
 
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 
-	// check if we should skip the asssessment
+	// Paused, scaled to zero, or Progressive strategy forcePromote: this resource's own health is Success.
+	// The chain assessment still decides whether it is promoted.
 	skipAssessment, reason, err := controller.SkipProgressiveAssessment(ctx, rolloutObject)
 	if err != nil {
 		return false, false, 0, err
 	}
 
-	// check for "force promote" label on the child
-	forcePromote := false
-	_, ok := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromote]
-	if ok {
-		forcePromote = true
-		reason = SkipProgressiveAssessmentReasonForcePromote
-	}
-
-	if forcePromote || skipAssessment {
+	// The ArgoCD UI "force promote" label overrides the chain assessment and promotes this child now.
+	_, forcePromote := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromote]
+	if forcePromote {
 		childStatus.ForcedSuccess = true
-		childStatus.ForcedSuccessReason = string(reason)
+		childStatus.ForcedSuccessReason = string(SkipProgressiveAssessmentReasonForcePromote)
 
-		numaLogger.WithValues("reason", reason).Debug("Upgrading child force promoted")
+		numaLogger.WithValues("reason", SkipProgressiveAssessmentReasonForcePromote).Debug("Upgrading child force promoted")
 
 		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef)
 		if err != nil {
@@ -395,7 +392,23 @@ func processUpgradingChild(
 		assessment = childStatus.AssessmentResult
 	}
 	var chainFailureReasons []string
-	if childStatus.CanAssess() {
+	if skipAssessment {
+		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			status.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
+			status.ForcedSuccess = true
+			status.ForcedSuccessReason = string(reason)
+		})
+		assessment, chainFailureReasons, err = controller.AssessResourceChain(ctx, rolloutObject, existingUpgradingChildDef)
+		if err != nil {
+			return false, false, 0, err
+		}
+		numaLogger.WithValues(
+			"name", existingUpgradingChildDef.GetName(),
+			"reason", reason,
+			"childStatus", *childStatus,
+			"resourceChainAssessment", assessment,
+		).Debugf("resource health forced to success, resource chain assessment returned: %v", assessment)
+	} else if childStatus.CanAssess() {
 		resourceAssessment, _, err := controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, assessmentSchedule)
 		if err != nil {
 			return false, false, 0, err
