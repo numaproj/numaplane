@@ -129,6 +129,15 @@ func TestPipelineAssessResourceChain(t *testing.T) {
 		}
 	}
 
+	promotedSiblingOnInstance := func(instanceID string) []client.Object {
+		sibling := siblingOnTrial("other-isb", instanceID)
+		pipelineRollout := sibling[0].(*apiv1.PipelineRollout)
+		pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
+		pipeline := sibling[1].(*numaflowv1.Pipeline)
+		pipeline.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+		return sibling
+	}
+
 	testCases := []struct {
 		name            string
 		own             apiv1.AssessmentResult
@@ -186,6 +195,12 @@ func TestPipelineAssessResourceChain(t *testing.T) {
 			own:      apiv1.AssessmentResultSuccess,
 			objects:  append(trialController(apiv1.AssessmentResultSuccess), siblingOnTrial("other-isb", "other")...),
 			expected: apiv1.AssessmentResultUnknown,
+		},
+		{
+			name:     "a sibling already promoted onto this controller instance does not block this pipeline",
+			own:      apiv1.AssessmentResultSuccess,
+			objects:  append(trialController(apiv1.AssessmentResultSuccess), promotedSiblingOnInstance("trial")...),
+			expected: apiv1.AssessmentResultSuccess,
 		},
 		{
 			name: "a pipeline that uses this ISBService but has not started keeps this pipeline from promoting",

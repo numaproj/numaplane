@@ -96,7 +96,7 @@ func (r *NumaflowControllerRolloutReconciler) CreateUpgradingChildDefinition(ctx
 
 // AssessUpgradingChild assesses the trial NumaflowController on its own.
 // This implements a function of the progressiveController interface.
-// A failure stays Unknown until assessmentSchedule.End so a restart does not fail the chain immediately.
+// The health check fails when assessmentSchedule.End passes, and a recorded success is not repeated.
 // Promotion uses AssessResourceChain, which also requires the workloads running on this controller instance.
 func (r *NumaflowControllerRolloutReconciler) AssessUpgradingChild(
 	ctx context.Context,
@@ -115,20 +115,27 @@ func (r *NumaflowControllerRolloutReconciler) AssessUpgradingChild(
 		childStatus = nfcRollout.GetUpgradingChildStatus()
 	}
 
-	assessmentResult, failureReason, err := assessNumaflowControllerHealthWindow(ctx, childStatus, existingUpgradingChildDef, assessmentSchedule, time.Now())
-	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", err
+	// Once the controller's own health check has finished, do not run it again.
+	// Promotion also requires AssessResourceChain.
+	if !childStatus.IsBasicAssessmentResultSet() {
+		assessmentResult, failureReason, err := assessNumaflowControllerHealthWindow(ctx, childStatus, existingUpgradingChildDef, assessmentSchedule, time.Now())
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, "", err
+		}
+		nfcRollout.SetUpgradingChildStatus(childStatus)
+		return assessmentResult, failureReason, nil
 	}
 	nfcRollout.SetUpgradingChildStatus(childStatus)
-
-	return assessmentResult, failureReason, nil
+	if childStatus.BasicAssessmentResult != apiv1.AssessmentResultSuccess {
+		return childStatus.BasicAssessmentResult, "Basic Resource Health Check failed", nil
+	}
+	return apiv1.AssessmentResultSuccess, "", nil
 }
 
 // assessNumaflowControllerHealthWindow applies the assessment schedule to the trial NumaflowController.
-// A healthy controller is Success once it has stayed healthy for assessmentSchedule.Period.
-// Period 0 means the first healthy observation is enough.
-// A failure is retried as Unknown until assessmentSchedule.End, so a restart at the beginning of the
-// upgrade does not fail the chain immediately. End 0 fails on the first failure after the start time.
+// The upgrade fails when assessmentSchedule.End passes without a completed success period, whatever the
+// current observation is. A failure or an unknown observation before that stays Unknown and restarts the
+// consecutive-success period. Period 0 means the first healthy observation is enough.
 func assessNumaflowControllerHealthWindow(
 	ctx context.Context,
 	childStatus *apiv1.UpgradingChildStatus,
@@ -137,6 +144,22 @@ func assessNumaflowControllerHealthWindow(
 	currentTime time.Time,
 ) (apiv1.AssessmentResult, string, error) {
 	numaLogger := logger.FromContext(ctx)
+
+	if childStatus.BasicAssessmentStartTime != nil &&
+		currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
+		numaLogger.Debugf("Assessment window ended for NumaflowController %s", numaflowController.GetName())
+		if len(childStatus.FailureReasons) == 0 {
+			childStatus.FailureReasons = []string{"Basic Resource Health Check failed"}
+		}
+		rawStatus, err := json.Marshal(numaflowController.Object["status"])
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, "", err
+		}
+		childStatus.ChildStatus.Raw = rawStatus
+		childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+		childStatus.BasicAssessmentResult = apiv1.AssessmentResultFailure
+		return apiv1.AssessmentResultFailure, strings.Join(childStatus.FailureReasons, "; "), nil
+	}
 
 	assessment, failureReasons, err := assessNumaflowControllerHealth(numaflowController)
 	if err != nil {
@@ -149,6 +172,7 @@ func assessNumaflowControllerHealthWindow(
 		}
 		if currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
 			childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+			childStatus.BasicAssessmentResult = apiv1.AssessmentResultSuccess
 			childStatus.ChildStatus.Raw = nil
 			childStatus.FailureReasons = nil
 			return apiv1.AssessmentResultSuccess, "", nil
@@ -157,24 +181,17 @@ func assessNumaflowControllerHealthWindow(
 		return apiv1.AssessmentResultUnknown, "", nil
 	}
 
+	// One failure, or a controller that is still starting, restarts the consecutive-success period.
 	childStatus.TrialWindowStartTime = nil
-	if assessment != apiv1.AssessmentResultFailure {
-		return apiv1.AssessmentResultUnknown, "", nil
+	if assessment == apiv1.AssessmentResultFailure {
+		rawStatus, err := json.Marshal(numaflowController.Object["status"])
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, "", err
+		}
+		childStatus.FailureReasons = failureReasons
+		childStatus.ChildStatus.Raw = rawStatus
+		numaLogger.Debugf("NumaflowController %s is unhealthy; checking again before the assessment window ends", numaflowController.GetName())
 	}
-
-	rawStatus, err := json.Marshal(numaflowController.Object["status"])
-	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", err
-	}
-	childStatus.FailureReasons = failureReasons
-	childStatus.ChildStatus.Raw = rawStatus
-
-	if childStatus.BasicAssessmentStartTime != nil &&
-		currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
-		childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
-		return apiv1.AssessmentResultFailure, strings.Join(failureReasons, "; "), nil
-	}
-	numaLogger.Debugf("NumaflowController %s is unhealthy; waiting until the assessment window ends before failing", numaflowController.GetName())
 	return apiv1.AssessmentResultUnknown, "", nil
 }
 

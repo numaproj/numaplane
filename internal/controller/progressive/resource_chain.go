@@ -152,8 +152,8 @@ func pipelineRolloutUsesISB(pipelineRollout *apiv1.PipelineRollout, isbRolloutNa
 // WorkloadsOnTrialController returns the resource assessments of ISBService, Pipeline, and MonoVertex
 // rollouts in the namespace, excluding the rollout identified by excludeKind and excludeName.
 // present is false when there is no trial controller.
-// A rollout that has not moved its upgrading child onto that controller instance contributes Unknown,
-// matching the controller's own dependent check, so another workload cannot promote ahead of it.
+// A rollout whose upgrading child is not bound to that controller instance contributes Unknown.
+// A child already promoted onto the instance still counts, so a later workload is not blocked after an earlier one succeeds.
 func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace, excludeKind, excludeName string) ([]apiv1.AssessmentResult, []string, bool, error) {
 	_, trialChild, err := findTrialController(ctx, c, namespace)
 	if err != nil {
@@ -177,11 +177,11 @@ func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace,
 			results, reasons = appendAssessment(results, reasons, apiv1.AssessmentResultUnknown, "")
 			return nil
 		}
-		onTrial, err := childOnTrialController(ctx, c, namespace, upgrading.Name, gvk, instanceID)
+		onInstance, err := childOnControllerInstance(ctx, c, namespace, upgrading.Name, gvk, instanceID)
 		if err != nil {
 			return err
 		}
-		if !onTrial {
+		if !onInstance {
 			results, reasons = appendAssessment(results, reasons, apiv1.AssessmentResultUnknown, "")
 			return nil
 		}
@@ -249,18 +249,16 @@ func unstructuredInstanceID(controller *unstructured.Unstructured) (string, erro
 	return instanceID, nil
 }
 
-// childOnTrialController reports whether the named child is a trial bound to instanceID.
-// A missing child is not on the trial.
-func childOnTrialController(ctx context.Context, c client.Client, namespace, childName string, gvk schema.GroupVersionKind, instanceID string) (bool, error) {
+// childOnControllerInstance reports whether the named child is bound to instanceID.
+// A child that already succeeded is relabeled from trial to promoted, so the upgrade-state label is not required.
+// A missing child is not on the instance.
+func childOnControllerInstance(ctx context.Context, c client.Client, namespace, childName string, gvk schema.GroupVersionKind, instanceID string) (bool, error) {
 	child, err := kubernetes.GetResource(ctx, c, gvk, types.NamespacedName{Namespace: namespace, Name: childName})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("getting %s %s/%s: %w", gvk.Kind, namespace, childName, err)
-	}
-	if child.GetLabels()[common.LabelKeyUpgradeState] != string(common.LabelValueUpgradeTrial) {
-		return false, nil
 	}
 	return numaflowtypes.ControllerInstanceIDFromResource(child) == instanceID, nil
 }

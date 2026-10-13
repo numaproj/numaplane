@@ -42,6 +42,35 @@ func TestAssessNumaflowControllerHealthWindow(t *testing.T) {
 		result, _, err := assessNumaflowControllerHealthWindow(context.Background(), status, healthy, schedule, now)
 		require.NoError(t, err)
 		require.Equal(t, apiv1.AssessmentResultSuccess, result)
+		require.Equal(t, apiv1.AssessmentResultSuccess, status.BasicAssessmentResult)
+	})
+
+	t.Run("an unknown observation fails once the window has ended", func(t *testing.T) {
+		starting := mustUnstructuredController(t, apiv1.PhaseDeployed, nil)
+		status := &apiv1.UpgradingChildStatus{BasicAssessmentStartTime: &metav1.Time{Time: now.Add(-4 * time.Minute)}}
+		result, _, err := assessNumaflowControllerHealthWindow(context.Background(), status, starting, schedule, now)
+		require.NoError(t, err)
+		require.Equal(t, apiv1.AssessmentResultFailure, result)
+		require.Equal(t, apiv1.AssessmentResultFailure, status.BasicAssessmentResult)
+	})
+
+	t.Run("a recorded success is not assessed again", func(t *testing.T) {
+		rollout := &apiv1.NumaflowControllerRollout{
+			ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: "test"},
+			Status: apiv1.NumaflowControllerRolloutStatus{
+				ProgressiveStatus: apiv1.NumaflowControllerProgressiveStatus{
+					UpgradingNumaflowControllerStatus: &apiv1.UpgradingNumaflowControllerStatus{
+						UpgradingChildStatus: apiv1.UpgradingChildStatus{
+							Name:                  "controller-1",
+							BasicAssessmentResult: apiv1.AssessmentResultSuccess,
+						},
+					},
+				},
+			},
+		}
+		result, _, err := (&NumaflowControllerRolloutReconciler{}).AssessUpgradingChild(context.Background(), rollout, failed, schedule)
+		require.NoError(t, err)
+		require.Equal(t, apiv1.AssessmentResultSuccess, result)
 	})
 }
 
