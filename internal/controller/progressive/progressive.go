@@ -876,6 +876,8 @@ func declareSuccess(
 	}
 
 	rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
+	// ResourceAssessmentResult is what the other rollouts read. Force-promote can reach here while it is still Unknown.
+	childStatus.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
 	childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
 	childStatus.ResourceChainAssessmentResult = apiv1.AssessmentResultSuccess
 	rolloutObject.SetUpgradingChildStatus(childStatus)
