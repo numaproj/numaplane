@@ -316,8 +316,8 @@ spec:
                           type: string
                         type: array
                       forcedSuccess:
-                        description: ForcedSuccess indicates if this promotion was
-                          forced to complete
+                        description: ForcedSuccess indicates the progressive assessment
+                          was forced successful
                         type: boolean
                       forcedSuccessReason:
                         description: ForcedSuccessReason indicates the reason for
@@ -812,8 +812,8 @@ spec:
                           type: string
                         type: array
                       forcedSuccess:
-                        description: ForcedSuccess indicates if this promotion was
-                          forced to complete
+                        description: ForcedSuccess indicates the progressive assessment
+                          was forced successful
                         type: boolean
                       forcedSuccessReason:
                         description: ForcedSuccessReason indicates the reason for
@@ -1260,8 +1260,8 @@ spec:
                           type: string
                         type: array
                       forcedSuccess:
-                        description: ForcedSuccess indicates if this promotion was
-                          forced to complete
+                        description: ForcedSuccess indicates the progressive assessment
+                          was forced successful
                         type: boolean
                       forcedSuccessReason:
                         description: ForcedSuccessReason indicates the reason for
@@ -2018,8 +2018,8 @@ spec:
                           type: string
                         type: array
                       forcedSuccess:
-                        description: ForcedSuccess indicates if this promotion was
-                          forced to complete
+                        description: ForcedSuccess indicates the progressive assessment
+                          was forced successful
                         type: boolean
                       forcedSuccessReason:
                         description: ForcedSuccessReason indicates the reason for

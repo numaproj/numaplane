@@ -63,7 +63,7 @@ type UpgradingChildStatus struct {
 	// TrialWindowStartTime indicates the time at which the trial window starts
 	TrialWindowStartTime *metav1.Time `json:"trialWindowStartTime,omitempty"`
 
-	// ForcedSuccess indicates if this promotion was forced to complete
+	// ForcedSuccess indicates the progressive assessment was forced successful
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
 
 	// ForcedSuccessReason indicates the reason for the forced success
