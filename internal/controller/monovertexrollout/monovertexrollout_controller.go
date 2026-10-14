@@ -251,9 +251,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	// Initial creation stays on the promoted controller. Once that child exists, the desired
 	// definition includes the trial controller so a controller upgrade can start Progressive.
-	// A failed trial has no desired instance. Hold unless Progressive is already running,
-	// in which case compare against the promoted instance so the live binding is kept
-	// while that trial is rolled back.
+	// A failed controller trial has no desired instance. Keep any trial that already exists and stay Pending.
 	requirePromotedNumaflowController := len(promotedMonovertices.Items) == 0
 	if !requirePromotedNumaflowController {
 		desiredInstanceID, desiredErr := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
@@ -261,11 +259,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			return ctrl.Result{}, desiredErr
 		}
 		if desiredInstanceID == nil {
-			if r.inProgressStrategyMgr.GetStrategy(ctx, monoVertexRollout) != apiv1.UpgradeStrategyProgressive {
-				monoVertexRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
-			}
-			requirePromotedNumaflowController = true
+			monoVertexRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
 		}
 	}
 	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requirePromotedNumaflowController)

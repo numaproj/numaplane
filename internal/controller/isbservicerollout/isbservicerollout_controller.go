@@ -308,22 +308,16 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// Object already exists. The desired definition uses the trial controller when one
 		// exists, so a controller-instance change is visible to Progressive. That path leaves
 		// the live promoted child unchanged and creates the trial child separately.
-		// A failed trial has no desired instance. Hold unless Progressive is already running,
-		// in which case compare against the promoted instance so the live binding is kept
-		// while that trial is rolled back.
-		requirePromotedNumaflowController := false
+		// A failed controller trial has no desired instance. Keep any trial that already exists and stay Pending.
 		desiredInstanceID, err := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if desiredInstanceID == nil {
-			if r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout) != apiv1.UpgradeStrategyProgressive {
-				isbServiceRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
-			}
-			requirePromotedNumaflowController = true
+			isbServiceRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
 		}
-		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, requirePromotedNumaflowController)
+		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, false)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 		}

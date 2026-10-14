@@ -35,8 +35,6 @@ import (
 const (
 	// FailedTrialPendingMessage is the Rollout phase message while an update is held for a failed progressive trial.
 	FailedTrialPendingMessage = "Waiting for a failed progressive trial to be rolled back or force-promoted"
-	// chainRollbackMessage is recorded on an in-progress trial that is rolled back because an upstream trial failed.
-	chainRollbackMessage = "Rolled back with a failed progressive trial"
 )
 
 // ShouldHoldNewProgressive reports whether a new progressive upgrade for rollout must stay Pending.
@@ -80,44 +78,6 @@ func pipelineISBRolloutName(pipeline *apiv1.PipelineRollout) (string, error) {
 		return "", fmt.Errorf("reading PipelineRollout %s/%s ISBService name: %w", pipeline.Namespace, pipeline.Name, err)
 	}
 	return spec.GetISBSvcName(), nil
-}
-
-// rollBackInProgressTrial returns a dependent's in-progress trial to the promoted child and marks the trial recyclable.
-// The promoted child is restored first when the trial had already scaled it down. A NumaflowController trial is not
-// recycled here: it stays failed so new updates remain Pending until that trial is rolled back or force-promoted.
-func rollBackInProgressTrial(
-	ctx context.Context,
-	rolloutObject ProgressiveRolloutObject,
-	controller progressiveController,
-	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
-	c client.Client,
-) (bool, error) {
-	requeue, err := restorePromotedAfterFailedTrial(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c)
-	if err != nil || requeue {
-		return requeue, err
-	}
-
-	if rolloutObject.GetUpgradingChildStatus() != nil {
-		UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
-			if status == nil {
-				return
-			}
-			if !status.IsFailed() {
-				status.FailureReasons = append(status.FailureReasons, chainRollbackMessage)
-			}
-			status.AssessmentResult = apiv1.AssessmentResultFailure
-			status.ResourceChainAssessmentResult = apiv1.AssessmentResultFailure
-			status.Discontinued = true
-		})
-	}
-	rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(chainRollbackMessage, rolloutObject.GetRolloutObjectMeta().Generation)
-	rolloutObject.GetRolloutStatus().SetPhase(apiv1.PhasePending, FailedTrialPendingMessage)
-
-	reason := common.LabelValueChainRollback
-	if err := ctlrcommon.MarkRecyclable(ctx, c, &reason, existingUpgradingChildDef); err != nil {
-		return false, err
-	}
-	return false, nil
 }
 
 // restorePromotedAfterFailedTrial runs the post-failure handlers that put the promoted child back, including scale.

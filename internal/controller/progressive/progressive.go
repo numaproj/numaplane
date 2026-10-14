@@ -554,6 +554,19 @@ func checkForUpgradeReplacement(
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 	var newUpgradingChildDef *unstructured.Unstructured
 
+	// A failed upstream trial blocks a new child. The trial that already exists stays until that
+	// failure is resolved, and this rollout remains Pending.
+	hold, err := ShouldHoldNewProgressive(ctx, c, rolloutObject)
+	if err != nil {
+		return false, false, err
+	}
+	if hold {
+		if _, isController := rolloutObject.(*apiv1.NumaflowControllerRollout); !isController {
+			rolloutObject.GetRolloutStatus().SetPhase(apiv1.PhasePending, FailedTrialPendingMessage)
+			return true, false, nil
+		}
+	}
+
 	// Compare our new spec to:
 	// 1. the existing Upgrading child definition
 	// 2. the existing Promoted child definition
@@ -563,14 +576,7 @@ func checkForUpgradeReplacement(
 
 	differentFromExistingUpgrading, differentFromPromoted, err := IsUpgradeReplacementRequired(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c)
 	if errors.Is(err, ctlrcommon.ErrNoDesiredControllerInstance) {
-		if _, isController := rolloutObject.(*apiv1.NumaflowControllerRollout); isController {
-			// The failed controller trial stays. It gates dependents until it is rolled back or force-promoted.
-			return false, false, nil
-		}
-		// There is no controller instance to bind a replacement child to. Roll this trial back.
-		if _, err := rollBackInProgressTrial(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c); err != nil {
-			return false, false, err
-		}
+		rolloutObject.GetRolloutStatus().SetPhase(apiv1.PhasePending, FailedTrialPendingMessage)
 		return true, false, nil
 	}
 	if err != nil {
@@ -578,24 +584,10 @@ func checkForUpgradeReplacement(
 	}
 
 	if differentFromExistingUpgrading {
-		// While an upstream trial assessment is failed, do not replace this trial with a new one.
-		// Roll it back to the promoted child and leave any remaining spec update Pending.
-		hold, err := ShouldHoldNewProgressive(ctx, c, rolloutObject)
-		if err != nil {
-			return false, false, err
-		}
-
 		if differentFromPromoted {
 			if hold {
-				if _, isController := rolloutObject.(*apiv1.NumaflowControllerRollout); isController {
-					// The failed controller trial stays. It gates dependents until it is rolled back or force-promoted.
-					return false, false, nil
-				}
-				if _, err := rollBackInProgressTrial(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c); err != nil {
-					return false, false, err
-				}
-				// Requeue either to finish restoring the promoted child or to observe the recycled trial.
-				return true, false, nil
+				// The failed controller trial stays. It gates dependents until it is rolled back or force-promoted.
+				return false, false, nil
 			}
 
 			// recycle the old one
@@ -626,8 +618,7 @@ func checkForUpgradeReplacement(
 		} else {
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName()).Debug("removing 'upgrading' child as Rollout is back to matching 'promoted' child")
 
-			// Restore the promoted child before removing the trial. A chain rollback reaches here once the desired
-			// instance is the previous promoted one, and the promoted child may still be scaled down.
+			// A failed trial may have scaled the promoted child down. Restore it before removing the trial.
 			if childStatus.IsFailed() || hold {
 				requeue, err := restorePromotedAfterFailedTrial(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c)
 				if err != nil {
