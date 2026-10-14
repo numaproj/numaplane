@@ -62,9 +62,19 @@ func TestISBServiceAssessResourceChain(t *testing.T) {
 		},
 	}
 
+	// A Pipeline that has not started upgrading onto the trial does not hold back the failure.
+	notStartedPipeline := &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: "pipeline-not-started", Namespace: namespace},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: apiv1.Pipeline{
+				Spec: runtime.RawExtension{Raw: []byte(`{"interStepBufferServiceName":"isb"}`)},
+			},
+		},
+	}
+
 	scheme := runtime.NewScheme()
 	require.NoError(t, apiv1.AddToScheme(scheme))
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(isbRollout, failedPipeline).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(isbRollout, failedPipeline, notStartedPipeline).Build()
 
 	result, reasons, err := (&ISBServiceRolloutReconciler{client: c}).AssessResourceChain(ctx, isbRollout, child)
 	require.NoError(t, err)

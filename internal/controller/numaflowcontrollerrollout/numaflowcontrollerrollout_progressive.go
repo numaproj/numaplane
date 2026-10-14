@@ -259,7 +259,7 @@ func assessNumaflowControllerHealth(numaflowController *unstructured.Unstructure
 // assessDependents assesses the ISBServiceRollouts, PipelineRollouts, and MonoVertexRollouts in the namespace
 // against the trial controller instance. Each must have an upgrading child bound to instanceID. The result is
 // those dependents' resource assessments: Success once all of them have succeeded, and Failure as soon as one
-// of them has failed.
+// of them has failed, even if others have not started upgrading onto this instance yet.
 // Return the AssessmentResult and, if it failed, the names of the dependents that failed.
 func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Context, namespace string, instanceID string) (apiv1.AssessmentResult, []string, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -308,20 +308,20 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 		depLogger := numaLogger.WithValues(strings.ToLower(dep.kind), dep.name)
 		if dep.upgradingStatus == nil {
 			depLogger.Debug("can't assess NumaflowController; dependent has not yet started upgrading onto this controller instance")
-			return apiv1.AssessmentResultUnknown, nil, nil
+			continue
 		}
 		// make sure the child that dependent is (or was) upgrading is in fact bound to this controller instance
 		child, err := kubernetes.GetResource(ctx, r.client, dep.childGVK, k8stypes.NamespacedName{Namespace: namespace, Name: dep.upgradingStatus.Name})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				depLogger.WithValues("child", dep.upgradingStatus.Name).Debug("can't assess NumaflowController; dependent's upgrading child not found")
-				return apiv1.AssessmentResultUnknown, nil, nil
+				continue
 			}
 			return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("error getting %s %s/%s: %w", dep.childGVK.Kind, namespace, dep.upgradingStatus.Name, err)
 		}
 		if numaflowtypes.ControllerInstanceIDFromResource(child) != instanceID {
 			depLogger.WithValues("child", child.GetName()).Debug("can't assess NumaflowController; dependent's upgrading child is not bound to this controller instance")
-			return apiv1.AssessmentResultUnknown, nil, nil
+			continue
 		}
 		switch dep.upgradingStatus.EffectiveResourceAssessment() {
 		case apiv1.AssessmentResultFailure:

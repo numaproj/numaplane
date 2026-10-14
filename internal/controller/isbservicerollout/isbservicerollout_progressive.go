@@ -206,7 +206,8 @@ func recordUpgradingChildSnapshot(childStatus *apiv1.UpgradingChildStatus, isbsv
 }
 
 // Assess the Pipelines of the upgrading ISBService
-// return AssessmentResult and if it failed, the name of the pipeline that failed
+// return AssessmentResult and if it failed, the name of the pipeline that failed.
+// One failed Pipeline fails the result even if other Pipelines have not started upgrading onto this ISBService yet.
 func (r *ISBServiceRolloutReconciler) assessPipelines(
 	ctx context.Context,
 	existingUpgradingChildDef *unstructured.Unstructured,
@@ -237,7 +238,7 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 		if upgradingPipelineStatus == nil || upgradingPipelineStatus.InterStepBufferServiceName != existingUpgradingChildDef.GetName() {
 			// we need to make sure the PipelineRollout has updated to use an Upgrading Pipeline which is on the new isbsvc first
 			numaLogger.WithValues("pipelineRollout", pipelineRollout.GetName()).Debug("can't assess ISBService; pipeline is not yet upgrading with this ISBService")
-			return apiv1.AssessmentResultUnknown, []string{}, nil
+			continue
 		}
 		switch upgradingPipelineStatus.EffectiveResourceAssessment() {
 		case apiv1.AssessmentResultFailure:
