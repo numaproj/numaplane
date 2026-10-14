@@ -74,7 +74,8 @@ func TestGetControllerInstanceID(t *testing.T) {
 		instanceID, err := GetDesiredControllerInstanceID(context.Background(), c, namespace)
 
 		require.NoError(t, err)
-		assert.Equal(t, "trial-2", instanceID)
+		require.NotNil(t, instanceID)
+		assert.Equal(t, "trial-2", *instanceID)
 	})
 
 	t.Run("does not bind dependents to a trial whose assessment failed", func(t *testing.T) {
@@ -91,7 +92,7 @@ func TestGetControllerInstanceID(t *testing.T) {
 
 		desired, err := GetDesiredControllerInstanceID(context.Background(), c, namespace)
 		require.NoError(t, err)
-		assert.Equal(t, "promoted-1", desired)
+		assert.Nil(t, desired)
 	})
 
 	t.Run("does not bind dependents when the rollout assessment is failed before the child label is set", func(t *testing.T) {
@@ -109,7 +110,7 @@ func TestGetControllerInstanceID(t *testing.T) {
 
 		desired, err := GetDesiredControllerInstanceID(context.Background(), c, namespace)
 		require.NoError(t, err)
-		assert.Equal(t, "promoted-1", desired)
+		assert.Nil(t, desired)
 	})
 
 	t.Run("ignores recyclable children and children of other rollouts", func(t *testing.T) {

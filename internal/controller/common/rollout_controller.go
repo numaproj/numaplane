@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -292,25 +293,31 @@ func GetPromotedControllerInstanceID(ctx context.Context, c client.Client, names
 	return promotedInstanceID, err
 }
 
-// GetDesiredControllerInstanceID returns the trial controller instance when one exists, otherwise the promoted one.
-// A trial whose progressive assessment has already failed is not desired: dependents stay on the promoted instance
-// until that trial is rolled back or force-promoted.
-func GetDesiredControllerInstanceID(ctx context.Context, c client.Client, namespace string) (string, error) {
+// ErrNoDesiredControllerInstance is returned when a child definition would have to choose a controller
+// instance while the trial controller's assessment has failed. Callers leave the update Pending.
+// A nil instance must not be applied: the child builders treat a nil pointer as "set no binding".
+var ErrNoDesiredControllerInstance = errors.New("no desired controller instance: a trial controller assessment has failed")
+
+// GetDesiredControllerInstanceID returns the controller instance a child should bind to.
+// A live trial that has not failed is desired. Otherwise the promoted instance is desired.
+// A failed trial returns nil. The update stays Pending, and no child is bound to either instance
+// while that trial is unresolved.
+func GetDesiredControllerInstanceID(ctx context.Context, c client.Client, namespace string) (*string, error) {
 	promotedInstanceID, trialInstanceID, err := GetControllerInstanceIDs(ctx, c, namespace)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if trialInstanceID == "" {
-		return promotedInstanceID, nil
+		return &promotedInstanceID, nil
 	}
 	failed, err := TrialControllerAssessmentFailed(ctx, c, namespace)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if failed {
-		return promotedInstanceID, nil
+		return nil, nil
 	}
-	return trialInstanceID, nil
+	return &trialInstanceID, nil
 }
 
 // TrialControllerAssessmentFailed reports whether the namespace has a live trial NumaflowController whose

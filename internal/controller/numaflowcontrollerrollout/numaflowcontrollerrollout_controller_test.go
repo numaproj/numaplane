@@ -603,7 +603,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedPromotedName:      promotedName,
 			expectedPromotedInstance:  originalInstance,
 			expectedUpgradingInstance: trialInstance,
-			// GetControllerInstanceIDs still reports the failed trial. GetDesiredControllerInstanceID does not bind dependents to it.
+			// GetControllerInstanceIDs still reports the failed trial. GetDesiredControllerInstanceID returns nil for it.
 			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
 		},
 		{

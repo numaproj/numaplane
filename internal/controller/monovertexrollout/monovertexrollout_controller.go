@@ -251,7 +251,23 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	// Initial creation stays on the promoted controller. Once that child exists, the desired
 	// definition includes the trial controller so a controller upgrade can start Progressive.
+	// A failed trial has no desired instance. Hold unless Progressive is already running,
+	// in which case compare against the promoted instance so the live binding is kept
+	// while that trial is rolled back.
 	requirePromotedNumaflowController := len(promotedMonovertices.Items) == 0
+	if !requirePromotedNumaflowController {
+		desiredInstanceID, desiredErr := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+		if desiredErr != nil {
+			return ctrl.Result{}, desiredErr
+		}
+		if desiredInstanceID == nil {
+			if r.inProgressStrategyMgr.GetStrategy(ctx, monoVertexRollout) != apiv1.UpgradeStrategyProgressive {
+				monoVertexRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
+				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+			}
+			requirePromotedNumaflowController = true
+		}
+	}
 	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requirePromotedNumaflowController)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -778,13 +794,21 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 		return nil, err
 	}
 
-	resolveControllerInstanceID := ctlrcommon.GetDesiredControllerInstanceID
+	var controllerInstanceID *string
 	if requirePromotedNumaflowController {
-		resolveControllerInstanceID = ctlrcommon.GetPromotedControllerInstanceID
-	}
-	controllerInstanceID, err := resolveControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
-	if err != nil {
-		return nil, err
+		promotedInstanceID, promotedErr := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+		if promotedErr != nil {
+			return nil, promotedErr
+		}
+		controllerInstanceID = &promotedInstanceID
+	} else {
+		controllerInstanceID, err = ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+		if err != nil {
+			return nil, err
+		}
+		if controllerInstanceID == nil {
+			return nil, ctlrcommon.ErrNoDesiredControllerInstance
+		}
 	}
 
 	metadata, err := getBaseMonoVertexMetadata(monoVertexRollout)
@@ -793,7 +817,7 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
-	return r.makeMonoVertexDefinition(monoVertexRollout, monoVertexName, metadata, &controllerInstanceID)
+	return r.makeMonoVertexDefinition(monoVertexRollout, monoVertexName, metadata, controllerInstanceID)
 }
 
 // templates are used to dynamically evaluate child spec, metadata, as well as Riders

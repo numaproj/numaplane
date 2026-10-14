@@ -19,6 +19,7 @@ package progressive
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -457,11 +458,6 @@ func processUpgradingChild(
 			return true, true, 0, err
 		}
 
-		// A failure anywhere in an active controller or ISBService chain rolls the rest of that chain back together.
-		if err = RollbackChain(ctx, c, rolloutObject, existingUpgradingChildDef); err != nil {
-			return true, true, 0, err
-		}
-
 		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 		if err != nil {
 			return true, true, 0, err
@@ -566,6 +562,17 @@ func checkForUpgradeReplacement(
 	//  Else replace the Upgrading one with a new one
 
 	differentFromExistingUpgrading, differentFromPromoted, err := IsUpgradeReplacementRequired(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c)
+	if errors.Is(err, ctlrcommon.ErrNoDesiredControllerInstance) {
+		if _, isController := rolloutObject.(*apiv1.NumaflowControllerRollout); isController {
+			// The failed controller trial stays. It gates dependents until it is rolled back or force-promoted.
+			return false, false, nil
+		}
+		// There is no controller instance to bind a replacement child to. Roll this trial back.
+		if _, err := rollBackInProgressTrial(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c); err != nil {
+			return false, false, err
+		}
+		return true, false, nil
+	}
 	if err != nil {
 		return false, false, err
 	}
