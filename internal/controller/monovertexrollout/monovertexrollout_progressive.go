@@ -75,7 +75,6 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		// Check if endTime has arrived and basic assessment is not complete yet, in which case we should declare failure
 		if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
 			numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
-			childStatus.ResourceAssessmentResult = apiv1.AssessmentResultFailure
 			childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 			childStatus.BasicAssessmentResult = apiv1.AssessmentResultFailure
 			return apiv1.AssessmentResultFailure, "Basic Resource Health Check failed", nil
@@ -95,7 +94,6 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			childStatus.TrialWindowStartTime = nil
-			childStatus.ResourceAssessmentResult = apiv1.AssessmentResultUnknown
 			childStatus.FailureReasons = failureReasons
 			childStatus.ChildStatus.Raw = monoVertexChildStatus
 			return apiv1.AssessmentResultUnknown, "", nil
@@ -106,7 +104,6 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		if assessment == apiv1.AssessmentResultSuccess {
 			if !childStatus.IsTrialWindowStartTimeSet() {
 				childStatus.TrialWindowStartTime = &metav1.Time{Time: currentTime}
-				childStatus.ResourceAssessmentResult = apiv1.AssessmentResultUnknown
 				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 			}
 

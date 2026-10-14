@@ -78,7 +78,6 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		// Check if endTime has arrived, fail immediately
 		if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
 			numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
-			childStatus.ResourceAssessmentResult = apiv1.AssessmentResultFailure
 			childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 			childStatus.BasicAssessmentResult = apiv1.AssessmentResultFailure
 
@@ -128,7 +127,6 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			childStatus.TrialWindowStartTime = nil
-			childStatus.ResourceAssessmentResult = apiv1.AssessmentResultUnknown
 			childStatus.FailureReasons = failureReasons
 			childStatus.ChildStatus.Raw = pipelineChildStatus
 
@@ -140,7 +138,6 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		if assessment == apiv1.AssessmentResultSuccess {
 			if !childStatus.IsTrialWindowStartTimeSet() {
 				childStatus.TrialWindowStartTime = &metav1.Time{Time: currentTime}
-				childStatus.ResourceAssessmentResult = apiv1.AssessmentResultUnknown
 				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 			}
 
