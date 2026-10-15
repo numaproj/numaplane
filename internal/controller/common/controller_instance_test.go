@@ -163,4 +163,20 @@ func TestGetControllerInstanceID(t *testing.T) {
 
 		assert.ErrorContains(t, err, "expected at most 1 NumaflowControllerRollout")
 	})
+
+	t.Run("keeps the promoted instance for a new rollout while the trial is failed", func(t *testing.T) {
+		failedTrial := newController("controller-2", numaplanecommon.LabelValueUpgradeTrial, "trial-2")
+		failedTrial.Labels[numaplanecommon.LabelKeyProgressiveResultState] = string(numaplanecommon.LabelValueResultStateFailed)
+		c := newClient(controllerRollout,
+			newController("controller-1", numaplanecommon.LabelValueUpgradePromoted, "promoted-1"),
+			failedTrial)
+
+		promoted, err := GetPromotedControllerInstanceID(context.Background(), c, namespace)
+		require.NoError(t, err)
+		assert.Equal(t, "promoted-1", promoted)
+
+		desired, err := GetDesiredControllerInstanceID(context.Background(), c, namespace)
+		require.NoError(t, err)
+		assert.Nil(t, desired)
+	})
 }
