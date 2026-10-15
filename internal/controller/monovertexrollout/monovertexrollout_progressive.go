@@ -75,7 +75,6 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		// Check if endTime has arrived and basic assessment is not complete yet, in which case we should declare failure
 		if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
 			numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
-			childStatus.AssessmentResult = apiv1.AssessmentResultFailure
 			childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 			childStatus.BasicAssessmentResult = apiv1.AssessmentResultFailure
 			return apiv1.AssessmentResultFailure, "Basic Resource Health Check failed", nil
@@ -95,7 +94,6 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			childStatus.TrialWindowStartTime = nil
-			childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
 			childStatus.FailureReasons = failureReasons
 			childStatus.ChildStatus.Raw = monoVertexChildStatus
 			return apiv1.AssessmentResultUnknown, "", nil
@@ -106,7 +104,6 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		if assessment == apiv1.AssessmentResultSuccess {
 			if !childStatus.IsTrialWindowStartTimeSet() {
 				childStatus.TrialWindowStartTime = &metav1.Time{Time: currentTime}
-				childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
 				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 			}
 
@@ -134,6 +131,40 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
+}
+
+// AssessResourceChain implements progressiveController.
+// A MonoVertex is promoted only when its own resource assessment succeeds and, when a trial
+// NumaflowController exists, that controller and the other ISBServices, Pipelines, and MonoVertices
+// in the namespace have succeeded their own resource assessments. A workload that has not moved
+// onto the trial controller yet leaves this MonoVertex Unknown.
+func (r *MonoVertexRolloutReconciler) AssessResourceChain(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+) (apiv1.AssessmentResult, []string, error) {
+	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	childStatus := mvtxRollout.GetUpgradingChildStatus()
+	results := []apiv1.AssessmentResult{apiv1.AssessmentResultUnknown}
+	if childStatus != nil {
+		results = []apiv1.AssessmentResult{childStatus.EffectiveResourceAssessment()}
+	}
+	var reasons []string
+
+	controllerResult, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	results, reasons = progressive.AppendChainMember(results, reasons, controllerResult, controllerPresent, controllerReason)
+	if controllerPresent {
+		workloadResults, workloadReasons, _, err := progressive.WorkloadsOnTrialController(ctx, r.client, existingUpgradingChildDef.GetNamespace(), "MonoVertexRollout", mvtxRollout.Name)
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, nil, err
+		}
+		results = append(results, workloadResults...)
+		reasons = append(reasons, workloadReasons...)
+	}
+	return progressive.CombineAssessmentResults(results), reasons, nil
 }
 
 // checkAnalysisTemplates checks if there are any analysis templates to run and runs them if so.
@@ -877,16 +908,13 @@ func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string
 	return scaleValue
 }
 
-func (r *MonoVertexRolloutReconciler) progressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
-
-	return false
-}
-
-// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the MonoVertexRollout
+// SkipProgressiveAssessment reports whether this MonoVertex's own health should be treated as Success.
+// A MonoVertex that cannot ingest data, and Progressive strategy forcePromote, do that.
+// The chain assessment still runs.
 func (r *MonoVertexRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 
-	// check if MonoVertex definition is set to Paused or scaled to 0, in which case it can't ingest data (so we skip the assessment as an optimization)
+	// check if MonoVertex definition is set to Paused or scaled to 0, in which case it can't ingest data
 	monoVertexSpecMap := make(map[string]interface{})
 	err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpecMap)
 	if err != nil {
@@ -906,13 +934,6 @@ func (r *MonoVertexRolloutReconciler) SkipProgressiveAssessment(ctx context.Cont
 	// check if ForcePromote is set true in the Progressive strategy
 	if monoVertexRollout.GetProgressiveStrategy().ForcePromote {
 		return true, progressive.SkipProgressiveAssessmentReasonRolloutConfiguration, nil
-	}
-	// check if Progressive is unsupported for this Rollout
-	if r.progressiveUnsupported(ctx, rolloutObject) {
-		return true, progressive.SkipProgressiveAssessmentReasonProgressiveUnsupported, nil
-	}
-	if !canIngestData {
-		return true, progressive.SkipProgressiveAssessmentReasonNoDataIngestion, nil
 	}
 
 	return false, progressive.SkipProgressiveAssessmentReasonUndefined, nil

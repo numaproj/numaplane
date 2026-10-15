@@ -81,6 +81,16 @@ func TestAssessISBServiceHealth(t *testing.T) {
 			wantResult: apiv1.AssessmentResultFailure,
 			wantReason: `condition ChildrenResourcesHealthy is False for Reason "StatefulSetFailed": pod crash`,
 		},
+		{
+			name:       "statefulset still being created stays unknown",
+			isbsvc:     testISBService(numaflowv1.ISBSvcPhaseRunning, "", 1, 1, []metav1.Condition{{Type: string(numaflowv1.ISBSvcConditionChildrenResourcesHealthy), Status: metav1.ConditionFalse, Reason: "GetStatefulSetFailed", Message: "StatefulSet not found, might be still under creation"}}),
+			wantResult: apiv1.AssessmentResultUnknown,
+		},
+		{
+			name:       "pods not ready yet stay unknown",
+			isbsvc:     testISBService(numaflowv1.ISBSvcPhaseRunning, "", 1, 1, []metav1.Condition{{Type: string(numaflowv1.ISBSvcConditionChildrenResourcesHealthy), Status: metav1.ConditionFalse, Reason: "Unavailable", Message: "Waiting for pods to be ready"}}),
+			wantResult: apiv1.AssessmentResultUnknown,
+		},
 	}
 
 	for _, tc := range tests {
@@ -176,34 +186,54 @@ func TestAssessUpgradingChildRequiresISBServiceHealthAndPipelines(t *testing.T) 
 		assert.Equal(t, apiv1.AssessmentResultFailure, rollout.GetUpgradingChildStatus().BasicAssessmentResult)
 	})
 
-	t.Run("a failed pipeline fails the upgrade before the health window finishes", func(t *testing.T) {
+	t.Run("a failed pipeline fails the chain before the health window finishes", func(t *testing.T) {
 		rollout := upgradingISBServiceRollout(now, nil, "")
 		pending := testISBService(numaflowv1.ISBSvcPhasePending, "", 1, 0, nil)
 		pipeline := pipelineRolloutUsingISBService("default", "default-1", "trial-pipeline", apiv1.AssessmentResultFailure)
-		result, _, err := newAssessmentReconciler(pipeline).AssessUpgradingChild(ctx, rollout, toUnstructured(t, pending), openWindow)
+		reconciler := newAssessmentReconciler(pipeline)
+		child := toUnstructured(t, pending)
+		result, _, err := reconciler.AssessUpgradingChild(ctx, rollout, child, openWindow)
 		require.NoError(t, err)
-		assert.Equal(t, apiv1.AssessmentResultFailure, result)
-		assert.Equal(t, []string{"Pipeline trial-pipeline failed"}, rollout.GetUpgradingChildStatus().FailureReasons)
+		assert.Equal(t, apiv1.AssessmentResultUnknown, result)
 		assert.Empty(t, rollout.GetUpgradingChildStatus().BasicAssessmentResult)
+
+		chain, reasons, err := reconciler.AssessResourceChain(ctx, rollout, child)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.AssessmentResultFailure, chain)
+		assert.Contains(t, reasons, "Pipeline trial-pipeline failed")
 	})
 
-	t.Run("pipelines that have not moved onto the new isbsvc keep the result unknown", func(t *testing.T) {
+	t.Run("pipelines that have not moved onto the new isbsvc keep the chain unknown", func(t *testing.T) {
 		trialStart := now.Add(-time.Minute)
 		rollout := upgradingISBServiceRollout(now.Add(-2*time.Minute), &trialStart, "")
 		pipeline := pipelineRolloutUsingISBService("default", "some-other-isbsvc", "trial-pipeline", apiv1.AssessmentResultSuccess)
-		result, _, err := newAssessmentReconciler(pipeline).AssessUpgradingChild(ctx, rollout, toUnstructured(t, healthyISBService()), openWindow)
-		require.NoError(t, err)
-		assert.Equal(t, apiv1.AssessmentResultUnknown, result)
-		assert.Equal(t, apiv1.AssessmentResultSuccess, rollout.GetUpgradingChildStatus().BasicAssessmentResult)
-	})
-
-	t.Run("after the isbsvc health window succeeds, pipeline success promotes", func(t *testing.T) {
-		rollout := upgradingISBServiceRollout(now.Add(-time.Hour), nil, apiv1.AssessmentResultSuccess)
-		pipeline := pipelineRolloutUsingISBService("default", "default-1", "trial-pipeline", apiv1.AssessmentResultSuccess)
-		result, _, err := newAssessmentReconciler(pipeline).AssessUpgradingChild(ctx, rollout, toUnstructured(t, healthyISBService()), openWindow)
+		reconciler := newAssessmentReconciler(pipeline)
+		child := toUnstructured(t, healthyISBService())
+		result, _, err := reconciler.AssessUpgradingChild(ctx, rollout, child, openWindow)
 		require.NoError(t, err)
 		assert.Equal(t, apiv1.AssessmentResultSuccess, result)
-		assert.Empty(t, rollout.GetUpgradingChildStatus().FailureReasons)
+		assert.Equal(t, apiv1.AssessmentResultSuccess, rollout.GetUpgradingChildStatus().BasicAssessmentResult)
+
+		rollout.GetUpgradingChildStatus().ResourceAssessmentResult = result
+		chain, _, err := reconciler.AssessResourceChain(ctx, rollout, child)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.AssessmentResultUnknown, chain)
+	})
+
+	t.Run("after the isbsvc health window succeeds, pipeline success completes the chain", func(t *testing.T) {
+		rollout := upgradingISBServiceRollout(now.Add(-time.Hour), nil, apiv1.AssessmentResultSuccess)
+		pipeline := pipelineRolloutUsingISBService("default", "default-1", "trial-pipeline", apiv1.AssessmentResultSuccess)
+		reconciler := newAssessmentReconciler(pipeline)
+		child := toUnstructured(t, healthyISBService())
+		result, _, err := reconciler.AssessUpgradingChild(ctx, rollout, child, openWindow)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.AssessmentResultSuccess, result)
+
+		rollout.GetUpgradingChildStatus().ResourceAssessmentResult = result
+		chain, reasons, err := reconciler.AssessResourceChain(ctx, rollout, child)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.AssessmentResultSuccess, chain)
+		assert.Empty(t, reasons)
 	})
 }
 

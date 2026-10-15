@@ -16,6 +16,7 @@ progressive:
       # 180s to become healthy; period 0 so the first healthy check is enough. End must be non-zero or the first check fails.
       schedule: "0,180,0,10"
     - kind: NumaflowController
-      schedule: "0,0,0,10"
+      # A non-zero end gives a restart time to recover before this controller's own assessment fails.
+      schedule: "0,180,0,10"
   analysisRunTimeout: "1200"
 permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=,kind=ConfigMap;group=autoscaling,kind=HorizontalPodAutoscaler;group=policy,kind=PodDisruptionBudget"

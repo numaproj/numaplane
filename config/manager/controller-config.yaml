@@ -30,7 +30,9 @@ data:
           # The window is the InterstepBufferService's own health. Pipeline assessment follows it.
           schedule: "0,360,60,10"
         - kind: NumaflowController
-          schedule: "0,0,0,10"
+          # A non-zero end gives a restart time to recover before this controller's own assessment fails.
+          # Period 0 means the first healthy observation is enough.
+          schedule: "0,180,0,10"
 
       # We will stop waiting if any AnalysisRun is still Running after this number of seconds
       analysisRunTimeout: 1200

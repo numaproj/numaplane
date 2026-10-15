@@ -78,7 +78,6 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		// Check if endTime has arrived, fail immediately
 		if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
 			numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
-			childStatus.AssessmentResult = apiv1.AssessmentResultFailure
 			childStatus.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 			childStatus.BasicAssessmentResult = apiv1.AssessmentResultFailure
 
@@ -128,7 +127,6 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 			}
 			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			childStatus.TrialWindowStartTime = nil
-			childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
 			childStatus.FailureReasons = failureReasons
 			childStatus.ChildStatus.Raw = pipelineChildStatus
 
@@ -140,7 +138,6 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		if assessment == apiv1.AssessmentResultSuccess {
 			if !childStatus.IsTrialWindowStartTimeSet() {
 				childStatus.TrialWindowStartTime = &metav1.Time{Time: currentTime}
-				childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
 				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 			}
 
@@ -168,6 +165,64 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
+}
+
+// AssessResourceChain implements progressiveController.
+// A Pipeline is promoted only when its own resource assessment succeeds and every other resource
+// in its trial chain has succeeded: the trial NumaflowController, the trial ISBService it is
+// rolling onto, the other Pipelines that use that ISBService (including ones that have not moved
+// onto it yet), and the other ISBServices, Pipelines, and MonoVertices on that controller.
+func (r *PipelineRolloutReconciler) AssessResourceChain(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+) (apiv1.AssessmentResult, []string, error) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	childStatus := pipelineRollout.GetUpgradingChildStatus()
+	results := []apiv1.AssessmentResult{apiv1.AssessmentResultUnknown}
+	if childStatus != nil {
+		results = []apiv1.AssessmentResult{childStatus.EffectiveResourceAssessment()}
+	}
+	var reasons []string
+
+	controllerResult, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	results, reasons = progressive.AppendChainMember(results, reasons, controllerResult, controllerPresent, controllerReason)
+
+	isbsvcName, _, err := unstructured.NestedString(existingUpgradingChildDef.Object, "spec", "interStepBufferServiceName")
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("reading spec.interStepBufferServiceName of Pipeline %s/%s: %w", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), err)
+	}
+	if isbsvcName == "" {
+		isbsvcName = "default"
+	}
+	isbResult, isbPresent, isbReason, err := progressive.TrialISBServiceResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace(), isbsvcName)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	results, reasons = progressive.AppendChainMember(results, reasons, isbResult, isbPresent, isbReason)
+
+	namespace := existingUpgradingChildDef.GetNamespace()
+	if isbPresent {
+		siblingResults, siblingReasons, err := progressive.PipelinesOnTrialISB(ctx, r.client, namespace, isbsvcName, pipelineRollout.Name)
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, nil, err
+		}
+		results = append(results, siblingResults...)
+		reasons = append(reasons, siblingReasons...)
+	}
+	workloadResults, workloadReasons, trialController, err := progressive.WorkloadsOnTrialController(ctx, r.client, namespace, "PipelineRollout", pipelineRollout.Name)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, nil, err
+	}
+	if trialController {
+		results = append(results, workloadResults...)
+		reasons = append(reasons, workloadReasons...)
+	}
+
+	return progressive.CombineAssessmentResults(results), reasons, nil
 }
 
 // checkAnalysisTemplates checks if there are any analysis templates to run and runs them if so.
@@ -829,11 +884,13 @@ func (r *PipelineRolloutReconciler) progressiveUnsupported(ctx context.Context, 
 	return false
 }
 
-// SkipProgressiveAssessment checks if we should skip the progressive assessment and force promote based on the definition of the PipelineRollout
+// SkipProgressiveAssessment reports whether this Pipeline's own health should be treated as Success.
+// A Pipeline that cannot ingest data, and Progressive strategy forcePromote, do that.
+// The chain assessment still runs. An HPA rider is not a reason to skip: the chain still has to pass.
 func (r *PipelineRolloutReconciler) SkipProgressiveAssessment(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) (bool, progressive.SkipProgressiveAssessmentReason, error) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 
-	// check if Pipeline definition is set to Paused or scaled to 0, in which case it can't ingest data (so we skip the assessment as an optimization)
+	// check if Pipeline definition is set to Paused or scaled to 0, in which case it can't ingest data
 	pipelineSpecMap := make(map[string]interface{})
 	err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, &pipelineSpecMap)
 	if err != nil {
@@ -849,10 +906,6 @@ func (r *PipelineRolloutReconciler) SkipProgressiveAssessment(ctx context.Contex
 	// check if ForcePromote is set true in the Progressive strategy
 	if pipelineRollout.GetProgressiveStrategy().ForcePromote {
 		return true, progressive.SkipProgressiveAssessmentReasonRolloutConfiguration, nil
-	}
-	// check if Progressive is unsupported for this Rollout
-	if r.progressiveUnsupported(ctx, rolloutObject) {
-		return true, progressive.SkipProgressiveAssessmentReasonProgressiveUnsupported, nil
 	}
 	if !canIngestData {
 		return true, progressive.SkipProgressiveAssessmentReasonNoDataIngestion, nil

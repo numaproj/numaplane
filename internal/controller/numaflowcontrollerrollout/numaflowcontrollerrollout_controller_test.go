@@ -452,7 +452,8 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
 				UpgradingMonoVertexStatus: &apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-						UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: mvName, AssessmentResult: assessment},
+						// The controller chain reads the MonoVertex resource assessment, not its promotion decision.
+						UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: mvName, ResourceAssessmentResult: assessment},
 					},
 				},
 			},
@@ -475,6 +476,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 		expectedRolloutPhase          apiv1.Phase
 		expectedInProgressStrategy    apiv1.UpgradeStrategy
 		expectedUpgradingAssessment   *apiv1.AssessmentResult // nil means no UpgradingChildStatus expected
+		expectedResourceAssessment    *apiv1.AssessmentResult // nil means don't check; set when the trial controller itself was assessed
 		expectedControllers           map[string]expectedController
 		expectedPromotedName          string
 		expectedPromotedInstance      apiv1.ControllerInstanceStatus
@@ -532,6 +534,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedRolloutPhase:        apiv1.PhaseDeployed,
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedUpgradingAssessment: ptr.To(apiv1.AssessmentResultSuccess),
+			expectedResourceAssessment:  ptr.To(apiv1.AssessmentResultSuccess),
 			expectedControllers: map[string]expectedController{
 				trialName: {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
 			},
@@ -541,7 +544,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedControllerInstanceIDs: [2]string{trialInstanceID, ""},
 		},
 		{
-			name:                         "trial is not assessed while a dependent is still upgrading",
+			name:                         "trial is not promoted while a dependent resource assessment is unknown",
 			newNumaflowControllerVersion: "3.2.1",
 			initialRolloutStatus:         assessingTrialStatus(),
 			existingNumaflowControllers: []*apiv1.NumaflowController{
@@ -551,6 +554,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedRolloutPhase:        apiv1.PhasePending,
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
 			expectedUpgradingAssessment: ptr.To(apiv1.AssessmentResultUnknown),
+			expectedResourceAssessment:  ptr.To(apiv1.AssessmentResultSuccess),
 			expectedControllers: map[string]expectedController{
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradePromoted},
 				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradeTrial},
@@ -571,6 +575,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedRolloutPhase:        apiv1.PhaseDeployed,
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedUpgradingAssessment: ptr.To(apiv1.AssessmentResultSuccess),
+			expectedResourceAssessment:  ptr.To(apiv1.AssessmentResultSuccess),
 			expectedControllers: map[string]expectedController{
 				trialName: {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
 			},
@@ -590,6 +595,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedRolloutPhase:        apiv1.PhasePending,
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
 			expectedUpgradingAssessment: ptr.To(apiv1.AssessmentResultFailure),
+			expectedResourceAssessment:  ptr.To(apiv1.AssessmentResultSuccess),
 			expectedControllers: map[string]expectedController{
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradePromoted},
 				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradeTrial},
@@ -616,6 +622,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedRolloutPhase:        apiv1.PhaseDeployed,
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedUpgradingAssessment: ptr.To(apiv1.AssessmentResultSuccess),
+			expectedResourceAssessment:  ptr.To(apiv1.AssessmentResultSuccess),
 			expectedControllers: map[string]expectedController{
 				promotedName: {version: "1.2.3", instanceID: "", upgradeState: common.LabelValueUpgradeRecyclable},
 				trialName:    {version: "3.2.1", instanceID: trialInstanceID, upgradeState: common.LabelValueUpgradePromoted},
@@ -675,6 +682,10 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			} else if assert.NotNil(t, nfcRollout.GetUpgradingChildStatus()) {
 				assert.Equal(t, trialName, nfcRollout.GetUpgradingChildStatus().Name)
 				assert.Equal(t, *tc.expectedUpgradingAssessment, nfcRollout.GetUpgradingChildStatus().AssessmentResult)
+				if tc.expectedResourceAssessment != nil {
+					assert.Equal(t, *tc.expectedResourceAssessment, nfcRollout.GetUpgradingChildStatus().ResourceAssessmentResult)
+					assert.Equal(t, *tc.expectedUpgradingAssessment, nfcRollout.GetUpgradingChildStatus().ResourceChainAssessmentResult)
+				}
 				assert.Equal(t, tc.expectedUpgradingInstance, nfcRollout.Status.ProgressiveStatus.UpgradingNumaflowControllerStatus.ControllerInstanceStatus)
 			}
 			if assert.NotNil(t, nfcRollout.Status.ProgressiveStatus.PromotedNumaflowControllerStatus) {

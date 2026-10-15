@@ -55,8 +55,14 @@ type progressiveController interface {
 	// CheckForDifferencesWithRolloutDef determines if the rollout-defined child definition is different from the existing child's definition
 	CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingChildUpgradeState common.UpgradeState) (bool, error)
 
-	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
+	// AssessUpgradingChild assesses the upgrading child resource on its own.
+	// The returned result is the resource assessment. Promotion uses AssessResourceChain.
 	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured, schedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error)
+
+	// AssessResourceChain assesses this child together with the other resources that must be healthy before it is promoted.
+	// The chain is built from each member's resource assessment, not from that member's own chain, so the assessments do not cycle.
+	// The returned reasons describe chain members that failed. The caller's resource failure reasons are separate.
+	AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []string, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
@@ -82,7 +88,9 @@ type progressiveController interface {
 	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// SkipProgressiveAssessment checks to see if we should skip progressive assessment for this Rollout
+	// SkipProgressiveAssessment reports whether this resource's own health should be treated as Success
+	// without running its health check. Promotion still waits for AssessResourceChain.
+	// The ArgoCD force-promote label is separate and overrides that chain.
 	SkipProgressiveAssessment(ctx context.Context, rolloutObject ProgressiveRolloutObject) (bool, SkipProgressiveAssessmentReason, error)
 
 	UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject)
@@ -338,25 +346,20 @@ func processUpgradingChild(
 
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 
-	// check if we should skip the asssessment
+	// Paused, scaled to zero, or Progressive strategy forcePromote: this resource's own health is Success.
+	// The chain assessment still decides whether it is promoted.
 	skipAssessment, reason, err := controller.SkipProgressiveAssessment(ctx, rolloutObject)
 	if err != nil {
 		return false, false, 0, err
 	}
 
-	// check for "force promote" label on the child
-	forcePromote := false
-	_, ok := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromote]
-	if ok {
-		forcePromote = true
-		reason = SkipProgressiveAssessmentReasonForcePromote
-	}
-
-	if forcePromote || skipAssessment {
+	// The ArgoCD UI "force promote" label overrides the chain assessment and promotes this child now.
+	_, forcePromote := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromote]
+	if forcePromote {
 		childStatus.ForcedSuccess = true
-		childStatus.ForcedSuccessReason = string(reason)
+		childStatus.ForcedSuccessReason = string(SkipProgressiveAssessmentReasonForcePromote)
 
-		numaLogger.WithValues("reason", reason).Debug("Upgrading child force promoted")
+		numaLogger.WithValues("reason", SkipProgressiveAssessmentReasonForcePromote).Debug("Upgrading child force promoted")
 
 		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef)
 		if err != nil {
@@ -381,17 +384,50 @@ func processUpgradingChild(
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentStartTime")
 	}
 
-	// Assess the upgrading child status only if within the assessment time window and if not previously failed.
-	// Otherwise, assess the previous child status.
-	assessment := childStatus.AssessmentResult
-	if childStatus.CanAssess() {
-		assessment, _, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, assessmentSchedule)
+	// Assess the upgrading child only if within the assessment time window and if the chain has not previously failed.
+	// Otherwise, use the previous promotion decision. A status from before the chain was recorded separately
+	// stores that decision only in AssessmentResult.
+	assessment := childStatus.ResourceChainAssessmentResult
+	if assessment == "" {
+		assessment = childStatus.AssessmentResult
+	}
+	var chainFailureReasons []string
+	if skipAssessment {
+		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			status.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
+			status.ForcedSuccess = true
+			status.ForcedSuccessReason = string(reason)
+		})
+		assessment, chainFailureReasons, err = controller.AssessResourceChain(ctx, rolloutObject, existingUpgradingChildDef)
+		if err != nil {
+			return false, false, 0, err
+		}
+		numaLogger.WithValues(
+			"name", existingUpgradingChildDef.GetName(),
+			"reason", reason,
+			"childStatus", *childStatus,
+			"resourceChainAssessment", assessment,
+		).Debugf("resource health forced to success, resource chain assessment returned: %v", assessment)
+	} else if childStatus.CanAssess() {
+		resourceAssessment, _, err := controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, assessmentSchedule)
+		if err != nil {
+			return false, false, 0, err
+		}
+		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			status.ResourceAssessmentResult = resourceAssessment
+		})
+
+		assessment, chainFailureReasons, err = controller.AssessResourceChain(ctx, rolloutObject, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
 
-		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus, "assessment", assessment).
-			Debugf("performing upgrading child assessment, assessment returned: %v", assessment)
+		numaLogger.WithValues(
+			"name", existingUpgradingChildDef.GetName(),
+			"childStatus", *childStatus,
+			"resourceAssessment", resourceAssessment,
+			"resourceChainAssessment", assessment,
+		).Debugf("performing upgrading child assessment, resource chain assessment returned: %v", assessment)
 	} else {
 		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus, "assessment", assessment).
 			Debug("skipping upgrading child assessment but assessing previous child status")
@@ -403,6 +439,8 @@ func processUpgradingChild(
 
 		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultFailure
+			status.ResourceChainAssessmentResult = apiv1.AssessmentResultFailure
+			status.FailureReasons = appendFailureReasons(status.FailureReasons, chainFailureReasons)
 		})
 
 		err = ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateFailed, existingUpgradingChildDef)
@@ -442,6 +480,7 @@ func processUpgradingChild(
 	default:
 		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultUnknown
+			status.ResourceChainAssessmentResult = apiv1.AssessmentResultUnknown
 		})
 
 		return false, false, assessmentSchedule.Interval, nil
@@ -837,7 +876,10 @@ func declareSuccess(
 	}
 
 	rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
+	// ResourceAssessmentResult is what the other rollouts read. Force-promote can reach here while it is still Unknown.
+	childStatus.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
 	childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
+	childStatus.ResourceChainAssessmentResult = apiv1.AssessmentResultSuccess
 	rolloutObject.SetUpgradingChildStatus(childStatus)
 	rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
@@ -1087,6 +1129,25 @@ func Discontinue(ctx context.Context,
 	rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 	return nil
+}
+
+func appendFailureReasons(existing, extra []string) []string {
+	for _, reason := range extra {
+		if reason == "" {
+			continue
+		}
+		alreadyPresent := false
+		for _, have := range existing {
+			if have == reason {
+				alreadyPresent = true
+				break
+			}
+		}
+		if !alreadyPresent {
+			existing = append(existing, reason)
+		}
+	}
+	return existing
 }
 
 func UpdateUpgradingChildStatus(rollout ProgressiveRolloutObject, f func(*apiv1.UpgradingChildStatus)) *apiv1.UpgradingChildStatus {
