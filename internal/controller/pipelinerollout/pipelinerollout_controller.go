@@ -401,8 +401,24 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return 0, nil, fmt.Errorf("error looking for promoted pipeline: %v", err)
 	}
 	// Initial creation stays on the promoted ISBService, so a promoted Pipeline never uses a trial ISBService.
-	// Once that child exists, the desired definition uses the trial ISBService so Progressive can create a trial Pipeline.
+	// While the controller trial is failed, a Rollout without its own trial also stays on promoted dependencies.
+	// This keeps a newly created Rollout deployed while still allowing a changed existing Rollout to reach
+	// ProcessResource, where the failed upstream trial holds the update.
 	requirePromotedISBService := len(promotedPipelines.Items) == 0
+	if !requirePromotedISBService {
+		controllerFailed, err := ctlrcommon.TrialControllerAssessmentFailed(ctx, r.client, pipelineRollout.Namespace)
+		if err != nil {
+			return 0, nil, err
+		}
+		if controllerFailed {
+			trialPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(
+				ctx, pipelineRollout, common.LabelValueUpgradeTrial, nil, false, r.client)
+			if err != nil {
+				return 0, nil, err
+			}
+			requirePromotedISBService = trialPipeline == nil
+		}
+	}
 	newPipelineDef, err := r.makeTargetPipelineDefinition(ctx, pipelineRollout, requirePromotedISBService)
 	if err != nil {
 		return 0, nil, err
@@ -418,14 +434,29 @@ func (r *PipelineRolloutReconciler) reconcile(
 	} else {
 
 		if len(promotedPipelines.Items) == 0 {
-			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
+			definition := newPipelineDef
+			keepUpgrade := false
+			restored, err := r.restoredPromotedDefinition(ctx, pipelineRollout, newPipelineDef)
+			if err != nil {
+				return 0, nil, err
+			}
+			if restored != nil {
+				definition = restored
+				keepUpgrade = true
+			}
+
+			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, definition.GetName())
 			pipelineRollout.Status.MarkPending()
 
-			if err = r.createPromotedPipeline(ctx, pipelineRollout, newPipelineDef); err != nil {
+			if err = r.createPromotedPipeline(ctx, pipelineRollout, definition, keepUpgrade); err != nil {
 				return 0, nil, err
 			}
 
-			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			// A restored promoted child means a failed trial is still the user's update.
+			// Marking Deployed here would report that update as finished.
+			if !keepUpgrade {
+				pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 
 		} else {
@@ -531,6 +562,10 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	// does the Resource need updating, and if so how?
 	// TODO: handle recreate parameter
 	needsUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef, currentRiderList, existingRiderList)
+	if err != nil {
+		return 0, err
+	}
+	needsUpdate, upgradeStrategyType, err = progressive.SuppressDerivedOnlyProgressive(ctx, r.client, pipelineRollout, r, existingPipelineDef, needsUpdate, upgradeStrategyType)
 	if err != nil {
 		return 0, err
 	}
@@ -692,8 +727,11 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	return requeueDelay, nil
 }
 
-// Create the Promoted Pipeline (as well as any Riders)
-func (r *PipelineRolloutReconciler) createPromotedPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, newPipelineDef *unstructured.Unstructured) error {
+// Create the Promoted Pipeline (as well as any Riders).
+// keepUpgrade is set when this replaces a promoted child that was recycled with its ISBService
+// while a failed trial is still the Rollout the user asked for. Discontinuing that trial would
+// drop it before a later spec change can replace it.
+func (r *PipelineRolloutReconciler) createPromotedPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, newPipelineDef *unstructured.Unstructured, keepUpgrade bool) error {
 
 	// first need to know if the pipeline needs to be created with "desiredPhase" = "Paused" or not
 	// (i.e. if isbsvc or numaflow controller is requesting pause)
@@ -727,16 +765,56 @@ func (r *PipelineRolloutReconciler) createPromotedPipeline(ctx context.Context, 
 	}
 
 	// if user somehow has no Promoted Pipeline and is in the middle of Progressive, this isn't right - user may have deleted the Promoted Pipeline
-	// if this happens, we need to stop the Progressive upgrade and remove any Upgrading children
+	// if this happens, we need to stop the Progressive upgrade and remove any Upgrading children.
+	// keepUpgrade means the previous promoted child was recycled with its ISBService and the trial
+	// still differs from that child, so the upgrade has to continue.
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
 
-	if inProgressStrategy == apiv1.UpgradeStrategyProgressive {
+	if inProgressStrategy == apiv1.UpgradeStrategyProgressive && !keepUpgrade {
 		r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
 		if err = progressive.Discontinue(ctx, pipelineRollout, r, r.client); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// restoredPromotedDefinition copies the spec of the promoted Pipeline that was just marked
+// recyclable because its ISBService was promoted. The current Rollout spec can be the failed
+// update. Creating the replacement from that spec makes the failed trial match the new promoted
+// child, and the upgrade is then discontinued instead of replaced when the user fixes the spec.
+// A nil result means there is nothing to restore and the caller should use the Rollout spec.
+func (r *PipelineRolloutReconciler) restoredPromotedDefinition(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+	template *unstructured.Unstructured,
+) (*unstructured.Unstructured, error) {
+	reason := common.LabelValueProgressiveSuccess
+	previous, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(
+		ctx, pipelineRollout, common.LabelValueUpgradeRecyclable, &reason, false, r.client)
+	if err != nil || previous == nil || previous.Object["spec"] == nil {
+		return nil, err
+	}
+	trial, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(
+		ctx, pipelineRollout, common.LabelValueUpgradeTrial, nil, false, r.client)
+	if err != nil || trial == nil {
+		return nil, err
+	}
+	differs, err := r.CheckForDifferencesWithRolloutDef(ctx, previous, pipelineRollout, common.LabelValueUpgradePromoted)
+	if err != nil || !differs {
+		return nil, err
+	}
+
+	restored := template.DeepCopy()
+	restored.Object["spec"] = previous.DeepCopy().Object["spec"]
+	isbsvcName, err := numaflowtypes.GetPipelineISBSVCName(template)
+	if err != nil {
+		return nil, err
+	}
+	if err := numaflowtypes.PipelineWithISBServiceName(restored, isbsvcName); err != nil {
+		return nil, err
+	}
+	return restored, nil
 }
 
 func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
@@ -1372,14 +1450,33 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 			if err != nil {
 				return false, err
 			}
-			if pipelineISBSvcName == isbsvc.GetName() {
-				recyclableReason := isbsvc.GetLabels()[common.LabelKeyUpgradeStateReason]
-				numaLogger.WithValues("pipeline", pipeline.GetName(), "isbsvc", pipelineISBSvcName).Debug("marking pipeline 'recyclable' since isbsvc is 'recyclable'")
-				upgradeStateReason := common.UpgradeStateReason(recyclableReason)
-				err = ctlrcommon.MarkRecyclable(ctx, r.client, &upgradeStateReason, &pipeline)
+			if pipelineISBSvcName != isbsvc.GetName() {
+				continue
+			}
+			// A trial whose Rollout spec still differs from the promoted Pipeline is the user's
+			// failed update. Recycling it because its ISBService child was discontinued drops
+			// that trial before a later spec fix can replace it.
+			if pipeline.GetLabels()[common.LabelKeyUpgradeState] == string(common.LabelValueUpgradeTrial) {
+				promotedPipelines, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
 				if err != nil {
-					return false, fmt.Errorf("failed to mark pipeline %s 'recyclable': %s/%s", pipeline.GetNamespace(), pipeline.GetName(), err.Error())
+					return false, err
 				}
+				if len(promotedPipelines.Items) > 0 {
+					differs, err := r.CheckForDifferencesWithRolloutDef(ctx, &promotedPipelines.Items[0], pipelineRollout, common.LabelValueUpgradePromoted)
+					if err != nil {
+						return false, err
+					}
+					if differs {
+						continue
+					}
+				}
+			}
+			recyclableReason := isbsvc.GetLabels()[common.LabelKeyUpgradeStateReason]
+			numaLogger.WithValues("pipeline", pipeline.GetName(), "isbsvc", pipelineISBSvcName).Debug("marking pipeline 'recyclable' since isbsvc is 'recyclable'")
+			upgradeStateReason := common.UpgradeStateReason(recyclableReason)
+			err = ctlrcommon.MarkRecyclable(ctx, r.client, &upgradeStateReason, &pipeline)
+			if err != nil {
+				return false, fmt.Errorf("failed to mark pipeline %s 'recyclable': %s/%s", pipeline.GetNamespace(), pipeline.GetName(), err.Error())
 			}
 		}
 

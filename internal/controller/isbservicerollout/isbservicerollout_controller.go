@@ -298,16 +298,26 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// Object already exists. The desired definition uses the trial controller when one
 		// exists, so a controller-instance change is visible to Progressive. That path leaves
 		// the live promoted child unchanged and creates the trial child separately.
-		// A failed controller trial has no desired instance. Keep any trial that already exists and stay Pending.
+		// A failed controller trial has no desired instance. Keep an existing trial Pending;
+		// otherwise compare against the promoted controller so a newly created Rollout remains Deployed.
+		requirePromotedNumaflowController := false
 		desiredInstanceID, err := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if desiredInstanceID == nil {
-			isbServiceRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-			return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+			trialISBService, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(
+				ctx, isbServiceRollout, common.LabelValueUpgradeTrial, nil, false, r.client)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if trialISBService != nil {
+				isbServiceRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
+				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+			}
+			requirePromotedNumaflowController = true
 		}
-		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, false)
+		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, requirePromotedNumaflowController)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 		}
@@ -382,6 +392,10 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
 	needsUpdate, upgradeStrategyType, needsRecreate, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef, currentRiderList, existingRiderList)
+	if err != nil {
+		return 0, err
+	}
+	needsUpdate, upgradeStrategyType, err = progressive.SuppressDerivedOnlyProgressive(ctx, r.client, isbServiceRollout, r, existingISBServiceDef, needsUpdate, upgradeStrategyType)
 	if err != nil {
 		return 0, err
 	}

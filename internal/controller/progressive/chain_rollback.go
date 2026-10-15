@@ -53,6 +53,78 @@ func ShouldHoldNewProgressive(ctx context.Context, c client.Client, rollout Prog
 	return pipelineISBTrialAssessmentFailed(ctx, c, pipeline)
 }
 
+// SuppressDerivedOnlyProgressive drops a Progressive update that is only a controller-instance
+// or ISBService-child binding once no upstream trial remains. ResourceNeedsUpdating treats that
+// annotation as data loss, so after force-promotion it would start another child forever.
+// An existing trial is left in place so checkForUpgradeReplacement can discontinue it.
+// A real Rollout spec change, or a live upstream trial, is unchanged.
+func SuppressDerivedOnlyProgressive(
+	ctx context.Context,
+	c client.Client,
+	rollout ProgressiveRolloutObject,
+	controller progressiveController,
+	existingPromoted *unstructured.Unstructured,
+	needsUpdate bool,
+	strategy apiv1.UpgradeStrategy,
+) (bool, apiv1.UpgradeStrategy, error) {
+	if !needsUpdate || strategy != apiv1.UpgradeStrategyProgressive || existingPromoted == nil {
+		return needsUpdate, strategy, nil
+	}
+	differs, err := controller.CheckForDifferencesWithRolloutDef(ctx, existingPromoted, rollout, common.LabelValueUpgradePromoted)
+	if err != nil || differs {
+		return needsUpdate, strategy, err
+	}
+	hasUpstream, err := upstreamTrialExists(ctx, c, rollout)
+	if err != nil || hasUpstream {
+		return needsUpdate, strategy, err
+	}
+	trial, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rollout, common.LabelValueUpgradeTrial, nil, false, c)
+	if err != nil || trial != nil {
+		return needsUpdate, strategy, err
+	}
+	return false, apiv1.UpgradeStrategyNoOp, nil
+}
+
+// upstreamTrialExists reports whether rollout still has a live trial dependency. Once a
+// force-promoted controller has no trial, an unchanged dependent trial whose only difference
+// is its derived binding must be discontinued instead of continuing as a user-requested update.
+func upstreamTrialExists(ctx context.Context, c client.Client, rollout ProgressiveRolloutObject) (bool, error) {
+	namespace := rollout.GetRolloutObjectMeta().Namespace
+	var controllerRollouts apiv1.NumaflowControllerRolloutList
+	if err := c.List(ctx, &controllerRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
+		return false, fmt.Errorf("listing NumaflowControllerRollouts in namespace %q: %w", namespace, err)
+	}
+	for i := range controllerRollouts.Items {
+		trial, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(
+			ctx, &controllerRollouts.Items[i], common.LabelValueUpgradeTrial, nil, false, c)
+		if err != nil {
+			return false, err
+		}
+		if trial != nil {
+			return true, nil
+		}
+	}
+
+	pipeline, ok := rollout.(*apiv1.PipelineRollout)
+	if !ok {
+		return false, nil
+	}
+	isbRolloutName, err := pipelineISBRolloutName(pipeline)
+	if err != nil {
+		return false, err
+	}
+	var isbRollout apiv1.ISBServiceRollout
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: isbRolloutName}, &isbRollout); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("getting ISBServiceRollout %s/%s: %w", namespace, isbRolloutName, err)
+	}
+	trial, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(
+		ctx, &isbRollout, common.LabelValueUpgradeTrial, nil, false, c)
+	return trial != nil, err
+}
+
 func pipelineISBTrialAssessmentFailed(ctx context.Context, c client.Client, pipeline *apiv1.PipelineRollout) (bool, error) {
 	isbRolloutName, err := pipelineISBRolloutName(pipeline)
 	if err != nil {

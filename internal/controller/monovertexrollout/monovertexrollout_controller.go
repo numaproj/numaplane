@@ -239,7 +239,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	// Initial creation stays on the promoted controller. Once that child exists, the desired
 	// definition includes the trial controller so a controller upgrade can start Progressive.
-	// A failed controller trial has no desired instance. Keep any trial that already exists and stay Pending.
+	// A failed controller trial has no desired instance. Keep an existing trial Pending;
+	// otherwise compare against the promoted controller so a newly created Rollout remains Deployed.
 	requirePromotedNumaflowController := len(promotedMonovertices.Items) == 0
 	if !requirePromotedNumaflowController {
 		desiredInstanceID, desiredErr := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
@@ -247,8 +248,16 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			return ctrl.Result{}, desiredErr
 		}
 		if desiredInstanceID == nil {
-			monoVertexRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-			return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+			trialMonoVertex, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(
+				ctx, monoVertexRollout, common.LabelValueUpgradeTrial, nil, false, r.client)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if trialMonoVertex != nil {
+				monoVertexRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
+				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+			}
+			requirePromotedNumaflowController = true
 		}
 	}
 	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requirePromotedNumaflowController)
@@ -332,6 +341,10 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
 	// and capability to rollback an unhealthy one
 	needsUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef, currentRiderList, existingRiderList)
+	if err != nil {
+		return 0, err
+	}
+	needsUpdate, upgradeStrategyType, err = progressive.SuppressDerivedOnlyProgressive(ctx, r.client, monoVertexRollout, r, existingMonoVertexDef, needsUpdate, upgradeStrategyType)
 	if err != nil {
 		return 0, err
 	}

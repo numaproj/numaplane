@@ -171,6 +171,21 @@ func ProcessResource(
 			rolloutObject.GetRolloutStatus().SetPhase(apiv1.PhasePending, FailedTrialPendingMessage)
 			return false, false, common.DefaultRequeueDelay, nil
 		}
+		// The promoted child can differ only by a controller instance or ISBService child name.
+		// That follows a live upstream trial. Once that trial is gone, do not start another child.
+		rolloutDiffers, err := controller.CheckForDifferencesWithRolloutDef(ctx, existingPromotedChild, rolloutObject, common.LabelValueUpgradePromoted)
+		if err != nil {
+			return false, false, 0, err
+		}
+		if !rolloutDiffers {
+			hasUpstreamTrial, err := upstreamTrialExists(ctx, c, rolloutObject)
+			if err != nil {
+				return false, false, 0, err
+			}
+			if !hasUpstreamTrial {
+				return true, false, 0, nil
+			}
+		}
 		// Create it
 		_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
 		if needRequeue {
@@ -516,19 +531,18 @@ func IsUpgradeReplacementRequired(
 	if err != nil {
 		return false, false, err
 	}
-	// we need to create an Upgrading child definition which is template-evaluated using the existing Promoted child's name so that we can effectively compare them below
-	existingPromotedChildName := existingPromotedChildDef.GetName()
-	newUpgradingChildDefUsingPromotedName, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, &existingPromotedChildName)
-	if err != nil {
-		return false, false, err
-	}
 
 	differentFromExistingUpgrading, err := checkForDifferences(ctx, controller, rolloutObject, existingUpgradingChildDef, common.LabelValueUpgradeTrial, newUpgradingChildDef)
 	if err != nil {
 		return false, false, err
 	}
 
-	differentFromPromoted, err := checkForDifferences(ctx, controller, rolloutObject, existingPromotedChildDef, common.LabelValueUpgradePromoted, newUpgradingChildDefUsingPromotedName)
+	// Whether the Rollout still matches the promoted child is based only on fields owned by
+	// the Rollout. Controller-instance and ISBService bindings are derived chain state; using
+	// the next trial's bindings here makes an unchanged Rollout look changed after an
+	// upstream rollback or force-promotion.
+	differentFromPromoted, err := controller.CheckForDifferencesWithRolloutDef(
+		ctx, existingPromotedChildDef, rolloutObject, common.LabelValueUpgradePromoted)
 	if err != nil {
 		return false, false, err
 	}
@@ -551,6 +565,8 @@ func checkForUpgradeReplacement(
 ) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	wasHeldForFailedTrial := rolloutObject.GetRolloutStatus().Phase == apiv1.PhasePending &&
+		rolloutObject.GetRolloutStatus().Message == FailedTrialPendingMessage
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 	var newUpgradingChildDef *unstructured.Unstructured
 
@@ -583,7 +599,22 @@ func checkForUpgradeReplacement(
 		return false, false, err
 	}
 
-	if differentFromExistingUpgrading {
+	resolvedDerivedOnlyUpgrade := false
+	if !hold && !differentFromPromoted && derivedBindingsDiffer(existingUpgradingChildDef, existingPromotedChildDef) {
+		hasUpstreamTrial, err := upstreamTrialExists(ctx, c, rolloutObject)
+		if err != nil {
+			return false, false, err
+		}
+		resolvedDerivedOnlyUpgrade = !hasUpstreamTrial
+	}
+
+	// If this child was held for a failed upstream trial which has now been force-promoted,
+	// its derived binding can already match the desired child. Still discontinue it when the
+	// Rollout-owned spec matches the promoted child; only an explicit Rollout change should
+	// continue as a progressive update.
+	resumeAfterFailedTrial := !hold && !differentFromPromoted &&
+		(wasHeldForFailedTrial || resolvedDerivedOnlyUpgrade)
+	if differentFromExistingUpgrading || resumeAfterFailedTrial {
 		if differentFromPromoted {
 			if hold {
 				// The failed controller trial stays. It gates dependents until it is rolled back or force-promoted.
@@ -615,8 +646,23 @@ func checkForUpgradeReplacement(
 			}
 
 			childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
+		} else if _, forcePromote := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromote]; forcePromote {
+			// The force-promote label is handled while assessing this child. Discontinuing here
+			// would drop the trial before that promotion, and any Pipeline bound to this ISBService
+			// would be recycled with it.
+			return false, false, nil
 		} else {
-			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName()).Debug("removing 'upgrading' child as Rollout is back to matching 'promoted' child")
+			assessment := apiv1.AssessmentResultUnknown
+			if childStatus != nil {
+				assessment = childStatus.AssessmentResult
+			}
+			numaLogger.WithValues(
+				"old child", existingUpgradingChildDef.GetName(),
+				"differentFromExistingUpgrading", differentFromExistingUpgrading,
+				"differentFromPromoted", differentFromPromoted,
+				"resumeAfterFailedTrial", resumeAfterFailedTrial,
+				"assessment", assessment,
+			).Debug("removing 'upgrading' child as Rollout is back to matching 'promoted' child")
 
 			// A failed trial may have scaled the promoted child down. Restore it before removing the trial.
 			if childStatus.IsFailed() || hold {
@@ -727,13 +773,15 @@ func controllerInstanceBindingDiffers(desired, existing *unstructured.Unstructur
 	// Compare only the Numaflow instance annotation. The Numaplane lookup label is bookkeeping
 	// and is restored by Direct Apply; requiring it here would recycle a child that already
 	// has the correct annotation.
-	// An empty desired annotation is not a difference: live children can already carry
-	// numaflow.numaproj.io/instance, and replacing them for that extra annotation is wrong.
-	desiredID := instanceAnnotation(desired)
-	if desiredID == "" {
-		return false
+	return instanceAnnotation(desired) != instanceAnnotation(existing)
+}
+
+func derivedBindingsDiffer(left, right *unstructured.Unstructured) bool {
+	if controllerInstanceBindingDiffers(left, right) {
+		return true
 	}
-	return desiredID != instanceAnnotation(existing)
+	return left.GetLabels()[common.LabelKeyISBServiceChildNameForPipeline] !=
+		right.GetLabels()[common.LabelKeyISBServiceChildNameForPipeline]
 }
 
 // instanceAnnotation returns the Numaflow controller-selection annotation, or "" if absent.

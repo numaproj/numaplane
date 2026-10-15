@@ -547,7 +547,6 @@ func Test_ISBSvcRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		if isbService.Annotations == nil {
 			isbService.Annotations = make(map[string]string)
 		}
-		isbService.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
 
 		// Convert to unstructured
 		unstructMap, _ := k8sRuntime.DefaultUnstructuredConverter.ToUnstructured(isbService)
