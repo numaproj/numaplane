@@ -237,18 +237,6 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(promotedMonovertices.Items[0].GetName())
 	}
 
-	// A new MonoVertexRollout stays Pending while a controller trial assessment is failed.
-	if len(promotedMonovertices.Items) == 0 {
-		hold, holdErr := ctlrcommon.TrialControllerAssessmentFailed(ctx, r.client, monoVertexRollout.Namespace)
-		if holdErr != nil {
-			return ctrl.Result{}, holdErr
-		}
-		if hold {
-			monoVertexRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-			return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
-		}
-	}
-
 	// Initial creation stays on the promoted controller. Once that child exists, the desired
 	// definition includes the trial controller so a controller upgrade can start Progressive.
 	// A failed controller trial has no desired instance. Keep any trial that already exists and stay Pending.
@@ -367,14 +355,6 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// if not, should we set one?
 	if !inProgressStrategySet {
 		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
-			hold, err := progressive.ShouldHoldNewProgressive(ctx, r.client, monoVertexRollout)
-			if err != nil {
-				return 0, err
-			}
-			if hold {
-				monoVertexRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-				return common.DefaultRequeueDelay, nil
-			}
 			inProgressStrategy = apiv1.UpgradeStrategyProgressive
 			r.inProgressStrategyMgr.SetStrategy(ctx, monoVertexRollout, inProgressStrategy)
 		}

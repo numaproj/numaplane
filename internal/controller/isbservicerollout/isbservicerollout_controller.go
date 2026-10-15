@@ -268,16 +268,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' isbservice yet; need to wait for recyclable isbservices to be deleted")
 			requeueDelay = common.DefaultRequeueDelay
 		} else {
-			// A new ISBServiceRollout stays Pending while a controller trial assessment is failed.
-			hold, holdErr := ctlrcommon.TrialControllerAssessmentFailed(ctx, r.client, isbServiceRollout.Namespace)
-			if holdErr != nil {
-				return ctrl.Result{}, holdErr
-			}
-			if hold {
-				isbServiceRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
-			}
-
 			// The first promoted child stays on the promoted controller. A later reconcile compares
 			// it with the desired controller, including a trial instance, and Progressive creates
 			// the trial child separately.
@@ -419,14 +409,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			r.inProgressStrategyMgr.SetStrategy(ctx, isbServiceRollout, inProgressStrategy)
 		}
 		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
-			hold, err := progressive.ShouldHoldNewProgressive(ctx, r.client, isbServiceRollout)
-			if err != nil {
-				return 0, err
-			}
-			if hold {
-				isbServiceRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-				return common.DefaultRequeueDelay, nil
-			}
 			inProgressStrategy = apiv1.UpgradeStrategyProgressive
 			r.inProgressStrategyMgr.SetStrategy(ctx, isbServiceRollout, inProgressStrategy)
 		}

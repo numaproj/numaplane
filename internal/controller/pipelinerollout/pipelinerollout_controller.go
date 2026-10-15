@@ -400,19 +400,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return 0, nil, fmt.Errorf("error looking for promoted pipeline: %v", err)
 	}
-	// A new PipelineRollout stays Pending while a controller trial assessment is failed, including when its
-	// ISBServiceRollout is also new and has not created an InterstepBufferService yet.
-	if len(promotedPipelines.Items) == 0 {
-		hold, holdErr := ctlrcommon.TrialControllerAssessmentFailed(ctx, r.client, pipelineRollout.Namespace)
-		if holdErr != nil {
-			return 0, nil, holdErr
-		}
-		if hold {
-			pipelineRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-			return common.DefaultRequeueDelay, nil, nil
-		}
-	}
-
 	// Initial creation stays on the promoted ISBService, so a promoted Pipeline never uses a trial ISBService.
 	// Once that child exists, the desired definition uses the trial ISBService so Progressive can create a trial Pipeline.
 	requirePromotedISBService := len(promotedPipelines.Items) == 0
@@ -585,14 +572,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 		if userPreferredStrategy == config.ProgressiveStrategyID {
 			if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
-				hold, err := progressive.ShouldHoldNewProgressive(ctx, r.client, pipelineRollout)
-				if err != nil {
-					return 0, err
-				}
-				if hold {
-					pipelineRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
-					return common.DefaultRequeueDelay, nil
-				}
 				inProgressStrategy = apiv1.UpgradeStrategyProgressive
 				r.inProgressStrategyMgr.SetStrategy(ctx, pipelineRollout, inProgressStrategy)
 			}
