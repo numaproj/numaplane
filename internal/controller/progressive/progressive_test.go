@@ -191,6 +191,9 @@ func Test_processUpgradingChild(t *testing.T) {
 							AssessmentResult:         apiv1.AssessmentResultFailure,
 							BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 							InitializationComplete:   true,
+							ResourceChainMembers: []apiv1.ResourceChainMemberStatus{
+								{Kind: "MonoVertexRollout", Name: "test", ChildName: "test-failure", AssessmentResult: apiv1.AssessmentResultFailure},
+							},
 						},
 					},
 				},
@@ -343,6 +346,13 @@ func Test_processUpgradingChild(t *testing.T) {
 				require.NotEmpty(t, childStatus.ResourceChainMembers, "resourceChainMembers should be set after progressive assessment")
 				assert.Equal(t, "TestRollout", childStatus.ResourceChainMembers[0].Kind)
 				assert.Equal(t, tc.existingUpgradingChildDef.Name, childStatus.ResourceChainMembers[0].ChildName)
+			}
+			// A later reconcile of an already-failed child skips assessment. Keep the members recorded earlier.
+			if tc.name == "failure" {
+				childStatus := tc.rolloutObject.GetUpgradingChildStatus()
+				require.Equal(t, []apiv1.ResourceChainMemberStatus{
+					{Kind: "MonoVertexRollout", Name: "test", ChildName: "test-failure", AssessmentResult: apiv1.AssessmentResultFailure},
+				}, childStatus.ResourceChainMembers)
 			}
 		})
 	}

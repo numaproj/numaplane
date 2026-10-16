@@ -194,7 +194,9 @@ func (r *PipelineRolloutReconciler) AssessResourceChain(
 	if err != nil {
 		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
-	members, reasons = progressive.AppendChainMember(members, reasons, controllerMember, controllerPresent, controllerReason)
+	if controllerPresent {
+		members, reasons = progressive.AppendChainMember(members, reasons, controllerMember, controllerReason)
+	}
 
 	isbsvcName, _, err := unstructured.NestedString(existingUpgradingChildDef.Object, "spec", "interStepBufferServiceName")
 	if err != nil {
@@ -207,7 +209,9 @@ func (r *PipelineRolloutReconciler) AssessResourceChain(
 	if err != nil {
 		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
-	members, reasons = progressive.AppendChainMember(members, reasons, isbMember, isbPresent, isbReason)
+	if isbPresent {
+		members, reasons = progressive.AppendChainMember(members, reasons, isbMember, isbReason)
+	}
 
 	namespace := existingUpgradingChildDef.GetNamespace()
 	if isbPresent {

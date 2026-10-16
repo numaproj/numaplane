@@ -287,7 +287,9 @@ func (r *ISBServiceRolloutReconciler) AssessResourceChain(
 	if err != nil {
 		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
-	members, reasons = progressive.AppendChainMember(members, reasons, controllerMember, controllerPresent, controllerReason)
+	if controllerPresent {
+		members, reasons = progressive.AppendChainMember(members, reasons, controllerMember, controllerReason)
+	}
 	if controllerPresent {
 		workloadMembers, workloadReasons, _, err := progressive.WorkloadsOnTrialController(ctx, r.client, existingUpgradingChildDef.GetNamespace(), "ISBServiceRollout", isbServiceRollout.Name)
 		if err != nil {

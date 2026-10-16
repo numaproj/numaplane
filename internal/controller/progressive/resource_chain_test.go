@@ -45,13 +45,14 @@ func TestEffectiveResourceAssessment(t *testing.T) {
 }
 
 func TestAppendChainMember(t *testing.T) {
-	members, reasons := AppendChainMember(nil, nil, NewChainMember("NumaflowControllerRollout", "nc", "nc-1", apiv1.AssessmentResultSuccess), false, "ignored")
-	assert.Empty(t, members)
-	assert.Empty(t, reasons)
-
 	failed := NewChainMember("NumaflowControllerRollout", "nc", "nc-1", apiv1.AssessmentResultFailure)
-	members, reasons = AppendChainMember(members, reasons, failed, true, "controller failed")
+	members, reasons := AppendChainMember(nil, nil, failed, "controller failed")
 	assert.Equal(t, []apiv1.ResourceChainMemberStatus{failed}, members)
+	assert.Equal(t, []string{"controller failed"}, reasons)
+
+	success := NewChainMember("PipelineRollout", "p", "p-1", apiv1.AssessmentResultSuccess)
+	members, reasons = AppendChainMember(members, reasons, success, "")
+	assert.Equal(t, []apiv1.ResourceChainMemberStatus{failed, success}, members)
 	assert.Equal(t, []string{"controller failed"}, reasons)
 }
 

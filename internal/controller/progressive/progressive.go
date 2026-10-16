@@ -442,7 +442,11 @@ func processUpgradingChild(
 		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultFailure
 			status.ResourceChainAssessmentResult = apiv1.AssessmentResultFailure
-			status.ResourceChainMembers = chainMembers
+			// A previous failure skips AssessResourceChain, so chainMembers is nil.
+			// Keep the members recorded when the failure was first discovered.
+			if chainMembers != nil {
+				status.ResourceChainMembers = chainMembers
+			}
 			status.FailureReasons = appendFailureReasons(status.FailureReasons, chainFailureReasons)
 		})
 
@@ -474,7 +478,9 @@ func processUpgradingChild(
 			return true, false, 0, err
 		}
 		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
-			status.ResourceChainMembers = chainMembers
+			if chainMembers != nil {
+				status.ResourceChainMembers = chainMembers
+			}
 		})
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {

@@ -63,12 +63,10 @@ func NewChainMember(kind, name, childName string, result apiv1.AssessmentResult)
 	}
 }
 
-// AppendChainMember adds member to the chain when the member is part of this chain.
+// AppendChainMember adds member to the chain.
 // A Failure contributes reason to the chain's failure reasons.
-func AppendChainMember(members []apiv1.ResourceChainMemberStatus, reasons []string, member apiv1.ResourceChainMemberStatus, present bool, reason string) ([]apiv1.ResourceChainMemberStatus, []string) {
-	if !present {
-		return members, reasons
-	}
+// Call this only for a member that is part of the chain.
+func AppendChainMember(members []apiv1.ResourceChainMemberStatus, reasons []string, member apiv1.ResourceChainMemberStatus, reason string) ([]apiv1.ResourceChainMemberStatus, []string) {
 	members = append(members, member)
 	if member.AssessmentResult == apiv1.AssessmentResultFailure && reason != "" {
 		reasons = append(reasons, reason)
