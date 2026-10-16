@@ -224,9 +224,13 @@ func TestPipelineAssessResourceChain(t *testing.T) {
 			require.NoError(t, numaflowv1.AddToScheme(scheme))
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
 
-			result, reasons, err := (&PipelineRolloutReconciler{client: c}).AssessResourceChain(ctx, pipelineRollout(tc.own), pipelineChild)
+			result, members, reasons, err := (&PipelineRolloutReconciler{client: c}).AssessResourceChain(ctx, pipelineRollout(tc.own), pipelineChild)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, result)
+			require.NotEmpty(t, members)
+			require.Equal(t, "PipelineRollout", members[0].Kind)
+			require.Equal(t, "pipeline", members[0].Name)
+			require.Equal(t, tc.own, members[0].AssessmentResult)
 			if tc.expectReasonSub == "" {
 				require.Empty(t, reasons)
 			} else {

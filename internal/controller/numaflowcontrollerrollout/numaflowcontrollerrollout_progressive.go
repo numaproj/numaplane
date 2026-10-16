@@ -204,26 +204,32 @@ func (r *NumaflowControllerRolloutReconciler) AssessResourceChain(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	existingUpgradingChildDef *unstructured.Unstructured,
-) (apiv1.AssessmentResult, []string, error) {
+) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error) {
 	nfcRollout := rolloutObject.(*apiv1.NumaflowControllerRollout)
 	own := apiv1.AssessmentResultUnknown
+	childName := ""
 	if status := nfcRollout.GetUpgradingChildStatus(); status != nil {
 		own = status.EffectiveResourceAssessment()
+		childName = status.Name
+	}
+	members := []apiv1.ResourceChainMemberStatus{
+		progressive.NewChainMember("NumaflowControllerRollout", nfcRollout.Name, childName, own),
 	}
 
 	instanceID, _, err := unstructured.NestedString(existingUpgradingChildDef.Object, "spec", "instanceID")
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("reading spec.instanceID of NumaflowController %s/%s: %w", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), err)
+		return apiv1.AssessmentResultUnknown, nil, nil, fmt.Errorf("reading spec.instanceID of NumaflowController %s/%s: %w", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), err)
 	}
-	dependentResult, failedDependents, err := r.assessDependents(ctx, existingUpgradingChildDef.GetNamespace(), instanceID)
+	dependentMembers, reasons, err := r.assessDependents(ctx, existingUpgradingChildDef.GetNamespace(), instanceID)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, err
+		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
-	var reasons []string
-	for _, failedDependent := range failedDependents {
-		reasons = append(reasons, fmt.Sprintf("%s failed", failedDependent))
+	members = append(members, dependentMembers...)
+	if len(dependentMembers) == 0 {
+		// No dependents: previously the dependent portion was treated as Success.
+		return progressive.CombineAssessmentResults([]apiv1.AssessmentResult{own, apiv1.AssessmentResultSuccess}), members, reasons, nil
 	}
-	return progressive.CombineAssessmentResults([]apiv1.AssessmentResult{own, dependentResult}), reasons, nil
+	return progressive.CombineMemberAssessments(members), members, reasons, nil
 }
 
 // assessNumaflowControllerHealth assesses the NumaflowController resource on its own:
@@ -260,8 +266,8 @@ func assessNumaflowControllerHealth(numaflowController *unstructured.Unstructure
 // against the trial controller instance. Each must have an upgrading child bound to instanceID. The result is
 // those dependents' resource assessments: Success once all of them have succeeded, and Failure as soon as one
 // of them has failed, even if others have not started upgrading onto this instance yet.
-// Return the AssessmentResult and, if it failed, the names of the dependents that failed.
-func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Context, namespace string, instanceID string) (apiv1.AssessmentResult, []string, error) {
+// Return each dependent as a chain member and failure reasons for those that failed.
+func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Context, namespace string, instanceID string) ([]apiv1.ResourceChainMemberStatus, []string, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	type dependent struct {
@@ -274,7 +280,7 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 
 	var isbServiceRollouts apiv1.ISBServiceRolloutList
 	if err := r.client.List(ctx, &isbServiceRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
-		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("error listing ISBServiceRollouts: %w", err)
+		return nil, nil, fmt.Errorf("error listing ISBServiceRollouts: %w", err)
 	}
 	for i := range isbServiceRollouts.Items {
 		isbServiceRollout := &isbServiceRollouts.Items[i]
@@ -282,7 +288,7 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 	}
 	var pipelineRollouts apiv1.PipelineRolloutList
 	if err := r.client.List(ctx, &pipelineRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
-		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("error listing PipelineRollouts: %w", err)
+		return nil, nil, fmt.Errorf("error listing PipelineRollouts: %w", err)
 	}
 	for i := range pipelineRollouts.Items {
 		pipelineRollout := &pipelineRollouts.Items[i]
@@ -290,7 +296,7 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 	}
 	var monoVertexRollouts apiv1.MonoVertexRolloutList
 	if err := r.client.List(ctx, &monoVertexRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
-		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("error listing MonoVertexRollouts: %w", err)
+		return nil, nil, fmt.Errorf("error listing MonoVertexRollouts: %w", err)
 	}
 	for i := range monoVertexRollouts.Items {
 		monoVertexRollout := &monoVertexRollouts.Items[i]
@@ -299,15 +305,16 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 
 	if len(dependents) == 0 {
 		numaLogger.Warn("Found no ISBServiceRollouts, PipelineRollouts, or MonoVertexRollouts in namespace: so NumaflowController is deemed Successful") // not typical but could happen
-		return apiv1.AssessmentResultSuccess, nil, nil
+		return nil, nil, nil
 	}
 
-	var failedDependents []string
-	successfulDependents := 0
+	var members []apiv1.ResourceChainMemberStatus
+	var reasons []string
 	for _, dep := range dependents {
 		depLogger := numaLogger.WithValues(strings.ToLower(dep.kind), dep.name)
 		if dep.upgradingStatus == nil {
 			depLogger.Debug("can't assess NumaflowController; dependent has not yet started upgrading onto this controller instance")
+			members = append(members, progressive.NewChainMember(dep.kind, dep.name, "", apiv1.AssessmentResultUnknown))
 			continue
 		}
 		// make sure the child that dependent is (or was) upgrading is in fact bound to this controller instance
@@ -315,32 +322,29 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				depLogger.WithValues("child", dep.upgradingStatus.Name).Debug("can't assess NumaflowController; dependent's upgrading child not found")
+				members = append(members, progressive.NewChainMember(dep.kind, dep.name, dep.upgradingStatus.Name, apiv1.AssessmentResultUnknown))
 				continue
 			}
-			return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("error getting %s %s/%s: %w", dep.childGVK.Kind, namespace, dep.upgradingStatus.Name, err)
+			return nil, nil, fmt.Errorf("error getting %s %s/%s: %w", dep.childGVK.Kind, namespace, dep.upgradingStatus.Name, err)
 		}
 		if numaflowtypes.ControllerInstanceIDFromResource(child) != instanceID {
 			depLogger.WithValues("child", child.GetName()).Debug("can't assess NumaflowController; dependent's upgrading child is not bound to this controller instance")
+			members = append(members, progressive.NewChainMember(dep.kind, dep.name, dep.upgradingStatus.Name, apiv1.AssessmentResultUnknown))
 			continue
 		}
-		switch dep.upgradingStatus.EffectiveResourceAssessment() {
+		result := dep.upgradingStatus.EffectiveResourceAssessment()
+		members = append(members, progressive.NewChainMember(dep.kind, dep.name, dep.upgradingStatus.Name, result))
+		switch result {
 		case apiv1.AssessmentResultFailure:
 			depLogger.Debug("assessing NumaflowController; dependent is failed")
-			failedDependents = append(failedDependents, fmt.Sprintf("%s %s", dep.kind, dep.name))
+			reasons = append(reasons, fmt.Sprintf("%s %s failed", dep.kind, dep.name))
 		case apiv1.AssessmentResultSuccess:
 			depLogger.Debug("assessing NumaflowController; dependent succeeded")
-			successfulDependents++
 		default:
 			depLogger.Debug("assessing NumaflowController; dependent assessment is unknown")
 		}
 	}
-	if len(failedDependents) > 0 {
-		return apiv1.AssessmentResultFailure, failedDependents, nil
-	}
-	if successfulDependents == len(dependents) {
-		return apiv1.AssessmentResultSuccess, nil, nil
-	}
-	return apiv1.AssessmentResultUnknown, nil, nil
+	return members, reasons, nil
 }
 
 // CheckForDifferences checks to see if the NumaflowController definition matches the spec and the required metadata.
