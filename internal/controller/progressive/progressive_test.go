@@ -11,6 +11,7 @@ import (
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -332,6 +333,16 @@ func Test_processUpgradingChild(t *testing.T) {
 				assert.Equal(t, tc.expectedDone, actualDone)
 				assert.Equal(t, tc.expectedFailed, actualFailed)
 				assert.Equal(t, tc.expectedRequeueDelay, actualRequeueDelay)
+			}
+
+			// Cases that run AssessResourceChain must persist resourceChainMembers on the rollout status.
+			if tc.name == "can assess, success" || tc.name == "force promote a failed progressive upgrade" ||
+				tc.name == "analysis status set - success" || tc.name == "analysis status set - failure" {
+				childStatus := tc.rolloutObject.GetUpgradingChildStatus()
+				require.NotNil(t, childStatus)
+				require.NotEmpty(t, childStatus.ResourceChainMembers, "resourceChainMembers should be set after progressive assessment")
+				assert.Equal(t, "TestRollout", childStatus.ResourceChainMembers[0].Kind)
+				assert.Equal(t, tc.existingUpgradingChildDef.Name, childStatus.ResourceChainMembers[0].ChildName)
 			}
 		})
 	}
