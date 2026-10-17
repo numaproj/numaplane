@@ -239,7 +239,27 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	// Initial creation stays on the promoted controller. Once that child exists, the desired
 	// definition includes the trial controller so a controller upgrade can start Progressive.
+	// A failed controller trial has no desired instance. Keep an existing trial Pending;
+	// otherwise compare against the promoted controller so a newly created Rollout remains Deployed.
 	requirePromotedNumaflowController := len(promotedMonovertices.Items) == 0
+	if !requirePromotedNumaflowController {
+		desiredInstanceID, desiredErr := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+		if desiredErr != nil {
+			return ctrl.Result{}, desiredErr
+		}
+		if desiredInstanceID == nil {
+			trialMonoVertex, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(
+				ctx, monoVertexRollout, common.LabelValueUpgradeTrial, nil, false, r.client)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if trialMonoVertex != nil {
+				monoVertexRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
+				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+			}
+			requirePromotedNumaflowController = true
+		}
+	}
 	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requirePromotedNumaflowController)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -247,7 +267,6 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	if newMonoVertexDef != nil {
 		if len(promotedMonovertices.Items) == 0 {
-
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, newMonoVertexDef.GetName())
 			monoVertexRollout.Status.MarkPending()
 
@@ -322,6 +341,10 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
 	// and capability to rollback an unhealthy one
 	needsUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef, currentRiderList, existingRiderList)
+	if err != nil {
+		return 0, err
+	}
+	needsUpdate, upgradeStrategyType, err = progressive.SuppressDerivedOnlyProgressive(ctx, r.client, monoVertexRollout, r, existingMonoVertexDef, needsUpdate, upgradeStrategyType)
 	if err != nil {
 		return 0, err
 	}
@@ -759,13 +782,21 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 		return nil, err
 	}
 
-	resolveControllerInstanceID := ctlrcommon.GetDesiredControllerInstanceID
+	var controllerInstanceID *string
 	if requirePromotedNumaflowController {
-		resolveControllerInstanceID = ctlrcommon.GetPromotedControllerInstanceID
-	}
-	controllerInstanceID, err := resolveControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
-	if err != nil {
-		return nil, err
+		promotedInstanceID, promotedErr := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+		if promotedErr != nil {
+			return nil, promotedErr
+		}
+		controllerInstanceID = &promotedInstanceID
+	} else {
+		controllerInstanceID, err = ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, monoVertexRollout.Namespace)
+		if err != nil {
+			return nil, err
+		}
+		if controllerInstanceID == nil {
+			return nil, ctlrcommon.ErrNoDesiredControllerInstance
+		}
 	}
 
 	metadata, err := getBaseMonoVertexMetadata(monoVertexRollout)
@@ -774,7 +805,7 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
-	return r.makeMonoVertexDefinition(monoVertexRollout, monoVertexName, metadata, &controllerInstanceID)
+	return r.makeMonoVertexDefinition(monoVertexRollout, monoVertexName, metadata, controllerInstanceID)
 }
 
 // templates are used to dynamically evaluate child spec, metadata, as well as Riders

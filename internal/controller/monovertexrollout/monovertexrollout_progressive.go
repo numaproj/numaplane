@@ -38,7 +38,10 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	if err != nil {
 		return nil, err
 	}
-	monoVertex, err := r.makeMonoVertexDefinition(monoVertexRollout, name, metadata, &controllerInstanceID)
+	if controllerInstanceID == nil {
+		return nil, ctlrcommon.ErrNoDesiredControllerInstance
+	}
+	monoVertex, err := r.makeMonoVertexDefinition(monoVertexRollout, name, metadata, controllerInstanceID)
 	if err != nil {
 		return nil, err
 	}

@@ -298,7 +298,26 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// Object already exists. The desired definition uses the trial controller when one
 		// exists, so a controller-instance change is visible to Progressive. That path leaves
 		// the live promoted child unchanged and creates the trial child separately.
-		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, false)
+		// A failed controller trial has no desired instance. Keep an existing trial Pending;
+		// otherwise compare against the promoted controller so a newly created Rollout remains Deployed.
+		requirePromotedNumaflowController := false
+		desiredInstanceID, err := ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if desiredInstanceID == nil {
+			trialISBService, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(
+				ctx, isbServiceRollout, common.LabelValueUpgradeTrial, nil, false, r.client)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if trialISBService != nil {
+				isbServiceRollout.Status.SetPhase(apiv1.PhasePending, progressive.FailedTrialPendingMessage)
+				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+			}
+			requirePromotedNumaflowController = true
+		}
+		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout, requirePromotedNumaflowController)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 		}
@@ -373,6 +392,10 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
 	needsUpdate, upgradeStrategyType, needsRecreate, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef, currentRiderList, existingRiderList)
+	if err != nil {
+		return 0, err
+	}
+	needsUpdate, upgradeStrategyType, err = progressive.SuppressDerivedOnlyProgressive(ctx, r.client, isbServiceRollout, r, existingISBServiceDef, needsUpdate, upgradeStrategyType)
 	if err != nil {
 		return 0, err
 	}
@@ -979,15 +1002,23 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
-	resolveControllerInstanceID := ctlrcommon.GetDesiredControllerInstanceID
+	var controllerInstanceID *string
 	if requirePromotedNumaflowController {
-		resolveControllerInstanceID = ctlrcommon.GetPromotedControllerInstanceID
+		promotedInstanceID, err := ctlrcommon.GetPromotedControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
+		if err != nil {
+			return nil, err
+		}
+		controllerInstanceID = &promotedInstanceID
+	} else {
+		controllerInstanceID, err = ctlrcommon.GetDesiredControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
+		if err != nil {
+			return nil, err
+		}
+		if controllerInstanceID == nil {
+			return nil, ctlrcommon.ErrNoDesiredControllerInstance
+		}
 	}
-	controllerInstanceID, err := resolveControllerInstanceID(ctx, r.client, isbServiceRollout.Namespace)
-	if err != nil {
-		return nil, err
-	}
-	return r.makeISBServiceDefinition(isbServiceRollout, isbsvcName, metadata, &controllerInstanceID)
+	return r.makeISBServiceDefinition(isbServiceRollout, isbsvcName, metadata, controllerInstanceID)
 }
 
 // templates are used to dynamically evaluate child spec, metadata, as well as Riders

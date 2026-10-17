@@ -603,8 +603,7 @@ func Test_reconcile_NumaflowControllerRollout_Progressive(t *testing.T) {
 			expectedPromotedName:      promotedName,
 			expectedPromotedInstance:  originalInstance,
 			expectedUpgradingInstance: trialInstance,
-			// a failed trial's instance is still resolved, the same way a Pipeline resolves a trial ISBService
-			// regardless of its assessment: see getControllerInstanceIDOfUpgradeState.
+			// GetControllerInstanceIDs still reports the failed trial. GetDesiredControllerInstanceID returns nil for it.
 			expectedControllerInstanceIDs: [2]string{"", trialInstanceID},
 		},
 		{

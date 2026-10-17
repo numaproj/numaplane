@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -92,6 +93,19 @@ func TestGetTargetPipelineDependencies(t *testing.T) {
 			},
 			expectedISBSvcName:   "default-1",
 			expectedControllerID: trialInstanceID,
+		},
+		{
+			name: "skips a trial ISBService whose assessment failed",
+			isbServices: []client.Object{
+				newISBSvc("default-0", common.LabelValueUpgradePromoted, promotedInstanceID),
+				func() *numaflowv1.InterStepBufferService {
+					failed := newISBSvc("default-1", common.LabelValueUpgradeTrial, trialInstanceID)
+					failed.Labels[common.LabelKeyProgressiveResultState] = string(common.LabelValueResultStateFailed)
+					return failed
+				}(),
+			},
+			expectedISBSvcName:   "default-0",
+			expectedControllerID: promotedInstanceID,
 		},
 		{
 			name: "uses trial ISBService on the promoted controller instance for an ISBService-only upgrade",
@@ -214,4 +228,72 @@ func TestCreateUpgradingPipelineWithoutControllerRollout(t *testing.T) {
 		assert.Equal(t, "cluster-controller", pipeline.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID])
 		assert.Equal(t, "cluster-controller", pipeline.GetLabels()[common.LabelKeyControllerInstanceID])
 	})
+}
+
+func TestRestoredPromotedDefinition(t *testing.T) {
+	const namespace = "test"
+	goodSpec := map[string]interface{}{}
+	badSpec := map[string]interface{}{}
+	require.NoError(t, json.Unmarshal([]byte(`{"interStepBufferServiceName":"isb-0","vertices":[{"name":"out","sink":{"log":{}}}]}`), &goodSpec))
+	require.NoError(t, json.Unmarshal([]byte(`{"interStepBufferServiceName":"isb","vertices":[{"name":"out","sink":{"udsink":{"container":{"image":"bad"}}}}]}`), &badSpec))
+
+	rollout := &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: "pipe", Namespace: namespace},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: apiv1.Pipeline{Spec: runtime.RawExtension{Raw: []byte(`{"interStepBufferServiceName":"isb","vertices":[{"name":"out","sink":{"udsink":{"container":{"image":"bad"}}}}]}`)}},
+		},
+	}
+	newPipeline := func(name, state, reason string, spec map[string]interface{}) *unstructured.Unstructured {
+		pipeline := &unstructured.Unstructured{Object: map[string]interface{}{}}
+		pipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+		pipeline.SetName(name)
+		pipeline.SetNamespace(namespace)
+		labels := map[string]string{
+			common.LabelKeyParentRollout: rollout.Name,
+			common.LabelKeyUpgradeState:  state,
+		}
+		if reason != "" {
+			labels[common.LabelKeyUpgradeStateReason] = reason
+		}
+		pipeline.SetLabels(labels)
+		pipeline.Object["spec"] = spec
+		return pipeline
+	}
+	template := newPipeline("pipe-2", string(common.LabelValueUpgradePromoted), "", badSpec)
+	if err := unstructured.SetNestedField(template.Object, "isb-1", "spec", "interStepBufferServiceName"); err != nil {
+		t.Fatal(err)
+	}
+
+	previous := newPipeline("pipe-0", string(common.LabelValueUpgradeRecyclable), string(common.LabelValueProgressiveSuccess), goodSpec)
+	trial := newPipeline("pipe-1", string(common.LabelValueUpgradeTrial), "", badSpec)
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiv1.AddToScheme(scheme))
+	require.NoError(t, numaflowv1.AddToScheme(scheme))
+	reconciler := &PipelineRolloutReconciler{
+		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(previous, trial).Build(),
+	}
+
+	restored, err := reconciler.restoredPromotedDefinition(context.Background(), rollout, template)
+	require.NoError(t, err)
+	require.NotNil(t, restored)
+	assert.Equal(t, "pipe-2", restored.GetName())
+	isbName, _, err := unstructured.NestedString(restored.Object, "spec", "interStepBufferServiceName")
+	require.NoError(t, err)
+	assert.Equal(t, "isb-1", isbName)
+	vertices, _, err := unstructured.NestedSlice(restored.Object, "spec", "vertices")
+	require.NoError(t, err)
+	require.NotEmpty(t, vertices)
+	sink, _ := vertices[0].(map[string]interface{})["sink"].(map[string]interface{})
+	_, hasFailedSink := sink["udsink"]
+	_, hasPromotedSink := sink["log"]
+	assert.False(t, hasFailedSink)
+	assert.True(t, hasPromotedSink)
+
+	noTrial := &PipelineRolloutReconciler{
+		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(previous).Build(),
+	}
+	restored, err = noTrial.restoredPromotedDefinition(context.Background(), rollout, template)
+	require.NoError(t, err)
+	assert.Nil(t, restored)
 }

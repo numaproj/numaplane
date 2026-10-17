@@ -33,7 +33,10 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	if err != nil {
 		return nil, err
 	}
-	isbsvc, err := r.makeISBServiceDefinition(isbsvcRollout, name, metadata, &controllerInstanceID)
+	if controllerInstanceID == nil {
+		return nil, ctlrcommon.ErrNoDesiredControllerInstance
+	}
+	isbsvc, err := r.makeISBServiceDefinition(isbsvcRollout, name, metadata, controllerInstanceID)
 	if err != nil {
 		return nil, err
 	}

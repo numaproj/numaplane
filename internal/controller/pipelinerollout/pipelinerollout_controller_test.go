@@ -1441,8 +1441,8 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				"my-annotation":    "my-pipeline-1",
 				"extra-annotation": "extra-value", // this is no problem to have an extra annotation
 			},
-			expectedDiffFromUpgrading: true, // image different
-			expectedDiffFromPromoted:  true, // because we need to use a different ISBService, we consider the "target spec"to be different from the one we have
+			expectedDiffFromUpgrading: true,  // image different
+			expectedDiffFromPromoted:  false, // derived ISBService binding is not part of the Rollout definition
 		},
 		{
 			name:        "different from Promoted only (different image)- rollout matches Upgrading",
