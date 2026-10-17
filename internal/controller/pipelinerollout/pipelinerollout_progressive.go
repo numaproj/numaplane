@@ -176,53 +176,62 @@ func (r *PipelineRolloutReconciler) AssessResourceChain(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	existingUpgradingChildDef *unstructured.Unstructured,
-) (apiv1.AssessmentResult, []string, error) {
+) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	childStatus := pipelineRollout.GetUpgradingChildStatus()
-	results := []apiv1.AssessmentResult{apiv1.AssessmentResultUnknown}
+	own := apiv1.AssessmentResultUnknown
+	childName := ""
 	if childStatus != nil {
-		results = []apiv1.AssessmentResult{childStatus.EffectiveResourceAssessment()}
+		own = childStatus.EffectiveResourceAssessment()
+		childName = childStatus.Name
+	}
+	members := []apiv1.ResourceChainMemberStatus{
+		progressive.NewChainMember("PipelineRollout", pipelineRollout.Name, childName, own),
 	}
 	var reasons []string
 
-	controllerResult, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
+	controllerMember, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, err
+		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
-	results, reasons = progressive.AppendChainMember(results, reasons, controllerResult, controllerPresent, controllerReason)
+	if controllerPresent {
+		members, reasons = progressive.AppendChainMember(members, reasons, controllerMember, controllerReason)
+	}
 
 	isbsvcName, _, err := unstructured.NestedString(existingUpgradingChildDef.Object, "spec", "interStepBufferServiceName")
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, fmt.Errorf("reading spec.interStepBufferServiceName of Pipeline %s/%s: %w", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), err)
+		return apiv1.AssessmentResultUnknown, nil, nil, fmt.Errorf("reading spec.interStepBufferServiceName of Pipeline %s/%s: %w", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), err)
 	}
 	if isbsvcName == "" {
 		isbsvcName = "default"
 	}
-	isbResult, isbPresent, isbReason, err := progressive.TrialISBServiceResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace(), isbsvcName)
+	isbMember, isbPresent, isbReason, err := progressive.TrialISBServiceResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace(), isbsvcName)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, err
+		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
-	results, reasons = progressive.AppendChainMember(results, reasons, isbResult, isbPresent, isbReason)
+	if isbPresent {
+		members, reasons = progressive.AppendChainMember(members, reasons, isbMember, isbReason)
+	}
 
 	namespace := existingUpgradingChildDef.GetNamespace()
 	if isbPresent {
-		siblingResults, siblingReasons, err := progressive.PipelinesOnTrialISB(ctx, r.client, namespace, isbsvcName, pipelineRollout.Name)
+		siblingMembers, siblingReasons, err := progressive.PipelinesOnTrialISB(ctx, r.client, namespace, isbsvcName, pipelineRollout.Name)
 		if err != nil {
-			return apiv1.AssessmentResultUnknown, nil, err
+			return apiv1.AssessmentResultUnknown, nil, nil, err
 		}
-		results = append(results, siblingResults...)
+		members = append(members, siblingMembers...)
 		reasons = append(reasons, siblingReasons...)
 	}
-	workloadResults, workloadReasons, trialController, err := progressive.WorkloadsOnTrialController(ctx, r.client, namespace, "PipelineRollout", pipelineRollout.Name)
+	workloadMembers, workloadReasons, trialController, err := progressive.WorkloadsOnTrialController(ctx, r.client, namespace, "PipelineRollout", pipelineRollout.Name)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, err
+		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
 	if trialController {
-		results = append(results, workloadResults...)
+		members = append(members, workloadMembers...)
 		reasons = append(reasons, workloadReasons...)
 	}
 
-	return progressive.CombineAssessmentResults(results), reasons, nil
+	return progressive.CombineMemberAssessments(members), members, reasons, nil
 }
 
 // checkAnalysisTemplates checks if there are any analysis templates to run and runs them if so.

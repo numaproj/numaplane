@@ -142,29 +142,36 @@ func (r *MonoVertexRolloutReconciler) AssessResourceChain(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	existingUpgradingChildDef *unstructured.Unstructured,
-) (apiv1.AssessmentResult, []string, error) {
+) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error) {
 	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	childStatus := mvtxRollout.GetUpgradingChildStatus()
-	results := []apiv1.AssessmentResult{apiv1.AssessmentResultUnknown}
+	own := apiv1.AssessmentResultUnknown
+	childName := ""
 	if childStatus != nil {
-		results = []apiv1.AssessmentResult{childStatus.EffectiveResourceAssessment()}
+		own = childStatus.EffectiveResourceAssessment()
+		childName = childStatus.Name
+	}
+	members := []apiv1.ResourceChainMemberStatus{
+		progressive.NewChainMember("MonoVertexRollout", mvtxRollout.Name, childName, own),
 	}
 	var reasons []string
 
-	controllerResult, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
+	controllerMember, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, err
+		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
-	results, reasons = progressive.AppendChainMember(results, reasons, controllerResult, controllerPresent, controllerReason)
 	if controllerPresent {
-		workloadResults, workloadReasons, _, err := progressive.WorkloadsOnTrialController(ctx, r.client, existingUpgradingChildDef.GetNamespace(), "MonoVertexRollout", mvtxRollout.Name)
+		members, reasons = progressive.AppendChainMember(members, reasons, controllerMember, controllerReason)
+	}
+	if controllerPresent {
+		workloadMembers, workloadReasons, _, err := progressive.WorkloadsOnTrialController(ctx, r.client, existingUpgradingChildDef.GetNamespace(), "MonoVertexRollout", mvtxRollout.Name)
 		if err != nil {
-			return apiv1.AssessmentResultUnknown, nil, err
+			return apiv1.AssessmentResultUnknown, nil, nil, err
 		}
-		results = append(results, workloadResults...)
+		members = append(members, workloadMembers...)
 		reasons = append(reasons, workloadReasons...)
 	}
-	return progressive.CombineAssessmentResults(results), reasons, nil
+	return progressive.CombineMemberAssessments(members), members, reasons, nil
 }
 
 // checkAnalysisTemplates checks if there are any analysis templates to run and runs them if so.

@@ -49,10 +49,13 @@ func TestMonoVertexAssessResourceChain(t *testing.T) {
 	}
 
 	t.Run("healthy monovertex with no trial controller succeeds", func(t *testing.T) {
-		result, reasons, err := (&MonoVertexRolloutReconciler{client: newClient()}).AssessResourceChain(ctx, mvRollout, child)
+		result, members, reasons, err := (&MonoVertexRolloutReconciler{client: newClient()}).AssessResourceChain(ctx, mvRollout, child)
 		require.NoError(t, err)
 		require.Equal(t, apiv1.AssessmentResultSuccess, result)
 		require.Empty(t, reasons)
+		require.Equal(t, []apiv1.ResourceChainMemberStatus{
+			{Kind: "MonoVertexRollout", Name: "mv", ChildName: "mv-1", AssessmentResult: apiv1.AssessmentResultSuccess},
+		}, members)
 	})
 
 	t.Run("unhealthy trial controller blocks a healthy monovertex", func(t *testing.T) {
@@ -71,10 +74,13 @@ func TestMonoVertexAssessResourceChain(t *testing.T) {
 		}
 		trial := ctlrcommon.CreateTestNumaflowController(namespace, "controller", "controller-1", common.LabelValueUpgradeTrial, "trial")
 
-		result, reasons, err := (&MonoVertexRolloutReconciler{client: newClient(controller, trial)}).AssessResourceChain(ctx, mvRollout, child)
+		result, members, reasons, err := (&MonoVertexRolloutReconciler{client: newClient(controller, trial)}).AssessResourceChain(ctx, mvRollout, child)
 		require.NoError(t, err)
 		require.Equal(t, apiv1.AssessmentResultFailure, result)
 		require.NotEmpty(t, reasons)
+		require.GreaterOrEqual(t, len(members), 2)
+		require.Equal(t, "NumaflowControllerRollout", members[1].Kind)
+		require.Equal(t, apiv1.AssessmentResultFailure, members[1].AssessmentResult)
 	})
 
 	t.Run("failed pipeline on the trial controller blocks a healthy monovertex", func(t *testing.T) {
@@ -121,9 +127,17 @@ func TestMonoVertexAssessResourceChain(t *testing.T) {
 			},
 		}
 
-		result, reasons, err := (&MonoVertexRolloutReconciler{client: newClient(controller, trial, failedPipeline, pipeline)}).AssessResourceChain(ctx, mvRollout, child)
+		result, members, reasons, err := (&MonoVertexRolloutReconciler{client: newClient(controller, trial, failedPipeline, pipeline)}).AssessResourceChain(ctx, mvRollout, child)
 		require.NoError(t, err)
 		require.Equal(t, apiv1.AssessmentResultFailure, result)
 		require.NotEmpty(t, reasons)
+		var foundFailedPipeline bool
+		for _, member := range members {
+			if member.Kind == "PipelineRollout" && member.Name == "pipeline" {
+				require.Equal(t, apiv1.AssessmentResultFailure, member.AssessmentResult)
+				foundFailedPipeline = true
+			}
+		}
+		require.True(t, foundFailedPipeline)
 	})
 }

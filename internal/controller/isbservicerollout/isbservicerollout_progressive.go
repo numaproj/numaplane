@@ -211,26 +211,27 @@ func recordUpgradingChildSnapshot(childStatus *apiv1.UpgradingChildStatus, isbsv
 func (r *ISBServiceRolloutReconciler) assessPipelines(
 	ctx context.Context,
 	existingUpgradingChildDef *unstructured.Unstructured,
-) (apiv1.AssessmentResult, []string, error) {
+) ([]apiv1.ResourceChainMemberStatus, []string, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	var failedPipelines, successfulPipelines []string
 	// What is the name of the ISBServiceRollout?
 	isbsvcRolloutName, found := existingUpgradingChildDef.GetLabels()[common.LabelKeyParentRollout]
 	if !found {
-		return apiv1.AssessmentResultUnknown, failedPipelines, fmt.Errorf("there is no Label named %q for isbsvc %s/%s; can't make assessment for progressive",
+		return nil, nil, fmt.Errorf("there is no Label named %q for isbsvc %s/%s; can't make assessment for progressive",
 			common.LabelKeyParentRollout, existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName())
 	}
 	// get all PipelineRollouts using this ISBServiceRollout
 	pipelineRollouts, err := r.getPipelineRolloutList(ctx, existingUpgradingChildDef.GetNamespace(), isbsvcRolloutName)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, failedPipelines, fmt.Errorf("error getting PipelineRollouts: %s", err.Error())
+		return nil, nil, fmt.Errorf("error getting PipelineRollouts: %s", err.Error())
 	}
 	if len(pipelineRollouts) == 0 {
 		numaLogger.Warn("Found no PipelineRollouts using ISBServiceRollout: pipeline portion of the chain is Successful") // not typical but could happen
-		return apiv1.AssessmentResultSuccess, failedPipelines, nil
+		return nil, nil, nil
 	}
 
+	var members []apiv1.ResourceChainMemberStatus
+	var reasons []string
 	// for each PipelineRollout, we need to check that its current Upgrading Status is for a Pipeline in fact using this isbsvc
 	// otherwise, it may not have yet started the upgrade process for this isbsvc
 	for _, pipelineRollout := range pipelineRollouts {
@@ -238,27 +239,22 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 		if upgradingPipelineStatus == nil || upgradingPipelineStatus.InterStepBufferServiceName != existingUpgradingChildDef.GetName() {
 			// we need to make sure the PipelineRollout has updated to use an Upgrading Pipeline which is on the new isbsvc first
 			numaLogger.WithValues("pipelineRollout", pipelineRollout.GetName()).Debug("can't assess ISBService; pipeline is not yet upgrading with this ISBService")
+			members = append(members, progressive.NewChainMember("PipelineRollout", pipelineRollout.GetName(), "", apiv1.AssessmentResultUnknown))
 			continue
 		}
-		switch upgradingPipelineStatus.EffectiveResourceAssessment() {
+		result := upgradingPipelineStatus.EffectiveResourceAssessment()
+		members = append(members, progressive.NewChainMember("PipelineRollout", pipelineRollout.GetName(), upgradingPipelineStatus.Name, result))
+		switch result {
 		case apiv1.AssessmentResultFailure:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline resource assessment failed")
-			failedPipelines = append(failedPipelines, upgradingPipelineStatus.Name)
+			reasons = append(reasons, fmt.Sprintf("Pipeline %s failed", upgradingPipelineStatus.Name))
 		case apiv1.AssessmentResultUnknown:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline resource assessment is unknown")
 		case apiv1.AssessmentResultSuccess:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("assessing ISBService; pipeline resource assessment succeeded")
-			successfulPipelines = append(successfulPipelines, upgradingPipelineStatus.Name)
 		}
 	}
-	if len(failedPipelines) > 0 {
-		return apiv1.AssessmentResultFailure, failedPipelines, nil
-	}
-	if len(successfulPipelines) == len(pipelineRollouts) {
-		return apiv1.AssessmentResultSuccess, []string{}, nil
-	}
-
-	return apiv1.AssessmentResultUnknown, []string{}, nil
+	return members, reasons, nil
 }
 
 // AssessResourceChain implements progressiveController.
@@ -269,37 +265,40 @@ func (r *ISBServiceRolloutReconciler) AssessResourceChain(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	existingUpgradingChildDef *unstructured.Unstructured,
-) (apiv1.AssessmentResult, []string, error) {
+) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error) {
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 	own := apiv1.AssessmentResultUnknown
+	childName := ""
 	if status := isbServiceRollout.GetUpgradingChildStatus(); status != nil {
 		own = status.EffectiveResourceAssessment()
+		childName = status.Name
+	}
+	members := []apiv1.ResourceChainMemberStatus{
+		progressive.NewChainMember("ISBServiceRollout", isbServiceRollout.Name, childName, own),
 	}
 
-	pipelineResult, failedPipelines, err := r.assessPipelines(ctx, existingUpgradingChildDef)
+	pipelineMembers, reasons, err := r.assessPipelines(ctx, existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, err
+		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
-	var reasons []string
-	for _, failedPipeline := range failedPipelines {
-		reasons = append(reasons, fmt.Sprintf("Pipeline %s failed", failedPipeline))
-	}
+	members = append(members, pipelineMembers...)
 
-	results := []apiv1.AssessmentResult{own, pipelineResult}
-	controllerResult, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
+	controllerMember, controllerPresent, controllerReason, err := progressive.TrialControllerResourceAssessment(ctx, r.client, existingUpgradingChildDef.GetNamespace())
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, nil, err
+		return apiv1.AssessmentResultUnknown, nil, nil, err
 	}
-	results, reasons = progressive.AppendChainMember(results, reasons, controllerResult, controllerPresent, controllerReason)
 	if controllerPresent {
-		workloadResults, workloadReasons, _, err := progressive.WorkloadsOnTrialController(ctx, r.client, existingUpgradingChildDef.GetNamespace(), "ISBServiceRollout", isbServiceRollout.Name)
+		members, reasons = progressive.AppendChainMember(members, reasons, controllerMember, controllerReason)
+	}
+	if controllerPresent {
+		workloadMembers, workloadReasons, _, err := progressive.WorkloadsOnTrialController(ctx, r.client, existingUpgradingChildDef.GetNamespace(), "ISBServiceRollout", isbServiceRollout.Name)
 		if err != nil {
-			return apiv1.AssessmentResultUnknown, nil, err
+			return apiv1.AssessmentResultUnknown, nil, nil, err
 		}
-		results = append(results, workloadResults...)
+		members = append(members, workloadMembers...)
 		reasons = append(reasons, workloadReasons...)
 	}
-	return progressive.CombineAssessmentResults(results), reasons, nil
+	return progressive.CombineMemberAssessments(members), members, reasons, nil
 }
 
 // CheckForDifferences checks to see if the isbsvc definition matches the spec and the required metadata

@@ -61,8 +61,9 @@ type progressiveController interface {
 
 	// AssessResourceChain assesses this child together with the other resources that must be healthy before it is promoted.
 	// The chain is built from each member's resource assessment, not from that member's own chain, so the assessments do not cycle.
+	// The returned members are the individual resource assessments behind the combined result.
 	// The returned reasons describe chain members that failed. The caller's resource failure reasons are separate.
-	AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []string, error)
+	AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
@@ -392,13 +393,14 @@ func processUpgradingChild(
 		assessment = childStatus.AssessmentResult
 	}
 	var chainFailureReasons []string
+	var chainMembers []apiv1.ResourceChainMemberStatus
 	if skipAssessment {
 		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
 			status.ForcedSuccess = true
 			status.ForcedSuccessReason = string(reason)
 		})
-		assessment, chainFailureReasons, err = controller.AssessResourceChain(ctx, rolloutObject, existingUpgradingChildDef)
+		assessment, chainMembers, chainFailureReasons, err = controller.AssessResourceChain(ctx, rolloutObject, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
@@ -417,7 +419,7 @@ func processUpgradingChild(
 			status.ResourceAssessmentResult = resourceAssessment
 		})
 
-		assessment, chainFailureReasons, err = controller.AssessResourceChain(ctx, rolloutObject, existingUpgradingChildDef)
+		assessment, chainMembers, chainFailureReasons, err = controller.AssessResourceChain(ctx, rolloutObject, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
@@ -440,6 +442,11 @@ func processUpgradingChild(
 		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultFailure
 			status.ResourceChainAssessmentResult = apiv1.AssessmentResultFailure
+			// A previous failure skips AssessResourceChain, so chainMembers is nil.
+			// Keep the members recorded when the failure was first discovered.
+			if chainMembers != nil {
+				status.ResourceChainMembers = chainMembers
+			}
 			status.FailureReasons = appendFailureReasons(status.FailureReasons, chainFailureReasons)
 		})
 
@@ -470,6 +477,11 @@ func processUpgradingChild(
 		if err != nil {
 			return true, false, 0, err
 		}
+		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			if chainMembers != nil {
+				status.ResourceChainMembers = chainMembers
+			}
+		})
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, false, 0, err
@@ -481,6 +493,9 @@ func processUpgradingChild(
 		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultUnknown
 			status.ResourceChainAssessmentResult = apiv1.AssessmentResultUnknown
+			if chainMembers != nil {
+				status.ResourceChainMembers = chainMembers
+			}
 		})
 
 		return false, false, assessmentSchedule.Interval, nil
