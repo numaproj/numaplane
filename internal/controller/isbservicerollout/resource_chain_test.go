@@ -76,10 +76,12 @@ func TestISBServiceAssessResourceChain(t *testing.T) {
 	require.NoError(t, apiv1.AddToScheme(scheme))
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(isbRollout, failedPipeline, notStartedPipeline).Build()
 
-	result, reasons, err := (&ISBServiceRolloutReconciler{client: c}).AssessResourceChain(ctx, isbRollout, child)
+	result, members, reasons, err := (&ISBServiceRolloutReconciler{client: c}).AssessResourceChain(ctx, isbRollout, child)
 	require.NoError(t, err)
 	require.Equal(t, apiv1.AssessmentResultFailure, result)
 	require.Contains(t, reasons, "Pipeline pipeline-1 failed")
+	require.GreaterOrEqual(t, len(members), 2)
+	require.Equal(t, "ISBServiceRollout", members[0].Kind)
 }
 
 func TestISBServiceAssessResourceChainIncludesControllerWorkloads(t *testing.T) {
@@ -154,8 +156,16 @@ func TestISBServiceAssessResourceChainIncludesControllerWorkloads(t *testing.T) 
 		monoVertex,
 	).Build()
 
-	result, reasons, err := (&ISBServiceRolloutReconciler{client: c}).AssessResourceChain(ctx, isbRollout, child)
+	result, members, reasons, err := (&ISBServiceRolloutReconciler{client: c}).AssessResourceChain(ctx, isbRollout, child)
 	require.NoError(t, err)
 	require.Equal(t, apiv1.AssessmentResultFailure, result)
 	require.Contains(t, reasons[0], "MonoVertexRollout mv trial mv-1 resource assessment failed")
+	var foundFailedMV bool
+	for _, member := range members {
+		if member.Kind == "MonoVertexRollout" && member.Name == "mv" {
+			require.Equal(t, apiv1.AssessmentResultFailure, member.AssessmentResult)
+			foundFailedMV = true
+		}
+	}
+	require.True(t, foundFailedMV)
 }

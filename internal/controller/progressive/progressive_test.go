@@ -11,6 +11,7 @@ import (
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -73,19 +74,21 @@ func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, r
 	}
 }
 
-func (fpc fakeProgressiveController) AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []string, error) {
+func (fpc fakeProgressiveController) AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error) {
 	// These tests have no dependent rollouts, so the chain is the resource assessment.
 	if status := rolloutObject.GetUpgradingChildStatus(); status != nil && status.ResourceAssessmentResult != "" {
+		member := NewChainMember("TestRollout", rolloutObject.GetRolloutObjectMeta().Name, status.Name, status.ResourceAssessmentResult)
 		if status.ResourceAssessmentResult == apiv1.AssessmentResultFailure {
-			return apiv1.AssessmentResultFailure, []string{"test-fail-reason"}, nil
+			return apiv1.AssessmentResultFailure, []apiv1.ResourceChainMemberStatus{member}, []string{"test-fail-reason"}, nil
 		}
-		return status.ResourceAssessmentResult, nil, nil
+		return status.ResourceAssessmentResult, []apiv1.ResourceChainMemberStatus{member}, nil, nil
 	}
 	result, reason, err := fpc.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, config.AssessmentSchedule{})
+	member := NewChainMember("TestRollout", rolloutObject.GetRolloutObjectMeta().Name, existingUpgradingChildDef.GetName(), result)
 	if result == apiv1.AssessmentResultFailure && reason != "" {
-		return result, []string{reason}, err
+		return result, []apiv1.ResourceChainMemberStatus{member}, []string{reason}, err
 	}
-	return result, nil, err
+	return result, []apiv1.ResourceChainMemberStatus{member}, nil, err
 }
 
 func (fpc fakeProgressiveController) ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
@@ -188,6 +191,9 @@ func Test_processUpgradingChild(t *testing.T) {
 							AssessmentResult:         apiv1.AssessmentResultFailure,
 							BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 							InitializationComplete:   true,
+							ResourceChainMembers: []apiv1.ResourceChainMemberStatus{
+								{Kind: "MonoVertexRollout", Name: "test", ChildName: "test-failure", AssessmentResult: apiv1.AssessmentResultFailure},
+							},
 						},
 					},
 				},
@@ -330,6 +336,23 @@ func Test_processUpgradingChild(t *testing.T) {
 				assert.Equal(t, tc.expectedDone, actualDone)
 				assert.Equal(t, tc.expectedFailed, actualFailed)
 				assert.Equal(t, tc.expectedRequeueDelay, actualRequeueDelay)
+			}
+
+			// Cases that run AssessResourceChain must persist resourceChainMembers on the rollout status.
+			if tc.name == "can assess, success" || tc.name == "force promote a failed progressive upgrade" ||
+				tc.name == "analysis status set - success" || tc.name == "analysis status set - failure" {
+				childStatus := tc.rolloutObject.GetUpgradingChildStatus()
+				require.NotNil(t, childStatus)
+				require.NotEmpty(t, childStatus.ResourceChainMembers, "resourceChainMembers should be set after progressive assessment")
+				assert.Equal(t, "TestRollout", childStatus.ResourceChainMembers[0].Kind)
+				assert.Equal(t, tc.existingUpgradingChildDef.Name, childStatus.ResourceChainMembers[0].ChildName)
+			}
+			// A later reconcile of an already-failed child skips assessment. Keep the members recorded earlier.
+			if tc.name == "failure" {
+				childStatus := tc.rolloutObject.GetUpgradingChildStatus()
+				require.Equal(t, []apiv1.ResourceChainMemberStatus{
+					{Kind: "MonoVertexRollout", Name: "test", ChildName: "test-failure", AssessmentResult: apiv1.AssessmentResultFailure},
+				}, childStatus.ResourceChainMembers)
 			}
 		})
 	}

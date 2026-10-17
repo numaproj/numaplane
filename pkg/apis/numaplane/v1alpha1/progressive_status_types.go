@@ -32,6 +32,18 @@ const (
 	AssessmentResultUnknown AssessmentResult = "Unknown"
 )
 
+// ResourceChainMemberStatus is the resource assessment of one member of a progressive resource chain.
+type ResourceChainMemberStatus struct {
+	// Kind is the Rollout kind, e.g. PipelineRollout, ISBServiceRollout, MonoVertexRollout, NumaflowControllerRollout
+	Kind string `json:"kind"`
+	// Name is the Rollout name
+	Name string `json:"name"`
+	// ChildName is the trial child resource name when known
+	ChildName string `json:"childName,omitempty"`
+	// AssessmentResult is this member's resource assessment (not its own chain assessment)
+	AssessmentResult AssessmentResult `json:"assessmentResult"`
+}
+
 // UpgradingChildStatus describes the status of an upgrading child
 type UpgradingChildStatus struct {
 	// Name of the upgrading child
@@ -50,6 +62,10 @@ type UpgradingChildStatus struct {
 	// that must be healthy before it is promoted. The chain is Success only when every member is Success,
 	// and Failure as soon as any member is Failure.
 	ResourceChainAssessmentResult AssessmentResult `json:"resourceChainAssessmentResult,omitempty"`
+
+	// ResourceChainMembers is the individual resource assessment of each member of the resource chain.
+	// It is the breakdown behind ResourceChainAssessmentResult and is intended for debuggability.
+	ResourceChainMembers []ResourceChainMemberStatus `json:"resourceChainMembers,omitempty"`
 
 	// BasicAssessmentStartTime indicates the time at/after which the basic resource health check assessment result will be computed
 	BasicAssessmentStartTime *metav1.Time `json:"basicAssessmentStartTime,omitempty"`

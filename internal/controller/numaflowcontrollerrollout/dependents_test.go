@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -48,8 +49,12 @@ func TestAssessDependentsFailsBeforeAllDependentsStart(t *testing.T) {
 	require.NoError(t, numaflowv1.AddToScheme(scheme))
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(failedMonoVertex, monoVertex, notStartedPipeline).Build()
 
-	result, failed, err := (&NumaflowControllerRolloutReconciler{client: c}).assessDependents(context.Background(), namespace, "trial")
+	members, reasons, err := (&NumaflowControllerRolloutReconciler{client: c}).assessDependents(context.Background(), namespace, "trial")
 	require.NoError(t, err)
-	require.Equal(t, apiv1.AssessmentResultFailure, result)
-	require.Equal(t, []string{"MonoVertexRollout mv"}, failed)
+	require.Equal(t, apiv1.AssessmentResultFailure, progressive.CombineMemberAssessments(members))
+	require.Equal(t, []string{"MonoVertexRollout mv failed"}, reasons)
+	require.Equal(t, []apiv1.ResourceChainMemberStatus{
+		{Kind: "PipelineRollout", Name: "pipeline", AssessmentResult: apiv1.AssessmentResultUnknown},
+		{Kind: "MonoVertexRollout", Name: "mv", ChildName: "mv-1", AssessmentResult: apiv1.AssessmentResultFailure},
+	}, members)
 }

@@ -45,11 +45,24 @@ func TestEffectiveResourceAssessment(t *testing.T) {
 }
 
 func TestAppendChainMember(t *testing.T) {
-	results, reasons := AppendChainMember(nil, nil, apiv1.AssessmentResultSuccess, false, "ignored")
-	assert.Empty(t, results)
-	assert.Empty(t, reasons)
-
-	results, reasons = AppendChainMember(results, reasons, apiv1.AssessmentResultFailure, true, "controller failed")
-	assert.Equal(t, []apiv1.AssessmentResult{apiv1.AssessmentResultFailure}, results)
+	failed := NewChainMember("NumaflowControllerRollout", "nc", "nc-1", apiv1.AssessmentResultFailure)
+	members, reasons := AppendChainMember(nil, nil, failed, "controller failed")
+	assert.Equal(t, []apiv1.ResourceChainMemberStatus{failed}, members)
 	assert.Equal(t, []string{"controller failed"}, reasons)
+
+	success := NewChainMember("PipelineRollout", "p", "p-1", apiv1.AssessmentResultSuccess)
+	members, reasons = AppendChainMember(members, reasons, success, "")
+	assert.Equal(t, []apiv1.ResourceChainMemberStatus{failed, success}, members)
+	assert.Equal(t, []string{"controller failed"}, reasons)
+}
+
+func TestCombineMemberAssessments(t *testing.T) {
+	assert.Equal(t, apiv1.AssessmentResultUnknown, CombineMemberAssessments(nil))
+	assert.Equal(t, apiv1.AssessmentResultSuccess, CombineMemberAssessments([]apiv1.ResourceChainMemberStatus{
+		NewChainMember("PipelineRollout", "p", "p-1", apiv1.AssessmentResultSuccess),
+	}))
+	assert.Equal(t, apiv1.AssessmentResultFailure, CombineMemberAssessments([]apiv1.ResourceChainMemberStatus{
+		NewChainMember("PipelineRollout", "p", "p-1", apiv1.AssessmentResultSuccess),
+		NewChainMember("ISBServiceRollout", "isb", "isb-1", apiv1.AssessmentResultFailure),
+	}))
 }

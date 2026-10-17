@@ -197,10 +197,11 @@ func TestAssessUpgradingChildRequiresISBServiceHealthAndPipelines(t *testing.T) 
 		assert.Equal(t, apiv1.AssessmentResultUnknown, result)
 		assert.Empty(t, rollout.GetUpgradingChildStatus().BasicAssessmentResult)
 
-		chain, reasons, err := reconciler.AssessResourceChain(ctx, rollout, child)
+		chain, members, reasons, err := reconciler.AssessResourceChain(ctx, rollout, child)
 		require.NoError(t, err)
 		assert.Equal(t, apiv1.AssessmentResultFailure, chain)
 		assert.Contains(t, reasons, "Pipeline trial-pipeline failed")
+		require.NotEmpty(t, members)
 	})
 
 	t.Run("pipelines that have not moved onto the new isbsvc keep the chain unknown", func(t *testing.T) {
@@ -215,9 +216,10 @@ func TestAssessUpgradingChildRequiresISBServiceHealthAndPipelines(t *testing.T) 
 		assert.Equal(t, apiv1.AssessmentResultSuccess, rollout.GetUpgradingChildStatus().BasicAssessmentResult)
 
 		rollout.GetUpgradingChildStatus().ResourceAssessmentResult = result
-		chain, _, err := reconciler.AssessResourceChain(ctx, rollout, child)
+		chain, members, _, err := reconciler.AssessResourceChain(ctx, rollout, child)
 		require.NoError(t, err)
 		assert.Equal(t, apiv1.AssessmentResultUnknown, chain)
+		require.NotEmpty(t, members)
 	})
 
 	t.Run("after the isbsvc health window succeeds, pipeline success completes the chain", func(t *testing.T) {
@@ -230,10 +232,11 @@ func TestAssessUpgradingChildRequiresISBServiceHealthAndPipelines(t *testing.T) 
 		assert.Equal(t, apiv1.AssessmentResultSuccess, result)
 
 		rollout.GetUpgradingChildStatus().ResourceAssessmentResult = result
-		chain, reasons, err := reconciler.AssessResourceChain(ctx, rollout, child)
+		chain, members, reasons, err := reconciler.AssessResourceChain(ctx, rollout, child)
 		require.NoError(t, err)
 		assert.Equal(t, apiv1.AssessmentResultSuccess, chain)
 		assert.Empty(t, reasons)
+		require.NotEmpty(t, members)
 	})
 }
 
