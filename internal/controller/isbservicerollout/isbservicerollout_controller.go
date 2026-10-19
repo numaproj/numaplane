@@ -267,6 +267,15 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		if len(recyclableISBSvcs.Items) > 0 {
 			numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' isbservice yet; need to wait for recyclable isbservices to be deleted")
 			requeueDelay = common.DefaultRequeueDelay
+		} else if chainFailed, err := progressive.ControllerChainFailed(ctx, r.client, isbServiceRollout.Namespace); err != nil {
+			return ctrl.Result{}, err
+		} else if chainFailed {
+			// A new ISBService stays Pending while the controller chain is failed. It is created on
+			// whichever controller is promoted once that chain succeeds, is reverted, or is force-promoted.
+			// A Pipeline that needs this ISBService stays Pending until the ISBService exists.
+			numaLogger.Info("ISBServiceRollout is waiting for the failed controller chain to be resolved")
+			isbServiceRollout.Status.MarkPending()
+			requeueDelay = common.DefaultRequeueDelay
 		} else {
 			// The first promoted child stays on the promoted controller. A later reconcile compares
 			// it with the desired controller, including a trial instance, and Progressive creates

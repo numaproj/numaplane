@@ -248,6 +248,18 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	if newMonoVertexDef != nil {
 		if len(promotedMonovertices.Items) == 0 {
 
+			chainFailed, err := progressive.ControllerChainFailed(ctx, r.client, monoVertexRollout.Namespace)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if chainFailed {
+				// A new MonoVertex stays Pending while the controller chain is failed. It is created on
+				// whichever controller is promoted once that chain succeeds, is reverted, or is force-promoted.
+				numaLogger.Info("MonoVertexRollout is waiting for the failed controller chain to be resolved")
+				monoVertexRollout.Status.MarkPending()
+				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+			}
+
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, newMonoVertexDef.GetName())
 			monoVertexRollout.Status.MarkPending()
 

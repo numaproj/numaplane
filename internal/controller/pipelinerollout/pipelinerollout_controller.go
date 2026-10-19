@@ -419,6 +419,18 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 		if len(promotedPipelines.Items) == 0 {
 
+			chainFailed, err := progressive.ControllerChainFailed(ctx, r.client, pipelineRollout.Namespace)
+			if err != nil {
+				return 0, nil, err
+			}
+			if chainFailed {
+				// A new Pipeline stays Pending while the controller chain is failed. It is created on
+				// whichever controller is promoted once that chain succeeds, is reverted, or is force-promoted.
+				numaLogger.Info("PipelineRollout is waiting for the failed controller chain to be resolved")
+				pipelineRollout.Status.MarkPending()
+				return common.DefaultRequeueDelay, nil, nil
+			}
+
 			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
 			pipelineRollout.Status.MarkPending()
 
