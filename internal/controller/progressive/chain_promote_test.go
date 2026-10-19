@@ -341,6 +341,81 @@ func TestCurrentTrialMembersBlocksPromotedChildOnOlderController(t *testing.T) {
 	}
 }
 
+func TestCurrentTrialMembersBlocksPipelineOnPromotedISB(t *testing.T) {
+	const namespace = "test"
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name                string
+		pipelineISBName     string
+		expectPipelineBlock bool
+	}{
+		{name: "named child still uses the promoted ISBService", pipelineISBName: "isb-0", expectPipelineBlock: true},
+		{name: "named child already uses the trial ISBService", pipelineISBName: "isb-1", expectPipelineBlock: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			isbRollout := &apiv1.ISBServiceRollout{
+				ObjectMeta: metav1.ObjectMeta{Name: "isb", Namespace: namespace},
+				Status: apiv1.ISBServiceRolloutStatus{
+					ProgressiveStatus: apiv1.ISBServiceProgressiveStatus{
+						UpgradingISBServiceStatus: &apiv1.UpgradingISBServiceStatus{
+							UpgradingChildStatus: apiv1.UpgradingChildStatus{
+								Name:                     "isb-1",
+								ResourceAssessmentResult: apiv1.AssessmentResultSuccess,
+							},
+						},
+					},
+				},
+			}
+			trialISB := trialChild(numaflowv1.ISBGroupVersionKind, namespace, "isb-1", "isb", "uid-isb")
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{Name: "pipeline", Namespace: namespace},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{Raw: []byte(`{"interStepBufferServiceName":"isb"}`)},
+					},
+				},
+				Status: apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
+							InterStepBufferServiceName: tc.pipelineISBName,
+							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+								UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: "pipeline-0"},
+							},
+						},
+					},
+				},
+			}
+			promotedPipeline := trialChild(numaflowv1.PipelineGroupVersionKind, namespace, "pipeline-0", "pipeline", "uid-pipeline")
+			promotedPipeline.SetLabels(map[string]string{
+				common.LabelKeyParentRollout: "pipeline",
+				common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+			})
+
+			scheme := runtime.NewScheme()
+			require.NoError(t, apiv1.AddToScheme(scheme))
+			require.NoError(t, numaflowv1.AddToScheme(scheme))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(isbRollout, trialISB, pipelineRollout, promotedPipeline).Build()
+
+			members, err := currentTrialMembers(ctx, c, namespace)
+			require.NoError(t, err)
+			var pipeline *trialMember
+			for i := range members {
+				if members[i].Kind == "PipelineRollout" {
+					pipeline = &members[i]
+				}
+			}
+			if tc.expectPipelineBlock {
+				require.NotNil(t, pipeline)
+				assert.Equal(t, apiv1.AssessmentResultUnknown, pipeline.Assessment)
+				assert.Nil(t, pipeline.Child)
+			} else {
+				assert.Nil(t, pipeline)
+			}
+		})
+	}
+}
+
 func assertChainPromote(t *testing.T, c client.Client, gvk schema.GroupVersionKind, namespace, name string, want bool) {
 	t.Helper()
 	got := &unstructured.Unstructured{}

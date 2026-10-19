@@ -414,15 +414,20 @@ func memberFromRollout(kind, rolloutName string, upgrading *apiv1.UpgradingChild
 }
 
 // childFinishedOnTrialController reports whether upgrading still names a child that has already
-// joined the current trial controller. That rollout is not a current trial member.
+// joined the current trial. That rollout is not a current trial member.
 // A named child bound to an older controller has not started this trial, so the rollout stays Unknown.
-// With no trial controller, any named non-discontinued child has finished its upgrade.
+// With no trial controller, a Pipeline is finished only when its named child already uses the trial
+// ISBService. Otherwise pipelineAwaitingTrial can record it as Unknown.
 func childFinishedOnTrialController(ctx context.Context, c client.Client, rollout ctlrcommon.RolloutObject, upgrading *apiv1.UpgradingChildStatus, trialController *unstructured.Unstructured) (bool, error) {
 	if upgrading == nil || upgrading.Name == "" || upgrading.Discontinued {
 		return false, nil
 	}
 	if trialController == nil {
-		return true, nil
+		pipelineRollout, ok := rollout.(*apiv1.PipelineRollout)
+		if !ok {
+			return true, nil
+		}
+		return pipelineFinishedOnTrialISB(ctx, c, pipelineRollout)
 	}
 	instanceID, err := unstructuredInstanceID(trialController)
 	if err != nil {
@@ -433,6 +438,27 @@ func childFinishedOnTrialController(ctx context.Context, c client.Client, rollou
 		return false, err
 	}
 	return onInstance, nil
+}
+
+// pipelineFinishedOnTrialISB reports whether the Pipeline's named child already uses a trial ISBService.
+// A child still bound to the promoted ISBService has not started that trial.
+func pipelineFinishedOnTrialISB(ctx context.Context, c client.Client, pipelineRollout *apiv1.PipelineRollout) (bool, error) {
+	upgrading := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
+	if upgrading == nil || upgrading.InterStepBufferServiceName == "" {
+		return false, nil
+	}
+	trialISBs, err := kubernetes.ListResources(ctx, c, numaflowv1.ISBGroupVersionKind, pipelineRollout.Namespace, client.MatchingLabels{
+		common.LabelKeyUpgradeState: string(common.LabelValueUpgradeTrial),
+	})
+	if err != nil {
+		return false, fmt.Errorf("listing trial ISBServices in namespace %q: %w", pipelineRollout.Namespace, err)
+	}
+	for i := range trialISBs.Items {
+		if trialISBs.Items[i].GetName() == upgrading.InterStepBufferServiceName {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func upgradingDiscontinued(upgrading *apiv1.UpgradingChildStatus) bool {
