@@ -1010,6 +1010,7 @@ func TestProcessResourcePromotesAnnotatedTrialBeforeReplacement(t *testing.T) {
 	gotTrial, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, createdTrial.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, string(common.LabelValueUpgradePromoted), gotTrial.Labels[common.LabelKeyUpgradeState])
+	assert.Equal(t, string(common.LabelValueResultStateSucceeded), gotTrial.Labels[common.LabelKeyProgressiveResultState])
 
 	gotPromoted, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, createdPromoted.Name, metav1.GetOptions{})
 	require.NoError(t, err)

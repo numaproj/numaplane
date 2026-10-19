@@ -321,6 +321,34 @@ func getChildStatusAssessmentSchedule(
 	return schedule, nil
 }
 
+// promoteForcePromoteChain stamps force-promote-chain on every current trial child and promotes this child.
+// The other children promote when their own reconcilers see the label.
+func promoteForcePromoteChain(
+	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+	controller progressiveController,
+	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
+	childStatus *apiv1.UpgradingChildStatus,
+	assessmentSchedule config.AssessmentSchedule,
+	c client.Client,
+) (bool, bool, time.Duration, error) {
+	numaLogger := logger.FromContext(ctx)
+	if err := StampForcePromoteChain(ctx, c, existingUpgradingChildDef.GetNamespace()); err != nil {
+		return false, false, 0, err
+	}
+	childStatus.ForcedSuccess = true
+	childStatus.ForcedSuccessReason = string(SkipProgressiveAssessmentReasonForcePromoteChain)
+	numaLogger.Debug("Upgrading child force-promote-chain")
+	if err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef); err != nil {
+		return false, false, 0, err
+	}
+	done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+	if err != nil || done {
+		return done, false, 0, err
+	}
+	return done, false, assessmentSchedule.Interval, err
+}
+
 /*
 processUpgradingChild handles the assessment and potential update of a child resource during a progressive upgrade.
 It evaluates the current status of the upgrading child, determines if an assessment is needed, and processes the
@@ -358,13 +386,12 @@ func processUpgradingChild(
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 
 	// A chain-promote annotation means every stored resource assessment was already Success.
-	// Promote this exact child without running health checks again.
+	// Promote this exact child without running health checks again. declareSuccess records the
+	// assessment results after the child is relabeled.
 	if ChainPromoteApplies(existingUpgradingChildDef, childStatus.Name) {
-		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
-			status.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
-			status.ResourceChainAssessmentResult = apiv1.AssessmentResultSuccess
-			status.AssessmentResult = apiv1.AssessmentResultSuccess
-		})
+		if err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef); err != nil {
+			return false, false, 0, err
+		}
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, false, 0, err
@@ -381,20 +408,7 @@ func processUpgradingChild(
 
 	// Force Promote Chain promotes every trial member, including ones that are still unhealthy.
 	if _, forceChain := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromoteChain]; forceChain {
-		if err := StampForcePromoteChain(ctx, c, existingUpgradingChildDef.GetNamespace()); err != nil {
-			return false, false, 0, err
-		}
-		childStatus.ForcedSuccess = true
-		childStatus.ForcedSuccessReason = string(SkipProgressiveAssessmentReasonForcePromoteChain)
-		numaLogger.Debug("Upgrading child force-promote-chain")
-		if err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef); err != nil {
-			return false, false, 0, err
-		}
-		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
-		if err != nil || done {
-			return done, false, 0, err
-		}
-		return done, false, assessmentSchedule.Interval, err
+		return promoteForcePromoteChain(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, assessmentSchedule, c)
 	}
 
 	// Individual force promote is disabled while the chain assessment is Failure.
