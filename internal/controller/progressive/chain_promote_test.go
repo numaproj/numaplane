@@ -201,13 +201,153 @@ func TestAnnotateCurrentTrialChildrenRecordsNameAndUID(t *testing.T) {
 	require.NoError(t, numaflowv1.AddToScheme(scheme))
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(isbRollout, trialISB).Build()
 
-	require.NoError(t, AnnotateCurrentTrialChildren(ctx, c, namespace))
+	require.NoError(t, AnnotateCurrentTrialChildren(ctx, c, namespace, nil))
 
 	got := &unstructured.Unstructured{}
 	got.SetGroupVersionKind(numaflowv1.ISBGroupVersionKind)
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "isb-1"}, got))
 	assert.Equal(t, ChainPromoteAnnotationValue("isb-1", "uid-isb"), got.GetAnnotations()[common.AnnotationKeyChainPromote])
 	assert.True(t, ChainPromoteAnnotationMatches(got))
+}
+
+func TestAnnotateCurrentTrialChildrenSkipsOutsidersAndFailures(t *testing.T) {
+	const namespace = "test"
+	ctx := context.Background()
+
+	isbRollout := &apiv1.ISBServiceRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: "isb", Namespace: namespace},
+		Status: apiv1.ISBServiceRolloutStatus{
+			ProgressiveStatus: apiv1.ISBServiceProgressiveStatus{
+				UpgradingISBServiceStatus: &apiv1.UpgradingISBServiceStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                     "isb-1",
+						ResourceAssessmentResult: apiv1.AssessmentResultSuccess,
+					},
+				},
+			},
+		},
+	}
+	pipelineRollout := &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: "pipeline", Namespace: namespace},
+		Status: apiv1.PipelineRolloutStatus{
+			ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+				UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
+					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+						UpgradingChildStatus: apiv1.UpgradingChildStatus{
+							Name:                     "pipeline-1",
+							ResourceAssessmentResult: apiv1.AssessmentResultFailure,
+						},
+					},
+				},
+			},
+		},
+	}
+	monoVertexRollout := &apiv1.MonoVertexRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: "monovertex", Namespace: namespace},
+		Status: apiv1.MonoVertexRolloutStatus{
+			ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
+				UpgradingMonoVertexStatus: &apiv1.UpgradingMonoVertexStatus{
+					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+						UpgradingChildStatus: apiv1.UpgradingChildStatus{
+							Name:                     "mv-1",
+							ResourceAssessmentResult: apiv1.AssessmentResultSuccess,
+						},
+					},
+				},
+			},
+		},
+	}
+	isbTrial := trialChild(numaflowv1.ISBGroupVersionKind, namespace, "isb-1", "isb", "uid-isb")
+	pipelineTrial := trialChild(numaflowv1.PipelineGroupVersionKind, namespace, "pipeline-1", "pipeline", "uid-pipeline")
+	monoVertexTrial := trialChild(numaflowv1.MonoVertexGroupVersionKind, namespace, "mv-1", "monovertex", "uid-mv")
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiv1.AddToScheme(scheme))
+	require.NoError(t, numaflowv1.AddToScheme(scheme))
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(isbRollout, pipelineRollout, monoVertexRollout, isbTrial, pipelineTrial, monoVertexTrial).Build()
+
+	require.NoError(t, AnnotateCurrentTrialChildren(ctx, c, namespace, []apiv1.ResourceChainMemberStatus{
+		{Kind: "ISBServiceRollout", Name: "isb", AssessmentResult: apiv1.AssessmentResultSuccess},
+		{Kind: "PipelineRollout", Name: "pipeline", AssessmentResult: apiv1.AssessmentResultFailure},
+	}))
+
+	assertChainPromote(t, c, numaflowv1.ISBGroupVersionKind, namespace, "isb-1", true)
+	assertChainPromote(t, c, numaflowv1.PipelineGroupVersionKind, namespace, "pipeline-1", false)
+	assertChainPromote(t, c, numaflowv1.MonoVertexGroupVersionKind, namespace, "mv-1", false)
+}
+
+func TestCurrentTrialMembersBlocksPromotedChildOnOlderController(t *testing.T) {
+	const namespace = "test"
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name           string
+		instanceID     string
+		expectISBBlock bool
+	}{
+		{name: "promoted child is on an older controller", instanceID: "old", expectISBBlock: true},
+		{name: "promoted child is already on the trial controller", instanceID: "new", expectISBBlock: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			controllerRollout := &apiv1.NumaflowControllerRollout{
+				ObjectMeta: metav1.ObjectMeta{Name: "controller", Namespace: namespace},
+				Status: apiv1.NumaflowControllerRolloutStatus{
+					ProgressiveStatus: apiv1.NumaflowControllerProgressiveStatus{
+						UpgradingNumaflowControllerStatus: &apiv1.UpgradingNumaflowControllerStatus{
+							UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: "controller-1"},
+						},
+					},
+				},
+			}
+			trialController := ctlrcommon.CreateTestNumaflowController(namespace, "controller", "controller-1", common.LabelValueUpgradeTrial, "new")
+			isbRollout := &apiv1.ISBServiceRollout{
+				ObjectMeta: metav1.ObjectMeta{Name: "isb", Namespace: namespace},
+				Status: apiv1.ISBServiceRolloutStatus{
+					ProgressiveStatus: apiv1.ISBServiceProgressiveStatus{
+						UpgradingISBServiceStatus: &apiv1.UpgradingISBServiceStatus{
+							UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: "isb-0"},
+						},
+					},
+				},
+			}
+			promoted := trialChild(numaflowv1.ISBGroupVersionKind, namespace, "isb-0", "isb", "uid-promoted")
+			promoted.SetLabels(map[string]string{
+				common.LabelKeyParentRollout: "isb",
+				common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+			})
+			promoted.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: tc.instanceID})
+
+			scheme := runtime.NewScheme()
+			require.NoError(t, apiv1.AddToScheme(scheme))
+			require.NoError(t, numaflowv1.AddToScheme(scheme))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(controllerRollout, trialController, isbRollout, promoted).Build()
+
+			members, err := currentTrialMembers(ctx, c, namespace)
+			require.NoError(t, err)
+			var isb *trialMember
+			for i := range members {
+				if members[i].Kind == "ISBServiceRollout" {
+					isb = &members[i]
+				}
+			}
+			if tc.expectISBBlock {
+				require.NotNil(t, isb)
+				assert.Equal(t, apiv1.AssessmentResultUnknown, isb.Assessment)
+				assert.Nil(t, isb.Child)
+			} else {
+				assert.Nil(t, isb)
+			}
+		})
+	}
+}
+
+func assertChainPromote(t *testing.T, c client.Client, gvk schema.GroupVersionKind, namespace, name string, want bool) {
+	t.Helper()
+	got := &unstructured.Unstructured{}
+	got.SetGroupVersionKind(gvk)
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Namespace: namespace, Name: name}, got))
+	_, found := got.GetAnnotations()[common.AnnotationKeyChainPromote]
+	assert.Equal(t, want, found)
 }
 
 func TestRemoveTrialDependentsOnInstanceDiscontinuesRollouts(t *testing.T) {

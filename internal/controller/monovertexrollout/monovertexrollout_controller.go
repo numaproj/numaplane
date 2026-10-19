@@ -255,21 +255,22 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			if chainFailed {
 				// A new MonoVertex stays Pending while the controller chain is failed. It is created on
 				// whichever controller is promoted once that chain succeeds, is reverted, or is force-promoted.
+				// Recyclable children are still cleaned up below.
 				numaLogger.Info("MonoVertexRollout is waiting for the failed controller chain to be resolved")
 				monoVertexRollout.Status.MarkPending()
-				return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
+				requeueDelay = common.DefaultRequeueDelay
+			} else {
+				numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, newMonoVertexDef.GetName())
+				monoVertexRollout.Status.MarkPending()
+
+				if err := r.createPromotedMonoVertex(ctx, monoVertexRollout, newMonoVertexDef); err != nil {
+					return ctrl.Result{}, err
+				}
+
+				monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(newMonoVertexDef.GetName())
+				monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
+				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
 			}
-
-			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, newMonoVertexDef.GetName())
-			monoVertexRollout.Status.MarkPending()
-
-			if err := r.createPromotedMonoVertex(ctx, monoVertexRollout, newMonoVertexDef); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(newMonoVertexDef.GetName())
-			monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
 
 		} else {
 			existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),

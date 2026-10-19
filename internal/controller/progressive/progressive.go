@@ -446,7 +446,7 @@ func processUpgradingChild(
 		if resourceAssessment != apiv1.AssessmentResultSuccess {
 			if skipAssessment {
 				resourceAssessment = apiv1.AssessmentResultSuccess
-				childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+				_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 					status.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
 					status.ForcedSuccess = true
 					status.ForcedSuccessReason = string(reason)
@@ -462,7 +462,7 @@ func processUpgradingChild(
 					if assessErr != nil {
 						return false, false, 0, assessErr
 					}
-					childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+					_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 						status.ResourceAssessmentResult = resourceAssessment
 					})
 				}
@@ -578,7 +578,7 @@ func processUpgradingChild(
 			}
 		})
 		// Stamp the exact trial children so the rest of the chain promotes without another health check.
-		if err := AnnotateCurrentTrialChildren(ctx, c, existingUpgradingChildDef.GetNamespace()); err != nil {
+		if err := AnnotateCurrentTrialChildren(ctx, c, existingUpgradingChildDef.GetNamespace(), chainMembers); err != nil {
 			return false, false, 0, err
 		}
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
@@ -1231,13 +1231,10 @@ func Discontinue(ctx context.Context,
 
 	for _, child := range upgradingChildren {
 		reason := common.LabelValueDiscontinueProgressive
-		err = ctlrcommon.MarkRecyclable(ctx, c, &reason, &child)
-		if err != nil {
-			return fmt.Errorf("failed to Discontinue progressive upgrade: error marking child %s recyclable: %v", child.GetName(), err)
-		}
 		// Trial workloads bound to a discontinued trial controller are removed and their Rollouts
 		// are discontinued. Later reconciles create new trials on the controller that remains
-		// promoted, using the latest Rollout specs.
+		// promoted, using the latest Rollout specs. The controller stays a trial until that
+		// cleanup succeeds, so a failed cleanup can be retried.
 		if rolloutObject.GetChildGVK().Kind == "NumaflowController" {
 			instanceID, _, err := unstructured.NestedString(child.Object, "spec", "instanceID")
 			if err != nil {
@@ -1246,6 +1243,10 @@ func Discontinue(ctx context.Context,
 			if err := RemoveTrialDependentsOnInstance(ctx, c, child.GetNamespace(), instanceID); err != nil {
 				return err
 			}
+		}
+		err = ctlrcommon.MarkRecyclable(ctx, c, &reason, &child)
+		if err != nil {
+			return fmt.Errorf("failed to Discontinue progressive upgrade: error marking child %s recyclable: %v", child.GetName(), err)
 		}
 	}
 

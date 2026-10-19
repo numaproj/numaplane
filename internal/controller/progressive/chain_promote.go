@@ -106,16 +106,31 @@ func StoredTrialResourceAssessments(ctx context.Context, c client.Client, namesp
 	return results, nil
 }
 
-// AnnotateCurrentTrialChildren writes the chain-promote annotation onto each live trial child
-// that is part of the chain. The value records that child's name and UID.
-func AnnotateCurrentTrialChildren(ctx context.Context, c client.Client, namespace string) error {
+// AnnotateCurrentTrialChildren writes the chain-promote annotation onto live trial children
+// whose stored resource assessment is Success. chainMembers, when set, is the chain that just
+// succeeded; children outside that chain are left alone. A nil chainMembers means every current
+// Success member, which is the stored chain after a failed chain has fully recovered.
+// The value records that child's name and UID.
+func AnnotateCurrentTrialChildren(ctx context.Context, c client.Client, namespace string, chainMembers []apiv1.ResourceChainMemberStatus) error {
 	members, err := currentTrialMembers(ctx, c, namespace)
 	if err != nil {
 		return err
 	}
+	var allowed map[string]struct{}
+	if chainMembers != nil {
+		allowed = make(map[string]struct{}, len(chainMembers))
+		for _, chainMember := range chainMembers {
+			allowed[chainMember.Kind+"/"+chainMember.Name] = struct{}{}
+		}
+	}
 	for _, member := range members {
-		if member.Child == nil {
+		if member.Assessment != apiv1.AssessmentResultSuccess || member.Child == nil {
 			continue
+		}
+		if allowed != nil {
+			if _, ok := allowed[member.Kind+"/"+member.RolloutName]; !ok {
+				continue
+			}
 		}
 		value := ChainPromoteAnnotationValue(member.Child.GetName(), string(member.Child.GetUID()))
 		if member.Child.GetAnnotations()[common.AnnotationKeyChainPromote] == value {
@@ -184,11 +199,13 @@ func RemoveTrialDependentsOnInstance(ctx context.Context, c client.Client, names
 			}
 			numaLogger.WithValues("kind", gvk.Kind, "name", child.GetName(), "instanceID", instanceID).
 				Debug("removing trial dependent of discontinued NumaflowController")
-			if err := ctlrcommon.MarkRecyclable(ctx, c, &reason, child); err != nil {
-				return fmt.Errorf("removing trial %s %s/%s bound to controller instance %q: %w", gvk.Kind, namespace, child.GetName(), instanceID, err)
-			}
+			// Update the Rollout before removing the trial label. A failed status update can be
+			// retried only while this child is still listed as a trial.
 			if err := discontinueDependentRollout(ctx, c, gvk.Kind, child); err != nil {
 				return err
+			}
+			if err := ctlrcommon.MarkRecyclable(ctx, c, &reason, child); err != nil {
+				return fmt.Errorf("removing trial %s %s/%s bound to controller instance %q: %w", gvk.Kind, namespace, child.GetName(), instanceID, err)
 			}
 		}
 	}
@@ -290,7 +307,11 @@ func currentTrialMembers(ctx context.Context, c client.Client, namespace string)
 		}
 		// An existing ISBService that has not started its trial yet blocks promotion.
 		// A brand-new rollout with no promoted child is Pending and is not a chain member.
-		if trialController != nil && !upgradingDiscontinued(isbRollout.GetUpgradingChildStatus()) && child == nil && !upgradingNamesLiveChild(isbRollout.GetUpgradingChildStatus()) {
+		finished, err := childFinishedOnTrialController(ctx, c, isbRollout, isbRollout.GetUpgradingChildStatus(), trialController)
+		if err != nil {
+			return nil, err
+		}
+		if trialController != nil && !upgradingDiscontinued(isbRollout.GetUpgradingChildStatus()) && child == nil && !finished {
 			hasPromoted, err := hasPromotedChild(ctx, isbRollout, c)
 			if err != nil {
 				return nil, err
@@ -315,7 +336,11 @@ func currentTrialMembers(ctx context.Context, c client.Client, namespace string)
 			members = append(members, member)
 			continue
 		}
-		if upgradingDiscontinued(pipelineRollout.GetUpgradingChildStatus()) || child != nil || upgradingNamesLiveChild(pipelineRollout.GetUpgradingChildStatus()) {
+		finished, err := childFinishedOnTrialController(ctx, c, pipelineRollout, pipelineRollout.GetUpgradingChildStatus(), trialController)
+		if err != nil {
+			return nil, err
+		}
+		if upgradingDiscontinued(pipelineRollout.GetUpgradingChildStatus()) || child != nil || finished {
 			continue
 		}
 		hasPromoted, err := hasPromotedChild(ctx, pipelineRollout, c)
@@ -349,7 +374,11 @@ func currentTrialMembers(ctx context.Context, c client.Client, namespace string)
 			members = append(members, member)
 			continue
 		}
-		if trialController != nil && !upgradingDiscontinued(monoVertexRollout.GetUpgradingChildStatus()) && child == nil && !upgradingNamesLiveChild(monoVertexRollout.GetUpgradingChildStatus()) {
+		finished, err := childFinishedOnTrialController(ctx, c, monoVertexRollout, monoVertexRollout.GetUpgradingChildStatus(), trialController)
+		if err != nil {
+			return nil, err
+		}
+		if trialController != nil && !upgradingDiscontinued(monoVertexRollout.GetUpgradingChildStatus()) && child == nil && !finished {
 			hasPromoted, err := hasPromotedChild(ctx, monoVertexRollout, c)
 			if err != nil {
 				return nil, err
@@ -384,10 +413,26 @@ func memberFromRollout(kind, rolloutName string, upgrading *apiv1.UpgradingChild
 	}, true
 }
 
-// upgradingNamesLiveChild is true when status still names a child that is no longer the trial
-// (it was promoted or recycled). That rollout is not a current trial member.
-func upgradingNamesLiveChild(upgrading *apiv1.UpgradingChildStatus) bool {
-	return upgrading != nil && upgrading.Name != "" && !upgrading.Discontinued
+// childFinishedOnTrialController reports whether upgrading still names a child that has already
+// joined the current trial controller. That rollout is not a current trial member.
+// A named child bound to an older controller has not started this trial, so the rollout stays Unknown.
+// With no trial controller, any named non-discontinued child has finished its upgrade.
+func childFinishedOnTrialController(ctx context.Context, c client.Client, rollout ctlrcommon.RolloutObject, upgrading *apiv1.UpgradingChildStatus, trialController *unstructured.Unstructured) (bool, error) {
+	if upgrading == nil || upgrading.Name == "" || upgrading.Discontinued {
+		return false, nil
+	}
+	if trialController == nil {
+		return true, nil
+	}
+	instanceID, err := unstructuredInstanceID(trialController)
+	if err != nil {
+		return false, err
+	}
+	onInstance, err := childOnControllerInstance(ctx, c, rollout.GetRolloutObjectMeta().Namespace, upgrading.Name, rollout.GetChildGVK(), instanceID)
+	if err != nil {
+		return false, err
+	}
+	return onInstance, nil
 }
 
 func upgradingDiscontinued(upgrading *apiv1.UpgradingChildStatus) bool {

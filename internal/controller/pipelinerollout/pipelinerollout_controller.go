@@ -426,20 +426,21 @@ func (r *PipelineRolloutReconciler) reconcile(
 			if chainFailed {
 				// A new Pipeline stays Pending while the controller chain is failed. It is created on
 				// whichever controller is promoted once that chain succeeds, is reverted, or is force-promoted.
+				// Recyclable children are still cleaned up below.
 				numaLogger.Info("PipelineRollout is waiting for the failed controller chain to be resolved")
 				pipelineRollout.Status.MarkPending()
-				return common.DefaultRequeueDelay, nil, nil
+				requeueDelay = common.DefaultRequeueDelay
+			} else {
+				numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
+				pipelineRollout.Status.MarkPending()
+
+				if err = r.createPromotedPipeline(ctx, pipelineRollout, newPipelineDef); err != nil {
+					return 0, nil, err
+				}
+
+				pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 			}
-
-			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
-			pipelineRollout.Status.MarkPending()
-
-			if err = r.createPromotedPipeline(ctx, pipelineRollout, newPipelineDef); err != nil {
-				return 0, nil, err
-			}
-
-			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 
 		} else {
 
