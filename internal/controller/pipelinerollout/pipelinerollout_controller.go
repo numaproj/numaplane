@@ -403,44 +403,53 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Initial creation stays on the promoted ISBService, so a promoted Pipeline never uses a trial ISBService.
 	// Once that child exists, the desired definition uses the trial ISBService so Progressive can create a trial Pipeline.
 	requirePromotedISBService := len(promotedPipelines.Items) == 0
-	newPipelineDef, err := r.makeTargetPipelineDefinition(ctx, pipelineRollout, requirePromotedISBService)
-	if err != nil {
-		return 0, nil, err
-	}
 
 	requeueDelay := time.Duration(0)
-
 	var existingPipelineDef *unstructured.Unstructured
+	var newPipelineDef *unstructured.Unstructured
 
-	if newPipelineDef == nil {
+	// Check the failed chain before building a child definition. Building one allocates the next child
+	// name, so doing it on every wait would skip names (p2-0, p2-1, ...) until the chain resolves.
+	// This also covers a Pipeline whose ISBService does not exist yet: that definition is nil, and the
+	// Pipeline must still stay Pending for the same reason as the ISBService.
+	holdForFailedChain := false
+	if requirePromotedISBService {
+		chainFailed, err := progressive.ControllerChainFailed(ctx, r.client, pipelineRollout.Namespace)
+		if err != nil {
+			return 0, nil, err
+		}
+		if chainFailed {
+			numaLogger.Info("PipelineRollout is waiting for the failed controller chain to be resolved")
+			pipelineRollout.Status.MarkPending()
+			requeueDelay = common.DefaultRequeueDelay
+			holdForFailedChain = true
+		}
+	}
+
+	if !holdForFailedChain {
+		newPipelineDef, err = r.makeTargetPipelineDefinition(ctx, pipelineRollout, requirePromotedISBService)
+		if err != nil {
+			return 0, nil, err
+		}
+	}
+
+	// While the chain is failed, skip creation. Recyclable children are still cleaned up below.
+	if !holdForFailedChain && newPipelineDef == nil {
 		// we couldn't create the Pipeline definition: we need to check again later
 		requeueDelay = common.DefaultRequeueDelay
-	} else {
+	} else if newPipelineDef != nil {
 
 		if len(promotedPipelines.Items) == 0 {
 
-			chainFailed, err := progressive.ControllerChainFailed(ctx, r.client, pipelineRollout.Namespace)
-			if err != nil {
+			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
+			pipelineRollout.Status.MarkPending()
+
+			if err = r.createPromotedPipeline(ctx, pipelineRollout, newPipelineDef); err != nil {
 				return 0, nil, err
 			}
-			if chainFailed {
-				// A new Pipeline stays Pending while the controller chain is failed. It is created on
-				// whichever controller is promoted once that chain succeeds, is reverted, or is force-promoted.
-				// Recyclable children are still cleaned up below.
-				numaLogger.Info("PipelineRollout is waiting for the failed controller chain to be resolved")
-				pipelineRollout.Status.MarkPending()
-				requeueDelay = common.DefaultRequeueDelay
-			} else {
-				numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
-				pipelineRollout.Status.MarkPending()
 
-				if err = r.createPromotedPipeline(ctx, pipelineRollout, newPipelineDef); err != nil {
-					return 0, nil, err
-				}
-
-				pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
-			}
+			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 
 		} else {
 

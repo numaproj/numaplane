@@ -240,37 +240,47 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	// Initial creation stays on the promoted controller. Once that child exists, the desired
 	// definition includes the trial controller so a controller upgrade can start Progressive.
 	requirePromotedNumaflowController := len(promotedMonovertices.Items) == 0
-	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requirePromotedNumaflowController)
-	if err != nil {
-		return ctrl.Result{}, err
+
+	// Check the failed chain before building a child definition. Building one allocates the next
+	// child name, so doing it on every wait would skip names until the chain resolves.
+	holdForFailedChain := false
+	if requirePromotedNumaflowController {
+		chainFailed, err := progressive.ControllerChainFailed(ctx, r.client, monoVertexRollout.Namespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if chainFailed {
+			// A new MonoVertex stays Pending while the controller chain is failed. It is created on
+			// whichever controller is promoted once that chain succeeds, is reverted, or is force-promoted.
+			// Recyclable children are still cleaned up below.
+			numaLogger.Info("MonoVertexRollout is waiting for the failed controller chain to be resolved")
+			monoVertexRollout.Status.MarkPending()
+			requeueDelay = common.DefaultRequeueDelay
+			holdForFailedChain = true
+		}
+	}
+
+	var newMonoVertexDef *unstructured.Unstructured
+	if !holdForFailedChain {
+		newMonoVertexDef, err = r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requirePromotedNumaflowController)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	if newMonoVertexDef != nil {
 		if len(promotedMonovertices.Items) == 0 {
 
-			chainFailed, err := progressive.ControllerChainFailed(ctx, r.client, monoVertexRollout.Namespace)
-			if err != nil {
+			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, newMonoVertexDef.GetName())
+			monoVertexRollout.Status.MarkPending()
+
+			if err := r.createPromotedMonoVertex(ctx, monoVertexRollout, newMonoVertexDef); err != nil {
 				return ctrl.Result{}, err
 			}
-			if chainFailed {
-				// A new MonoVertex stays Pending while the controller chain is failed. It is created on
-				// whichever controller is promoted once that chain succeeds, is reverted, or is force-promoted.
-				// Recyclable children are still cleaned up below.
-				numaLogger.Info("MonoVertexRollout is waiting for the failed controller chain to be resolved")
-				monoVertexRollout.Status.MarkPending()
-				requeueDelay = common.DefaultRequeueDelay
-			} else {
-				numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, newMonoVertexDef.GetName())
-				monoVertexRollout.Status.MarkPending()
 
-				if err := r.createPromotedMonoVertex(ctx, monoVertexRollout, newMonoVertexDef); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(newMonoVertexDef.GetName())
-				monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
-				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
-			}
+			monoVertexRollout.Status.PromotedPodSelector = buildPromotedPodSelector(newMonoVertexDef.GetName())
+			monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
 
 		} else {
 			existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),
