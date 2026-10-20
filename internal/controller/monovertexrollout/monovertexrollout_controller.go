@@ -292,6 +292,15 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		}
 	}
 
+	// a trial monovertex bound to a "recyclable" NumaflowController is discontinued
+	discontinued, err := progressive.DiscontinueTrialOnRecyclableController(ctx, monoVertexRollout, r, r.client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error discontinuing trial monovertex on a recyclable NumaflowController: %w", err)
+	}
+	if discontinued {
+		requeueDelay = common.DefaultRequeueDelay
+	}
+
 	// clean up recyclable monovertices
 	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
 	if err != nil {

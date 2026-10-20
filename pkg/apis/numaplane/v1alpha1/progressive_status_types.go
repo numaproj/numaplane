@@ -169,12 +169,13 @@ func (ucs *UpgradingChildStatus) IsTrialWindowStartTimeSet() bool {
 }
 
 // CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.
-// It checks that the current time is after the AssessmentStartTime and that it hasn't already previously failed
-// (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
+// It checks that the current time is after the AssessmentStartTime and that this resource hasn't already previously failed
+// its own assessment (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
+// A failed chain assessment caused by another member does not stop this resource from being assessed.
 func (ucs *UpgradingChildStatus) CanAssess() bool {
 	return ucs != nil &&
 		ucs.BasicAssessmentStartTime != nil && time.Now().After(ucs.BasicAssessmentStartTime.Time) &&
-		ucs.AssessmentResult != AssessmentResultFailure
+		ucs.EffectiveResourceAssessment() != AssessmentResultFailure
 }
 
 // BasicAssessmentEndTimeArrived determines if the BasicAssessmentEndTime has been set and is in the past

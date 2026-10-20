@@ -329,6 +329,19 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
 
+	// a trial isbsvc bound to a "recyclable" NumaflowController is discontinued, and the Pipeline Rollouts are
+	// enqueued so their Pipelines using that isbsvc are marked "recyclable" as well
+	discontinued, err := progressive.DiscontinueTrialOnRecyclableController(ctx, isbServiceRollout, r, r.client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error discontinuing trial interstepbufferservice on a recyclable NumaflowController: %w", err)
+	}
+	if discontinued {
+		if err := r.enqueueAllPipelineROsForISBServiceRO(ctx, isbServiceRollout); err != nil {
+			return ctrl.Result{}, err
+		}
+		requeueDelay = common.DefaultRequeueDelay
+	}
+
 	// clean up recyclable interstepbufferservices
 	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
 	if err != nil {

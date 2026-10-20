@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -19,16 +19,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
-
-// trialMember is one current trial resource and its stored resource assessment.
-// Child is nil when the rollout belongs in the chain but has not created a trial child yet.
-type trialMember struct {
-	Kind        string
-	RolloutName string
-	ChildName   string
-	Assessment  apiv1.AssessmentResult
-	Child       *unstructured.Unstructured
-}
 
 // ChainPromoteAnnotationValue identifies the exact child the promotion annotation was written for.
 func ChainPromoteAnnotationValue(name, uid string) string {
@@ -63,13 +53,16 @@ func parseChainPromoteAnnotation(value string) (string, string, bool) {
 	return name, uid, true
 }
 
-// ControllerChainFailed reports whether the namespace has a trial NumaflowController whose
-// chain assessment is Failure. A new Pipeline, MonoVertex, or ISBService stays Pending until
-// that chain succeeds, is reverted, or is force-promoted.
+// ControllerChainFailed reports whether the namespace has a trial NumaflowController, in a
+// Progressive upgrade, whose chain assessment is Failure. A new Pipeline, MonoVertex, or
+// ISBService stays Pending until that chain succeeds, is reverted, or is force-promoted.
 func ControllerChainFailed(ctx context.Context, c client.Client, namespace string) (bool, error) {
 	nfcRollout, trialChild, err := findTrialController(ctx, c, namespace)
 	if err != nil || nfcRollout == nil || trialChild == nil {
 		return false, err
+	}
+	if nfcRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyProgressive {
+		return false, nil
 	}
 	upgrading := nfcRollout.GetUpgradingChildStatus()
 	if upgrading == nil || upgrading.Name != trialChild.GetName() || upgrading.Discontinued {
@@ -78,435 +71,157 @@ func ControllerChainFailed(ctx context.Context, c client.Client, namespace strin
 	return upgrading.ResourceChainAssessmentResult == apiv1.AssessmentResultFailure, nil
 }
 
-// StoredTrialResourceAssessments returns the stored resource assessment of each current trial member.
-// selfKind/selfName/selfResult override the caller's own rollout, which may have just saved a
-// resource assessment that is not in the API yet.
-// A discontinued trial is not a member. A rollout that has not started its trial is Unknown when a
-// trial controller (or, for a Pipeline, a trial ISBService it uses) is still in progress.
-func StoredTrialResourceAssessments(ctx context.Context, c client.Client, namespace, selfKind, selfName string, selfResult apiv1.AssessmentResult) ([]apiv1.AssessmentResult, error) {
-	members, err := currentTrialMembers(ctx, c, namespace)
-	if err != nil {
-		return nil, err
+// OutsideTrialChain reports whether a rollout takes no part in the current trial chain: its trial
+// was discontinued, or it has never created a child (a new rollout held Pending while the chain is failed).
+func OutsideTrialChain(ctx context.Context, c client.Client, rollout ctlrcommon.RolloutObject, upgrading *apiv1.UpgradingChildStatus) (bool, error) {
+	if upgrading != nil {
+		return upgrading.Discontinued, nil
 	}
-	results := make([]apiv1.AssessmentResult, 0, len(members)+1)
-	foundSelf := false
-	for _, member := range members {
-		if member.Kind == selfKind && member.RolloutName == selfName {
-			foundSelf = true
-			if selfResult != "" {
-				results = append(results, selfResult)
-				continue
-			}
-		}
-		results = append(results, member.Assessment)
-	}
-	if !foundSelf && selfResult != "" {
-		results = append(results, selfResult)
-	}
-	return results, nil
-}
-
-// AnnotateCurrentTrialChildren writes the chain-promote annotation onto live trial children
-// whose stored resource assessment is Success. chainMembers, when set, is the chain that just
-// succeeded; children outside that chain are left alone. A nil chainMembers means every current
-// Success member, which is the stored chain after a failed chain has fully recovered.
-// The value records that child's name and UID.
-func AnnotateCurrentTrialChildren(ctx context.Context, c client.Client, namespace string, chainMembers []apiv1.ResourceChainMemberStatus) error {
-	members, err := currentTrialMembers(ctx, c, namespace)
-	if err != nil {
-		return err
-	}
-	var allowed map[string]struct{}
-	if chainMembers != nil {
-		allowed = make(map[string]struct{}, len(chainMembers))
-		for _, chainMember := range chainMembers {
-			allowed[chainMember.Kind+"/"+chainMember.Name] = struct{}{}
-		}
-	}
-	for _, member := range members {
-		if member.Assessment != apiv1.AssessmentResultSuccess || member.Child == nil {
-			continue
-		}
-		if allowed != nil {
-			if _, ok := allowed[member.Kind+"/"+member.RolloutName]; !ok {
-				continue
-			}
-		}
-		value := ChainPromoteAnnotationValue(member.Child.GetName(), string(member.Child.GetUID()))
-		if member.Child.GetAnnotations()[common.AnnotationKeyChainPromote] == value {
-			continue
-		}
-		if err := kubernetes.SetAndPatchAnnotations(ctx, c, member.Child, map[string]string{
-			common.AnnotationKeyChainPromote: value,
-		}); err != nil {
-			return fmt.Errorf("annotating %s %s/%s for chain promotion: %w", member.Child.GetKind(), member.Child.GetNamespace(), member.Child.GetName(), err)
-		}
-	}
-	return nil
-}
-
-// StampForcePromoteChain sets the force-promote-chain label on every current trial child in the namespace.
-// Each rollout then promotes its own trial child through the normal promotion path.
-func StampForcePromoteChain(ctx context.Context, c client.Client, namespace string) error {
-	for _, gvk := range trialChildGVKs() {
-		children, err := kubernetes.ListResources(ctx, c, gvk, namespace, client.MatchingLabels{
-			common.LabelKeyUpgradeState: string(common.LabelValueUpgradeTrial),
-		})
-		if err != nil {
-			return fmt.Errorf("listing trial %s in namespace %q: %w", gvk.Kind, namespace, err)
-		}
-		for i := range children.Items {
-			child := &children.Items[i]
-			if child.GetLabels()[common.LabelKeyForcePromoteChain] == "true" {
-				continue
-			}
-			if err := kubernetes.SetAndPatchLabels(ctx, c, child, map[string]string{
-				common.LabelKeyForcePromoteChain: "true",
-			}); err != nil {
-				return fmt.Errorf("setting force-promote-chain on %s %s/%s: %w", child.GetKind(), child.GetNamespace(), child.GetName(), err)
-			}
-		}
-	}
-	return nil
-}
-
-// RemoveTrialDependentsOnInstance marks trial ISBService, Pipeline, and MonoVertex children bound
-// to instanceID recyclable and discontinues their Rollouts. They belonged to a trial
-// NumaflowController that is being discontinued. A dependent with no spec change of its own keeps
-// its promoted child; discontinuing the Rollout clears the progressive-failed condition, which
-// otherwise stays set until declareSuccess or Discontinue.
-func RemoveTrialDependentsOnInstance(ctx context.Context, c client.Client, namespace, instanceID string) error {
-	if instanceID == "" {
-		return nil
-	}
-	numaLogger := logger.FromContext(ctx)
-	for _, gvk := range []schema.GroupVersionKind{
-		numaflowv1.ISBGroupVersionKind,
-		numaflowv1.PipelineGroupVersionKind,
-		numaflowv1.MonoVertexGroupVersionKind,
-	} {
-		children, err := kubernetes.ListResources(ctx, c, gvk, namespace, client.MatchingLabels{
-			common.LabelKeyUpgradeState: string(common.LabelValueUpgradeTrial),
-		})
-		if err != nil {
-			return fmt.Errorf("listing trial %s in namespace %q: %w", gvk.Kind, namespace, err)
-		}
-		reason := common.LabelValueDiscontinueProgressive
-		for i := range children.Items {
-			child := &children.Items[i]
-			if numaflowtypes.ControllerInstanceIDFromResource(child) != instanceID {
-				continue
-			}
-			numaLogger.WithValues("kind", gvk.Kind, "name", child.GetName(), "instanceID", instanceID).
-				Debug("removing trial dependent of discontinued NumaflowController")
-			// Update the Rollout before removing the trial label. A failed status update can be
-			// retried only while this child is still listed as a trial.
-			if err := discontinueDependentRollout(ctx, c, gvk.Kind, child); err != nil {
-				return err
-			}
-			if err := ctlrcommon.MarkRecyclable(ctx, c, &reason, child); err != nil {
-				return fmt.Errorf("removing trial %s %s/%s bound to controller instance %q: %w", gvk.Kind, namespace, child.GetName(), instanceID, err)
-			}
-		}
-	}
-	return nil
-}
-
-// discontinueDependentRollout applies the same status update as Discontinue to the Rollout that
-// owns child. The progressive-failed condition is cleared here because this Rollout's own
-// reconcile does not run Discontinue when only the controller trial was reverted.
-func discontinueDependentRollout(ctx context.Context, c client.Client, childKind string, child *unstructured.Unstructured) error {
-	parentName := child.GetLabels()[common.LabelKeyParentRollout]
-	if parentName == "" {
-		return fmt.Errorf("trial %s %s/%s has no parent rollout label", childKind, child.GetNamespace(), child.GetName())
-	}
-	key := client.ObjectKey{Namespace: child.GetNamespace(), Name: parentName}
-
-	var rollout ProgressiveRolloutObject
-	var statusObject client.Object
-	rolloutKind := ""
-	switch childKind {
-	case common.NumaflowISBServiceKind:
-		obj := &apiv1.ISBServiceRollout{}
-		if err := c.Get(ctx, key, obj); err != nil {
-			return fmt.Errorf("getting ISBServiceRollout %s/%s for discontinued trial %s: %w", child.GetNamespace(), parentName, child.GetName(), err)
-		}
-		rollout, statusObject, rolloutKind = obj, obj, "ISBServiceRollout"
-	case common.NumaflowPipelineKind:
-		obj := &apiv1.PipelineRollout{}
-		if err := c.Get(ctx, key, obj); err != nil {
-			return fmt.Errorf("getting PipelineRollout %s/%s for discontinued trial %s: %w", child.GetNamespace(), parentName, child.GetName(), err)
-		}
-		rollout, statusObject, rolloutKind = obj, obj, "PipelineRollout"
-	case common.NumaflowMonoVertexKind:
-		obj := &apiv1.MonoVertexRollout{}
-		if err := c.Get(ctx, key, obj); err != nil {
-			return fmt.Errorf("getting MonoVertexRollout %s/%s for discontinued trial %s: %w", child.GetNamespace(), parentName, child.GetName(), err)
-		}
-		rollout, statusObject, rolloutKind = obj, obj, "MonoVertexRollout"
-	default:
-		return fmt.Errorf("trial %s %s/%s is not an ISBService, Pipeline, or MonoVertex", childKind, child.GetNamespace(), child.GetName())
-	}
-
-	if rollout.GetUpgradingChildStatus() != nil {
-		UpdateUpgradingChildStatus(rollout, func(status *apiv1.UpgradingChildStatus) {
-			status.Discontinued = true
-		})
-	}
-	generation := rollout.GetRolloutObjectMeta().Generation
-	rollout.GetRolloutStatus().MarkProgressiveUpgradeSucceeded("Discontinued", generation)
-	rollout.GetRolloutStatus().MarkDeployed(generation)
-	if err := c.Status().Update(ctx, statusObject); err != nil {
-		return fmt.Errorf("discontinuing %s %s/%s after removing its trial child: %w", rolloutKind, child.GetNamespace(), parentName, err)
-	}
-	return nil
-}
-
-// ReopenFailedResourceAssessment starts a new resource-health window after a sticky basic failure
-// so a resource that becomes healthy can save Resource Assessment Success.
-func ReopenFailedResourceAssessment(rollout ProgressiveRolloutObject) {
-	UpdateUpgradingChildStatus(rollout, func(status *apiv1.UpgradingChildStatus) {
-		if status.BasicAssessmentResult != apiv1.AssessmentResultFailure {
-			return
-		}
-		now := metav1.NewTime(time.Now())
-		status.BasicAssessmentResult = ""
-		status.BasicAssessmentEndTime = nil
-		status.TrialWindowStartTime = nil
-		status.BasicAssessmentStartTime = &now
-		status.FailureReasons = nil
-	})
-}
-
-func currentTrialMembers(ctx context.Context, c client.Client, namespace string) ([]trialMember, error) {
-	var members []trialMember
-
-	nfcRollout, trialController, err := findTrialController(ctx, c, namespace)
-	if err != nil {
-		return nil, err
-	}
-	if nfcRollout != nil && trialController != nil {
-		if member, include := memberFromRollout("NumaflowControllerRollout", nfcRollout.Name, nfcRollout.GetUpgradingChildStatus(), trialController); include {
-			members = append(members, member)
-		}
-	}
-
-	var isbRollouts apiv1.ISBServiceRolloutList
-	if err := c.List(ctx, &isbRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
-		return nil, fmt.Errorf("listing ISBServiceRollouts in namespace %q: %w", namespace, err)
-	}
-	for i := range isbRollouts.Items {
-		isbRollout := &isbRollouts.Items[i]
-		child, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, isbRollout, common.LabelValueUpgradeTrial, nil, false, c)
-		if err != nil {
-			return nil, err
-		}
-		if member, include := memberFromRollout("ISBServiceRollout", isbRollout.Name, isbRollout.GetUpgradingChildStatus(), child); include {
-			members = append(members, member)
-			continue
-		}
-		// An existing ISBService that has not started its trial yet blocks promotion.
-		// A brand-new rollout with no promoted child is Pending and is not a chain member.
-		finished, err := childFinishedOnTrialController(ctx, c, isbRollout, isbRollout.GetUpgradingChildStatus(), trialController)
-		if err != nil {
-			return nil, err
-		}
-		if trialController != nil && !upgradingDiscontinued(isbRollout.GetUpgradingChildStatus()) && child == nil && !finished {
-			hasPromoted, err := hasPromotedChild(ctx, isbRollout, c)
-			if err != nil {
-				return nil, err
-			}
-			if hasPromoted {
-				members = append(members, trialMember{Kind: "ISBServiceRollout", RolloutName: isbRollout.Name, Assessment: apiv1.AssessmentResultUnknown})
-			}
-		}
-	}
-
-	var pipelineRollouts apiv1.PipelineRolloutList
-	if err := c.List(ctx, &pipelineRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
-		return nil, fmt.Errorf("listing PipelineRollouts in namespace %q: %w", namespace, err)
-	}
-	for i := range pipelineRollouts.Items {
-		pipelineRollout := &pipelineRollouts.Items[i]
-		child, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradeTrial, nil, false, c)
-		if err != nil {
-			return nil, err
-		}
-		if member, include := memberFromRollout("PipelineRollout", pipelineRollout.Name, pipelineRollout.GetUpgradingChildStatus(), child); include {
-			members = append(members, member)
-			continue
-		}
-		finished, err := childFinishedOnTrialController(ctx, c, pipelineRollout, pipelineRollout.GetUpgradingChildStatus(), trialController)
-		if err != nil {
-			return nil, err
-		}
-		if upgradingDiscontinued(pipelineRollout.GetUpgradingChildStatus()) || child != nil || finished {
-			continue
-		}
-		hasPromoted, err := hasPromotedChild(ctx, pipelineRollout, c)
-		if err != nil {
-			return nil, err
-		}
-		if !hasPromoted {
-			// New PipelineRollout held Pending during a failed chain. It is created after the chain resolves.
-			continue
-		}
-		blocked, err := pipelineAwaitingTrial(ctx, c, namespace, pipelineRollout, trialController != nil)
-		if err != nil {
-			return nil, err
-		}
-		if blocked {
-			members = append(members, trialMember{Kind: "PipelineRollout", RolloutName: pipelineRollout.Name, Assessment: apiv1.AssessmentResultUnknown})
-		}
-	}
-
-	var monoVertexRollouts apiv1.MonoVertexRolloutList
-	if err := c.List(ctx, &monoVertexRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
-		return nil, fmt.Errorf("listing MonoVertexRollouts in namespace %q: %w", namespace, err)
-	}
-	for i := range monoVertexRollouts.Items {
-		monoVertexRollout := &monoVertexRollouts.Items[i]
-		child, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, monoVertexRollout, common.LabelValueUpgradeTrial, nil, false, c)
-		if err != nil {
-			return nil, err
-		}
-		if member, include := memberFromRollout("MonoVertexRollout", monoVertexRollout.Name, monoVertexRollout.GetUpgradingChildStatus(), child); include {
-			members = append(members, member)
-			continue
-		}
-		finished, err := childFinishedOnTrialController(ctx, c, monoVertexRollout, monoVertexRollout.GetUpgradingChildStatus(), trialController)
-		if err != nil {
-			return nil, err
-		}
-		if trialController != nil && !upgradingDiscontinued(monoVertexRollout.GetUpgradingChildStatus()) && child == nil && !finished {
-			hasPromoted, err := hasPromotedChild(ctx, monoVertexRollout, c)
-			if err != nil {
-				return nil, err
-			}
-			if hasPromoted {
-				members = append(members, trialMember{Kind: "MonoVertexRollout", RolloutName: monoVertexRollout.Name, Assessment: apiv1.AssessmentResultUnknown})
-			}
-		}
-	}
-	return members, nil
-}
-
-// memberFromRollout includes a rollout that still has a live trial child.
-// The stored resource assessment counts only when the rollout status still names that child.
-func memberFromRollout(kind, rolloutName string, upgrading *apiv1.UpgradingChildStatus, trialChild *unstructured.Unstructured) (trialMember, bool) {
-	if upgrading != nil && upgrading.Discontinued {
-		return trialMember{}, false
-	}
-	if trialChild == nil {
-		return trialMember{}, false
-	}
-	assessment := apiv1.AssessmentResultUnknown
-	if upgrading != nil && upgrading.Name == trialChild.GetName() {
-		assessment = upgrading.EffectiveResourceAssessment()
-	}
-	return trialMember{
-		Kind:        kind,
-		RolloutName: rolloutName,
-		ChildName:   trialChild.GetName(),
-		Assessment:  assessment,
-		Child:       trialChild,
-	}, true
-}
-
-// childFinishedOnTrialController reports whether upgrading still names a child that has already
-// joined the current trial. That rollout is not a current trial member.
-// A named child bound to an older controller has not started this trial, so the rollout stays Unknown.
-// With no trial controller, a Pipeline is finished only when its named child already uses the trial
-// ISBService. Otherwise pipelineAwaitingTrial can record it as Unknown.
-func childFinishedOnTrialController(ctx context.Context, c client.Client, rollout ctlrcommon.RolloutObject, upgrading *apiv1.UpgradingChildStatus, trialController *unstructured.Unstructured) (bool, error) {
-	if upgrading == nil || upgrading.Name == "" || upgrading.Discontinued {
-		return false, nil
-	}
-	if trialController == nil {
-		pipelineRollout, ok := rollout.(*apiv1.PipelineRollout)
-		if !ok {
-			return true, nil
-		}
-		return pipelineFinishedOnTrialISB(ctx, c, pipelineRollout)
-	}
-	instanceID, err := unstructuredInstanceID(trialController)
-	if err != nil {
-		return false, err
-	}
-	onInstance, err := childOnControllerInstance(ctx, c, rollout.GetRolloutObjectMeta().Namespace, upgrading.Name, rollout.GetChildGVK(), instanceID)
-	if err != nil {
-		return false, err
-	}
-	return onInstance, nil
-}
-
-// pipelineFinishedOnTrialISB reports whether the Pipeline's named child already uses a trial ISBService.
-// A child still bound to the promoted ISBService has not started that trial.
-func pipelineFinishedOnTrialISB(ctx context.Context, c client.Client, pipelineRollout *apiv1.PipelineRollout) (bool, error) {
-	upgrading := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
-	if upgrading == nil || upgrading.InterStepBufferServiceName == "" {
-		return false, nil
-	}
-	trialISBs, err := kubernetes.ListResources(ctx, c, numaflowv1.ISBGroupVersionKind, pipelineRollout.Namespace, client.MatchingLabels{
-		common.LabelKeyUpgradeState: string(common.LabelValueUpgradeTrial),
-	})
-	if err != nil {
-		return false, fmt.Errorf("listing trial ISBServices in namespace %q: %w", pipelineRollout.Namespace, err)
-	}
-	for i := range trialISBs.Items {
-		if trialISBs.Items[i].GetName() == upgrading.InterStepBufferServiceName {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func upgradingDiscontinued(upgrading *apiv1.UpgradingChildStatus) bool {
-	return upgrading != nil && upgrading.Discontinued
-}
-
-func hasPromotedChild(ctx context.Context, rollout ctlrcommon.RolloutObject, c client.Client) (bool, error) {
 	promoted, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rollout, common.LabelValueUpgradePromoted, nil, false, c)
 	if err != nil {
 		return false, err
 	}
-	return len(promoted.Items) > 0, nil
+	return len(promoted.Items) == 0, nil
 }
 
-// pipelineAwaitingTrial reports whether a Pipeline with no trial child still belongs in the chain.
-// A trial controller means every Pipeline must move onto it. Otherwise a Pipeline that selects a
-// rollout which currently has a trial ISBService must move onto that ISBService.
-func pipelineAwaitingTrial(ctx context.Context, c client.Client, namespace string, pipelineRollout *apiv1.PipelineRollout, trialController bool) (bool, error) {
-	if trialController {
-		return true, nil
-	}
-	isbs, err := kubernetes.ListResources(ctx, c, numaflowv1.ISBGroupVersionKind, namespace, client.MatchingLabels{
-		common.LabelKeyUpgradeState: string(common.LabelValueUpgradeTrial),
-	})
-	if err != nil {
-		return false, fmt.Errorf("listing trial ISBServices in namespace %q: %w", namespace, err)
-	}
-	for i := range isbs.Items {
-		parent := isbs.Items[i].GetLabels()[common.LabelKeyParentRollout]
-		if parent == "" {
+// AnnotateCurrentTrialChildren writes the chain-promote annotation onto the trial child of each
+// chain member whose resource assessment is Success. The value records that child's name and UID.
+// A member whose named child is no longer its rollout's trial is skipped.
+func AnnotateCurrentTrialChildren(ctx context.Context, c client.Client, namespace string, members []apiv1.ResourceChainMemberStatus) error {
+	for _, member := range members {
+		if member.AssessmentResult != apiv1.AssessmentResultSuccess {
 			continue
 		}
-		uses, err := pipelineRolloutUsesISB(pipelineRollout, parent)
+		child, err := memberTrialChild(ctx, c, namespace, member)
+		if err != nil {
+			return err
+		}
+		if child == nil {
+			continue
+		}
+		value := ChainPromoteAnnotationValue(child.GetName(), string(child.GetUID()))
+		if child.GetAnnotations()[common.AnnotationKeyChainPromote] == value {
+			continue
+		}
+		if err := kubernetes.SetAndPatchAnnotations(ctx, c, child, map[string]string{
+			common.AnnotationKeyChainPromote: value,
+		}); err != nil {
+			return fmt.Errorf("annotating %s %s/%s for chain promotion: %w", child.GetKind(), namespace, child.GetName(), err)
+		}
+	}
+	return nil
+}
+
+// StampForcePromoteChain sets the force-promote-chain label on the trial child of each chain member.
+// While a trial NumaflowController exists, a member's trial that is not bound to it is not part of
+// that trial stack and is left alone. Each rollout then promotes its own trial child through the
+// normal promotion path.
+func StampForcePromoteChain(ctx context.Context, c client.Client, namespace string, members []apiv1.ResourceChainMemberStatus) error {
+	_, trialController, err := findTrialController(ctx, c, namespace)
+	if err != nil {
+		return err
+	}
+	trialInstanceID := ""
+	if trialController != nil {
+		if trialInstanceID, err = unstructuredInstanceID(trialController); err != nil {
+			return err
+		}
+	}
+	for _, member := range members {
+		child, err := memberTrialChild(ctx, c, namespace, member)
+		if err != nil {
+			return err
+		}
+		if child == nil || child.GetLabels()[common.LabelKeyForcePromoteChain] == "true" {
+			continue
+		}
+		if trialInstanceID != "" && member.Kind != "NumaflowControllerRollout" &&
+			numaflowtypes.ControllerInstanceIDFromResource(child) != trialInstanceID {
+			continue
+		}
+		if err := kubernetes.SetAndPatchLabels(ctx, c, child, map[string]string{
+			common.LabelKeyForcePromoteChain: "true",
+		}); err != nil {
+			return fmt.Errorf("setting force-promote-chain on %s %s/%s: %w", child.GetKind(), namespace, child.GetName(), err)
+		}
+	}
+	return nil
+}
+
+// DiscontinueTrialOnRecyclableController discontinues this rollout's trial when that trial is bound
+// to a NumaflowController marked recyclable, such as a reverted trial controller. It returns true
+// if the trial was discontinued. A promoted child is left alone: it moves to the newly promoted
+// controller through a normal progressive upgrade.
+func DiscontinueTrialOnRecyclableController(ctx context.Context, rolloutObject ProgressiveRolloutObject, controller progressiveController, c client.Client) (bool, error) {
+	trialChildren, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeTrial, nil, false, c)
+	if err != nil || len(trialChildren.Items) == 0 {
+		return false, err
+	}
+	namespace := rolloutObject.GetRolloutObjectMeta().Namespace
+	recyclableControllers, err := kubernetes.ListResources(ctx, c, apiv1.NumaflowControllerGroupVersionKind, namespace, client.MatchingLabels{
+		common.LabelKeyUpgradeState: string(common.LabelValueUpgradeRecyclable),
+	})
+	if err != nil {
+		return false, fmt.Errorf("listing recyclable NumaflowControllers in namespace %q: %w", namespace, err)
+	}
+	recyclableInstances := map[string]struct{}{}
+	for i := range recyclableControllers.Items {
+		instanceID, err := unstructuredInstanceID(&recyclableControllers.Items[i])
 		if err != nil {
 			return false, err
 		}
-		if uses {
-			return true, nil
+		if instanceID != "" {
+			recyclableInstances[instanceID] = struct{}{}
 		}
+	}
+	for i := range trialChildren.Items {
+		child := &trialChildren.Items[i]
+		if _, recyclable := recyclableInstances[numaflowtypes.ControllerInstanceIDFromResource(child)]; !recyclable {
+			continue
+		}
+		logger.FromContext(ctx).WithValues("child", child.GetName()).
+			Debug("discontinuing trial bound to a recyclable NumaflowController")
+		if err := Discontinue(ctx, rolloutObject, controller, c); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
 	return false, nil
 }
 
-func trialChildGVKs() []schema.GroupVersionKind {
-	return []schema.GroupVersionKind{
-		apiv1.NumaflowControllerGroupVersionKind,
-		numaflowv1.ISBGroupVersionKind,
-		numaflowv1.PipelineGroupVersionKind,
-		numaflowv1.MonoVertexGroupVersionKind,
+// memberTrialChild returns the member's named child while it is still that rollout's trial, otherwise nil.
+func memberTrialChild(ctx context.Context, c client.Client, namespace string, member apiv1.ResourceChainMemberStatus) (*unstructured.Unstructured, error) {
+	if member.ChildName == "" {
+		return nil, nil
 	}
+	gvk, ok := childGVKForRolloutKind(member.Kind)
+	if !ok {
+		return nil, nil
+	}
+	child, err := kubernetes.GetResource(ctx, c, gvk, types.NamespacedName{Namespace: namespace, Name: member.ChildName})
+	if apierrors.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting %s %s/%s: %w", gvk.Kind, namespace, member.ChildName, err)
+	}
+	labels := child.GetLabels()
+	if labels[common.LabelKeyUpgradeState] != string(common.LabelValueUpgradeTrial) || labels[common.LabelKeyParentRollout] != member.Name {
+		return nil, nil
+	}
+	return child, nil
+}
+
+func childGVKForRolloutKind(rolloutKind string) (schema.GroupVersionKind, bool) {
+	switch rolloutKind {
+	case "NumaflowControllerRollout":
+		return apiv1.NumaflowControllerGroupVersionKind, true
+	case "ISBServiceRollout":
+		return numaflowv1.ISBGroupVersionKind, true
+	case "PipelineRollout":
+		return numaflowv1.PipelineGroupVersionKind, true
+	case "MonoVertexRollout":
+		return numaflowv1.MonoVertexGroupVersionKind, true
+	}
+	return schema.GroupVersionKind{}, false
 }

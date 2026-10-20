@@ -321,8 +321,9 @@ func getChildStatusAssessmentSchedule(
 	return schedule, nil
 }
 
-// promoteForcePromoteChain stamps force-promote-chain on every current trial child and promotes this child.
-// The other children promote when their own reconcilers see the label.
+// promoteForcePromoteChain stamps force-promote-chain on the trial child of every member of this
+// child's chain and promotes this child. The other children promote when their own reconcilers see
+// the label, and each of them stamps its own chain in turn.
 func promoteForcePromoteChain(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
@@ -333,9 +334,14 @@ func promoteForcePromoteChain(
 	c client.Client,
 ) (bool, bool, time.Duration, error) {
 	numaLogger := logger.FromContext(ctx)
-	if err := StampForcePromoteChain(ctx, c, existingUpgradingChildDef.GetNamespace()); err != nil {
+	_, chainMembers, _, err := controller.AssessResourceChain(ctx, rolloutObject, existingUpgradingChildDef)
+	if err != nil {
 		return false, false, 0, err
 	}
+	if err := StampForcePromoteChain(ctx, c, existingUpgradingChildDef.GetNamespace(), chainMembers); err != nil {
+		return false, false, 0, err
+	}
+	childStatus.ResourceChainMembers = chainMembers
 	childStatus.ForcedSuccess = true
 	childStatus.ForcedSuccessReason = string(SkipProgressiveAssessmentReasonForcePromoteChain)
 	numaLogger.Debug("Upgrading child force-promote-chain")
@@ -444,66 +450,18 @@ func processUpgradingChild(
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentStartTime")
 	}
 
-	// Assess the upgrading child only if within the assessment time window and if the chain has not previously failed.
+	// Assess the upgrading child only if within the assessment time window and if this resource has not previously failed.
 	// Otherwise, use the previous promotion decision. A status from before the chain was recorded separately
 	// stores that decision only in AssessmentResult.
-	// Once the chain has failed, resource health is still refreshed and saved. The chain itself is not
-	// walked again unless every stored resource assessment is Success.
+	// A resource that is healthy while another member has failed keeps walking the chain, which reads the
+	// stored resource assessments of the other members, so the chain succeeds once every member is Success.
 	assessment := childStatus.ResourceChainAssessmentResult
 	if assessment == "" {
 		assessment = childStatus.AssessmentResult
 	}
 	var chainFailureReasons []string
 	var chainMembers []apiv1.ResourceChainMemberStatus
-	if chainAlreadyFailed {
-		resourceAssessment := childStatus.EffectiveResourceAssessment()
-		if resourceAssessment != apiv1.AssessmentResultSuccess {
-			if skipAssessment {
-				resourceAssessment = apiv1.AssessmentResultSuccess
-				_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
-					status.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
-					status.ForcedSuccess = true
-					status.ForcedSuccessReason = string(reason)
-				})
-			} else {
-				if childStatus.BasicAssessmentResult == apiv1.AssessmentResultFailure {
-					ReopenFailedResourceAssessment(rolloutObject)
-					childStatus = rolloutObject.GetUpgradingChildStatus()
-				}
-				if childStatus.BasicAssessmentStartTime != nil && time.Now().After(childStatus.BasicAssessmentStartTime.Time) {
-					var assessErr error
-					resourceAssessment, _, assessErr = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, assessmentSchedule)
-					if assessErr != nil {
-						return false, false, 0, assessErr
-					}
-					_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
-						status.ResourceAssessmentResult = resourceAssessment
-					})
-				}
-			}
-		}
-		if resourceAssessment != apiv1.AssessmentResultSuccess {
-			_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
-				status.AssessmentResult = apiv1.AssessmentResultFailure
-				status.ResourceChainAssessmentResult = apiv1.AssessmentResultFailure
-			})
-			return false, false, assessmentSchedule.Interval, nil
-		}
-
-		stored, err := StoredTrialResourceAssessments(ctx, c, existingUpgradingChildDef.GetNamespace(), rolloutObject.GetRolloutGVK().Kind, rolloutObject.GetRolloutObjectMeta().Name, resourceAssessment)
-		if err != nil {
-			return false, false, 0, err
-		}
-		if CombineAssessmentResults(stored) != apiv1.AssessmentResultSuccess {
-			numaLogger.Debug("stored resource assessments are not all Success; chain assessment stays Failure")
-			_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
-				status.AssessmentResult = apiv1.AssessmentResultFailure
-				status.ResourceChainAssessmentResult = apiv1.AssessmentResultFailure
-			})
-			return false, false, assessmentSchedule.Interval, nil
-		}
-		assessment = apiv1.AssessmentResultSuccess
-	} else if skipAssessment {
+	if skipAssessment {
 		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.ResourceAssessmentResult = apiv1.AssessmentResultSuccess
 			status.ForcedSuccess = true
@@ -579,7 +537,9 @@ func processUpgradingChild(
 			return true, true, common.DefaultRequeueDelay, nil
 		}
 
-		return true, true, 0, nil
+		// A failed chain is not final: it can still succeed once every member is Success, and a trial
+		// on a reverted controller is replaced on a later reconcile.
+		return true, true, assessmentSchedule.Interval, nil
 
 	case apiv1.AssessmentResultSuccess:
 		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef)
@@ -592,7 +552,7 @@ func processUpgradingChild(
 			}
 		})
 		// Stamp the exact trial children so the rest of the chain promotes without another health check.
-		if err := AnnotateCurrentTrialChildren(ctx, c, existingUpgradingChildDef.GetNamespace(), chainMembers); err != nil {
+		if err := AnnotateCurrentTrialChildren(ctx, c, existingUpgradingChildDef.GetNamespace(), childStatus.ResourceChainMembers); err != nil {
 			return false, false, 0, err
 		}
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
@@ -1245,19 +1205,6 @@ func Discontinue(ctx context.Context,
 
 	for _, child := range upgradingChildren {
 		reason := common.LabelValueDiscontinueProgressive
-		// Trial workloads bound to a discontinued trial controller are removed and their Rollouts
-		// are discontinued. Later reconciles create new trials on the controller that remains
-		// promoted, using the latest Rollout specs. The controller stays a trial until that
-		// cleanup succeeds, so a failed cleanup can be retried.
-		if rolloutObject.GetChildGVK().Kind == "NumaflowController" {
-			instanceID, _, err := unstructured.NestedString(child.Object, "spec", "instanceID")
-			if err != nil {
-				return fmt.Errorf("failed to read spec.instanceID of NumaflowController %s/%s: %w", child.GetNamespace(), child.GetName(), err)
-			}
-			if err := RemoveTrialDependentsOnInstance(ctx, c, child.GetNamespace(), instanceID); err != nil {
-				return err
-			}
-		}
 		err = ctlrcommon.MarkRecyclable(ctx, c, &reason, &child)
 		if err != nil {
 			return fmt.Errorf("failed to Discontinue progressive upgrade: error marking child %s recyclable: %v", child.GetName(), err)
