@@ -1445,6 +1445,39 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 			expectedDiffFromPromoted:  true, // because we need to use a different ISBService, we consider the "target spec"to be different from the one we have
 		},
 		{
+			name:                  "reverted to the Promoted spec while the trial Pipeline is already on the trial ISBService",
+			upgradingISBSvcExists: true,
+			rolloutSpec:           createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":    "my-pipeline-0",
+				"extra-label": "extra-value",
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-0",
+				"extra-annotation": "extra-value",
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-1"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":    "my-pipeline-1",
+				"extra-label": "extra-value",
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-1",
+				"extra-annotation": "extra-value",
+			},
+			expectedDiffFromUpgrading: true,  // image was reverted
+			expectedDiffFromPromoted:  false, // Rollout spec matches the promoted Pipeline and the trial is already on the trial ISBService
+		},
+		{
 			name:        "different from Promoted only (different image)- rollout matches Upgrading",
 			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
 			rolloutLabels: map[string]string{
