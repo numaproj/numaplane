@@ -116,6 +116,13 @@ func PipelinesOnTrialISB(ctx context.Context, c client.Client, namespace, isbsvc
 		if pipelineRollout.Name == excludeRolloutName {
 			continue
 		}
+		outside, err := OutsideTrialChain(ctx, c, pipelineRollout, pipelineRollout.GetUpgradingChildStatus())
+		if err != nil {
+			return nil, nil, err
+		}
+		if outside {
+			continue
+		}
 		upgrading := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
 		onThisISB := upgrading != nil && upgrading.InterStepBufferServiceName == isbsvcName
 		usesParent := false
@@ -174,6 +181,7 @@ func pipelineRolloutUsesISB(pipelineRollout *apiv1.PipelineRollout, isbRolloutNa
 // rollouts in the namespace, excluding the rollout identified by excludeKind and excludeName.
 // present is false when there is no trial controller.
 // A rollout whose upgrading child is not bound to that controller instance contributes Unknown.
+// A rollout outside the trial chain (see OutsideTrialChain) is not a member.
 // A child already promoted onto the instance still counts, so a later workload is not blocked after an earlier one succeeds.
 func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace, excludeKind, excludeName string) ([]apiv1.ResourceChainMemberStatus, []string, bool, error) {
 	_, trialChild, err := findTrialController(ctx, c, namespace)
@@ -190,9 +198,13 @@ func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace,
 
 	var members []apiv1.ResourceChainMemberStatus
 	var reasons []string
-	add := func(kind, rolloutName string, gvk schema.GroupVersionKind, upgrading *apiv1.UpgradingChildStatus) error {
+	add := func(kind string, rollout ctlrcommon.RolloutObject, gvk schema.GroupVersionKind, upgrading *apiv1.UpgradingChildStatus) error {
+		rolloutName := rollout.GetRolloutObjectMeta().Name
 		if kind == excludeKind && rolloutName == excludeName {
 			return nil
+		}
+		if outside, err := OutsideTrialChain(ctx, c, rollout, upgrading); err != nil || outside {
+			return err
 		}
 		if upgrading == nil || upgrading.Name == "" {
 			members, reasons = appendMember(members, reasons, NewChainMember(kind, rolloutName, "", apiv1.AssessmentResultUnknown), "")
@@ -218,7 +230,7 @@ func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace,
 	}
 	for i := range isbRollouts.Items {
 		isbRollout := &isbRollouts.Items[i]
-		if err := add("ISBServiceRollout", isbRollout.Name, numaflowv1.ISBGroupVersionKind, isbRollout.GetUpgradingChildStatus()); err != nil {
+		if err := add("ISBServiceRollout", isbRollout, numaflowv1.ISBGroupVersionKind, isbRollout.GetUpgradingChildStatus()); err != nil {
 			return nil, nil, true, err
 		}
 	}
@@ -228,7 +240,7 @@ func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace,
 	}
 	for i := range pipelineRollouts.Items {
 		pipelineRollout := &pipelineRollouts.Items[i]
-		if err := add("PipelineRollout", pipelineRollout.Name, numaflowv1.PipelineGroupVersionKind, pipelineRollout.GetUpgradingChildStatus()); err != nil {
+		if err := add("PipelineRollout", pipelineRollout, numaflowv1.PipelineGroupVersionKind, pipelineRollout.GetUpgradingChildStatus()); err != nil {
 			return nil, nil, true, err
 		}
 	}
@@ -238,7 +250,7 @@ func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace,
 	}
 	for i := range monoVertexRollouts.Items {
 		monoVertexRollout := &monoVertexRollouts.Items[i]
-		if err := add("MonoVertexRollout", monoVertexRollout.Name, numaflowv1.MonoVertexGroupVersionKind, monoVertexRollout.GetUpgradingChildStatus()); err != nil {
+		if err := add("MonoVertexRollout", monoVertexRollout, numaflowv1.MonoVertexGroupVersionKind, monoVertexRollout.GetUpgradingChildStatus()); err != nil {
 			return nil, nil, true, err
 		}
 	}

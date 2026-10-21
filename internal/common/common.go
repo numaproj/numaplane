@@ -168,8 +168,18 @@ const (
 	// LabelKeyNumaflowMonoVertexName is the label key used to identify the pod with a specific monovertex vertex
 	LabelKeyNumaflowMonoVertexName = KeyNumaflowPrefix + "mono-vertex-name"
 
-	// LabelKeyForcePromote is the label key used to force promote the upgrading child during a progressive upgrade
+	// LabelKeyForcePromote is the label key used to force promote the upgrading child during a progressive upgrade.
+	// It is ignored while that child's chain assessment is Failure. Use LabelKeyForcePromoteChain instead.
 	LabelKeyForcePromote = KeyNumaplanePrefix + "force-promote"
+
+	// LabelKeyForcePromoteChain promotes every current trial resource in the chain.
+	// Set it on any trial child. It is the override for a chain that is still unhealthy.
+	LabelKeyForcePromoteChain = KeyNumaplanePrefix + "force-promote-chain"
+
+	// AnnotationKeyChainPromote marks an exact trial child (name/UID) whose stored resource
+	// assessments are all Success, so that child can be promoted without another health check.
+	// Value format is "<child-name>/<uid>".
+	AnnotationKeyChainPromote = KeyNumaplanePrefix + "chain-promote"
 
 	// AnnotationKeyNumaflowInstanceID is the annotation passed to Numaflow Controller so it knows whether it should reconcile the resource
 	AnnotationKeyNumaflowInstanceID = KeyNumaflowPrefix + "instance"

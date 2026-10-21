@@ -240,9 +240,32 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	// Initial creation stays on the promoted controller. Once that child exists, the desired
 	// definition includes the trial controller so a controller upgrade can start Progressive.
 	requirePromotedNumaflowController := len(promotedMonovertices.Items) == 0
-	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requirePromotedNumaflowController)
-	if err != nil {
-		return ctrl.Result{}, err
+
+	// Check the failed chain before building a child definition. Building one allocates the next
+	// child name, so doing it on every wait would skip names until the chain resolves.
+	holdForFailedChain := false
+	if requirePromotedNumaflowController {
+		chainFailed, err := progressive.ControllerChainFailed(ctx, r.client, monoVertexRollout.Namespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if chainFailed {
+			// A new MonoVertex stays Pending while the controller chain is failed. It is created on
+			// whichever controller is promoted once that chain succeeds, is reverted, or is force-promoted.
+			// Recyclable children are still cleaned up below.
+			numaLogger.Info("MonoVertexRollout is waiting for the failed controller chain to be resolved")
+			monoVertexRollout.Status.MarkPending()
+			requeueDelay = common.DefaultRequeueDelay
+			holdForFailedChain = true
+		}
+	}
+
+	var newMonoVertexDef *unstructured.Unstructured
+	if !holdForFailedChain {
+		newMonoVertexDef, err = r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout, requirePromotedNumaflowController)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	if newMonoVertexDef != nil {
@@ -279,10 +302,13 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		}
 	}
 
-	// clean up recyclable monovertices
-	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	// clean up recyclable monovertices. A trial bound to a recyclable NumaflowController is discontinued here.
+	allDeleted, discontinued, err := r.garbageCollectChildren(ctx, monoVertexRollout)
 	if err != nil {
 		return ctrl.Result{}, err
+	}
+	if discontinued {
+		requeueDelay = common.DefaultRequeueDelay
 	}
 
 	// if we still have monovertices that need deleting, or if we're in the middle of an upgrade strategy, then requeue
@@ -298,6 +324,19 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// garbageCollectChildren discontinues a trial MonoVertex bound to a recyclable NumaflowController, then
+// deletes recyclable children. This sits with cleanup the same way PipelineRollout.garbageCollectChildren
+// marks a Pipeline recyclable when its ISBService is recyclable.
+// Returns whether every recyclable child is deleted, and whether a trial was discontinued.
+func (r *MonoVertexRolloutReconciler) garbageCollectChildren(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) (bool, bool, error) {
+	discontinued, err := progressive.DiscontinueTrialOnRecyclableController(ctx, monoVertexRollout, r, r.client)
+	if err != nil {
+		return false, false, fmt.Errorf("error discontinuing trial monovertex on a recyclable NumaflowController: %w", err)
+	}
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	return allDeleted, discontinued, err
 }
 
 // return a requeue delay greater than 0 if requeue is needed, and return error if any (if returning an error, we will requeue anyway)

@@ -91,7 +91,8 @@ type progressiveController interface {
 
 	// SkipProgressiveAssessment reports whether this resource's own health should be treated as Success
 	// without running its health check. Promotion still waits for AssessResourceChain.
-	// The ArgoCD force-promote label is separate and overrides that chain.
+	// The ArgoCD force-promote label overrides that chain, except while the chain assessment is Failure.
+	// force-promote-chain promotes every trial member of a failed chain.
 	SkipProgressiveAssessment(ctx context.Context, rolloutObject ProgressiveRolloutObject) (bool, SkipProgressiveAssessmentReason, error)
 
 	UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject)
@@ -125,6 +126,7 @@ type SkipProgressiveAssessmentReason string
 const (
 	SkipProgressiveAssessmentReasonUndefined              SkipProgressiveAssessmentReason = ""
 	SkipProgressiveAssessmentReasonForcePromote           SkipProgressiveAssessmentReason = "force_promote"
+	SkipProgressiveAssessmentReasonForcePromoteChain      SkipProgressiveAssessmentReason = "force_promote_chain"
 	SkipProgressiveAssessmentReasonProgressiveUnsupported SkipProgressiveAssessmentReason = "progressive_unsupported"
 	SkipProgressiveAssessmentReasonNoDataIngestion        SkipProgressiveAssessmentReason = "no_data_ingestion"
 	SkipProgressiveAssessmentReasonRolloutConfiguration   SkipProgressiveAssessmentReason = "rollout_configuration"
@@ -176,7 +178,7 @@ func ProcessResource(
 		return true, false, 0, err
 	}
 
-	// There's already an Upgrading child, now process it
+	// There's already an Upgrading child, now process it.
 
 	// get UpgradingChildStatus and reset it if necessary
 	childStatus, err := getUpgradingChildStatus(ctx, rolloutObject, currentUpgradingChildDef)
@@ -193,6 +195,14 @@ func ProcessResource(
 		} else {
 			return false, false, 0, err
 		}
+	}
+
+	// Honor a chain-promote annotation while this child is still the current trial, and promote it
+	// through the normal path. A spec change is applied only after that, on the next reconcile,
+	// which creates the replacement trial. Replacing first would mark this child recyclable and
+	// skip Rollout status, the progressive condition, and cleanup.
+	if ChainPromoteApplies(currentUpgradingChildDef, childStatus.Name) {
+		return processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	}
 
 	// determine if we need to replace the Upgrading child with a newer one
@@ -311,6 +321,40 @@ func getChildStatusAssessmentSchedule(
 	return schedule, nil
 }
 
+// promoteForcePromoteChain stamps force-promote-chain on the trial child of every member of this
+// child's chain and promotes this child. The other children promote when their own reconcilers see
+// the label, and each of them stamps its own chain in turn.
+func promoteForcePromoteChain(
+	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+	controller progressiveController,
+	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
+	childStatus *apiv1.UpgradingChildStatus,
+	assessmentSchedule config.AssessmentSchedule,
+	c client.Client,
+) (bool, bool, time.Duration, error) {
+	numaLogger := logger.FromContext(ctx)
+	_, chainMembers, _, err := controller.AssessResourceChain(ctx, rolloutObject, existingUpgradingChildDef)
+	if err != nil {
+		return false, false, 0, err
+	}
+	if err := StampForcePromoteChain(ctx, c, existingUpgradingChildDef.GetNamespace(), chainMembers); err != nil {
+		return false, false, 0, err
+	}
+	childStatus.ResourceChainMembers = chainMembers
+	childStatus.ForcedSuccess = true
+	childStatus.ForcedSuccessReason = string(SkipProgressiveAssessmentReasonForcePromoteChain)
+	numaLogger.Debug("Upgrading child force-promote-chain")
+	if err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef); err != nil {
+		return false, false, 0, err
+	}
+	done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+	if err != nil || done {
+		return done, false, 0, err
+	}
+	return done, false, assessmentSchedule.Interval, err
+}
+
 /*
 processUpgradingChild handles the assessment and potential update of a child resource during a progressive upgrade.
 It evaluates the current status of the upgrading child, determines if an assessment is needed, and processes the
@@ -347,6 +391,20 @@ func processUpgradingChild(
 
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 
+	// A chain-promote annotation means every stored resource assessment was already Success.
+	// Promote this exact child without running health checks again. declareSuccess records the
+	// assessment results after the child is relabeled.
+	if ChainPromoteApplies(existingUpgradingChildDef, childStatus.Name) {
+		if err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef); err != nil {
+			return false, false, 0, err
+		}
+		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+		if err != nil || done {
+			return done, false, 0, err
+		}
+		return done, false, assessmentSchedule.Interval, err
+	}
+
 	// Paused, scaled to zero, or Progressive strategy forcePromote: this resource's own health is Success.
 	// The chain assessment still decides whether it is promoted.
 	skipAssessment, reason, err := controller.SkipProgressiveAssessment(ctx, rolloutObject)
@@ -354,9 +412,16 @@ func processUpgradingChild(
 		return false, false, 0, err
 	}
 
-	// The ArgoCD UI "force promote" label overrides the chain assessment and promotes this child now.
+	// Force Promote Chain promotes every trial member, including ones that are still unhealthy.
+	if _, forceChain := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromoteChain]; forceChain {
+		return promoteForcePromoteChain(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, assessmentSchedule, c)
+	}
+
+	// Individual force promote is disabled while the chain assessment is Failure.
+	// The ArgoCD UI "force promote" label otherwise overrides the chain assessment and promotes this child now.
 	_, forcePromote := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromote]
-	if forcePromote {
+	chainAlreadyFailed := childStatus.ResourceChainAssessmentResult == apiv1.AssessmentResultFailure
+	if forcePromote && !chainAlreadyFailed {
 		childStatus.ForcedSuccess = true
 		childStatus.ForcedSuccessReason = string(SkipProgressiveAssessmentReasonForcePromote)
 
@@ -385,9 +450,11 @@ func processUpgradingChild(
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentStartTime")
 	}
 
-	// Assess the upgrading child only if within the assessment time window and if the chain has not previously failed.
+	// Assess the upgrading child only if within the assessment time window and if this resource has not previously failed.
 	// Otherwise, use the previous promotion decision. A status from before the chain was recorded separately
 	// stores that decision only in AssessmentResult.
+	// A resource that is healthy while another member has failed keeps walking the chain, which reads the
+	// stored resource assessments of the other members, so the chain succeeds once every member is Success.
 	assessment := childStatus.ResourceChainAssessmentResult
 	if assessment == "" {
 		assessment = childStatus.AssessmentResult
@@ -470,7 +537,9 @@ func processUpgradingChild(
 			return true, true, common.DefaultRequeueDelay, nil
 		}
 
-		return true, true, 0, nil
+		// A failed chain is not final: it can still succeed once every member is Success, and a trial
+		// on a reverted controller is replaced on a later reconcile.
+		return true, true, assessmentSchedule.Interval, nil
 
 	case apiv1.AssessmentResultSuccess:
 		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef)
@@ -482,6 +551,10 @@ func processUpgradingChild(
 				status.ResourceChainMembers = chainMembers
 			}
 		})
+		// Stamp the exact trial children so the rest of the chain promotes without another health check.
+		if err := AnnotateCurrentTrialChildren(ctx, c, existingUpgradingChildDef.GetNamespace(), childStatus.ResourceChainMembers); err != nil {
+			return false, false, 0, err
+		}
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, false, 0, err

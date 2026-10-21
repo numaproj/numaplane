@@ -35,6 +35,33 @@ type fakeProgressiveController struct {
 func (fpc fakeProgressiveController) UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject) {
 }
 
+// specChangeController reports that the rollout spec differs from the current children.
+// ProcessResource must promote an annotated trial before asking this controller to replace it.
+type specChangeController struct {
+	fakeProgressiveController
+	replacementAttempted bool
+}
+
+func (s *specChangeController) CheckForDifferences(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, childDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}, existingChildUpgradeState common.UpgradeState) (bool, error) {
+	s.replacementAttempted = true
+	return true, nil
+}
+
+func (s *specChangeController) CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject, existingChildUpgradeState common.UpgradeState) (bool, error) {
+	s.replacementAttempted = true
+	return true, nil
+}
+
+func (s *specChangeController) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error) {
+	s.replacementAttempted = true
+	return nil, assert.AnError
+}
+
+func (s *specChangeController) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
+	s.replacementAttempted = true
+	return 0, assert.AnError
+}
+
 func (fpc fakeProgressiveController) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error) {
 	return nil, nil
 }
@@ -210,7 +237,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			existingUpgradingChildDef: createMonoVertex("test-failure"),
 			expectedDone:              true,
 			expectedFailed:            true,
-			expectedRequeueDelay:      0,
+			expectedRequeueDelay:      10 * time.Second,
 			expectedError:             nil,
 		},
 		{
@@ -300,7 +327,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			existingUpgradingChildDef: createMonoVertex("test-analysis-failure"),
 			expectedDone:              true,
 			expectedFailed:            true,
-			expectedRequeueDelay:      0,
+			expectedRequeueDelay:      10 * time.Second,
 			expectedError:             nil,
 		},
 	}
@@ -898,6 +925,186 @@ func TestControllerInstanceBindingDiffers(t *testing.T) {
 		existing.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "same"})
 		assert.False(t, controllerInstanceBindingDiffers(desired, existing))
 	})
+}
+
+func TestProcessResourcePromotesAnnotatedTrialBeforeReplacement(t *testing.T) {
+	restConfig, numaflowClientSet, k8sClient, _, err := commontest.PrepareK8SEnvironment()
+	require.NoError(t, err)
+	require.NoError(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	require.NoError(t, err)
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	require.NoError(t, config.GetConfigManagerInstance().LoadAllConfigs(func(error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2")))
+
+	ctx := context.Background()
+	namespace := ctlrcommon.DefaultTestNamespace
+	require.NoError(t, numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}))
+
+	promoted := createMonoVertex("mv-promoted")
+	promoted.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+	trial := createMonoVertex("mv-trial")
+	trial.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
+	recyclable := createMonoVertex("mv-old")
+	recyclable.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeRecyclable)
+
+	createdPromoted, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, promoted, metav1.CreateOptions{})
+	require.NoError(t, err)
+	createdTrial, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, trial, metav1.CreateOptions{})
+	require.NoError(t, err)
+	createdOld, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, recyclable, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	if createdTrial.Annotations == nil {
+		createdTrial.Annotations = map[string]string{}
+	}
+	createdTrial.Annotations[common.AnnotationKeyChainPromote] = ChainPromoteAnnotationValue(createdTrial.Name, string(createdTrial.UID))
+	_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Update(ctx, createdTrial, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	if createdOld.Annotations == nil {
+		createdOld.Annotations = map[string]string{}
+	}
+	createdOld.Annotations[common.AnnotationKeyChainPromote] = ChainPromoteAnnotationValue(createdOld.Name, string(createdOld.UID))
+	_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Update(ctx, createdOld, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	rollout := setMonoVertexProgressiveStatus(
+		&apiv1.MonoVertexRollout{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       ctlrcommon.DefaultTestMonoVertexRolloutName,
+				Namespace:  namespace,
+				Generation: 3,
+			},
+		},
+		&apiv1.UpgradingMonoVertexStatus{
+			UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+				UpgradingChildStatus: apiv1.UpgradingChildStatus{
+					Name:                          createdTrial.Name,
+					AssessmentResult:              apiv1.AssessmentResultFailure,
+					ResourceAssessmentResult:      apiv1.AssessmentResultFailure,
+					ResourceChainAssessmentResult: apiv1.AssessmentResultFailure,
+					InitializationComplete:        true,
+				},
+			},
+		},
+		&apiv1.PromotedMonoVertexStatus{
+			PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+				PromotedChildStatus: apiv1.PromotedChildStatus{Name: createdPromoted.Name},
+			},
+		},
+	)
+	rollout.Status.MarkProgressiveUpgradeFailed("progressive upgrade failed", rollout.Generation)
+
+	promotedUn := monoVertexToUnstruct(createdPromoted)
+	promotedUn.SetGroupVersionKind(numaflowv1.MonoVertexGroupVersionKind)
+
+	controller := &specChangeController{}
+	done, failed, delay, err := ProcessResource(ctx, rollout, promotedUn, true, controller, k8sClient)
+	require.NoError(t, err)
+	assert.True(t, done)
+	assert.False(t, failed)
+	assert.Zero(t, delay)
+	assert.False(t, controller.replacementAttempted, "a spec change must wait until the annotated trial is promoted")
+
+	gotTrial, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, createdTrial.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradePromoted), gotTrial.Labels[common.LabelKeyUpgradeState])
+	assert.Equal(t, string(common.LabelValueResultStateSucceeded), gotTrial.Labels[common.LabelKeyProgressiveResultState])
+
+	gotPromoted, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, createdPromoted.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradeRecyclable), gotPromoted.Labels[common.LabelKeyUpgradeState])
+	assert.Equal(t, string(common.LabelValueProgressiveSuccess), gotPromoted.Labels[common.LabelKeyUpgradeStateReason])
+
+	gotOld, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, createdOld.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradeRecyclable), gotOld.Labels[common.LabelKeyUpgradeState])
+	_, promotedByLabel := gotOld.Labels[common.LabelKeyUpgradeStateReason]
+	assert.False(t, promotedByLabel)
+
+	list, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).List(ctx, metav1.ListOptions{})
+	require.NoError(t, err)
+	assert.Len(t, list.Items, 3)
+
+	childStatus := rollout.GetUpgradingChildStatus()
+	require.NotNil(t, childStatus)
+	assert.Equal(t, apiv1.AssessmentResultSuccess, childStatus.AssessmentResult)
+	assert.Equal(t, apiv1.AssessmentResultSuccess, childStatus.ResourceAssessmentResult)
+	assert.Equal(t, apiv1.AssessmentResultSuccess, childStatus.ResourceChainAssessmentResult)
+	condition := rollout.Status.GetCondition(apiv1.ConditionProgressiveUpgradeSucceeded)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
+	assert.Contains(t, condition.Message, createdTrial.Name)
+	assert.Equal(t, apiv1.PhaseDeployed, rollout.Status.Phase)
+}
+
+func TestDiscontinueTrialOnRecyclableController(t *testing.T) {
+	restConfig, numaflowClientSet, k8sClient, _, err := commontest.PrepareK8SEnvironment()
+	require.NoError(t, err)
+	require.NoError(t, kubernetes.SetClientSets(restConfig))
+
+	ctx := context.Background()
+	namespace := ctlrcommon.DefaultTestNamespace
+	require.NoError(t, numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}))
+	require.NoError(t, k8sClient.DeleteAllOf(ctx, &apiv1.NumaflowController{}, client.InNamespace(namespace)))
+
+	// createMonoVertex binds both children to controller instance "1".
+	promoted := createMonoVertex("mv-promoted")
+	promoted.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+	trial := createMonoVertex("mv-trial")
+	trial.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
+	_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, promoted, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, trial, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	rollout := setMonoVertexProgressiveStatus(
+		&apiv1.MonoVertexRollout{
+			ObjectMeta: metav1.ObjectMeta{Name: ctlrcommon.DefaultTestMonoVertexRolloutName, Namespace: namespace, Generation: 3},
+		},
+		&apiv1.UpgradingMonoVertexStatus{
+			UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+				UpgradingChildStatus: apiv1.UpgradingChildStatus{
+					Name:                          trial.Name,
+					ResourceAssessmentResult:      apiv1.AssessmentResultSuccess,
+					ResourceChainAssessmentResult: apiv1.AssessmentResultFailure,
+					InitializationComplete:        true,
+				},
+			},
+		},
+		nil,
+	)
+	rollout.Status.MarkProgressiveUpgradeFailed("progressive upgrade failed", rollout.Generation)
+
+	// A recyclable controller on another instance leaves the trial alone.
+	require.NoError(t, k8sClient.Create(ctx, ctlrcommon.CreateTestNumaflowController(namespace, "controller", "controller-0", common.LabelValueUpgradeRecyclable, "0")))
+	discontinued, err := DiscontinueTrialOnRecyclableController(ctx, rollout, fakeProgressiveController{}, k8sClient)
+	require.NoError(t, err)
+	assert.False(t, discontinued)
+	gotTrial, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, trial.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradeTrial), gotTrial.Labels[common.LabelKeyUpgradeState])
+
+	// The trial controller is reverted: the trial bound to it is discontinued, the promoted child stays.
+	require.NoError(t, k8sClient.Create(ctx, ctlrcommon.CreateTestNumaflowController(namespace, "controller", "controller-1", common.LabelValueUpgradeRecyclable, "1")))
+	discontinued, err = DiscontinueTrialOnRecyclableController(ctx, rollout, fakeProgressiveController{}, k8sClient)
+	require.NoError(t, err)
+	assert.True(t, discontinued)
+
+	gotTrial, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, trial.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradeRecyclable), gotTrial.Labels[common.LabelKeyUpgradeState])
+	assert.Equal(t, string(common.LabelValueDiscontinueProgressive), gotTrial.Labels[common.LabelKeyUpgradeStateReason])
+	gotPromoted, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, promoted.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradePromoted), gotPromoted.Labels[common.LabelKeyUpgradeState])
+
+	assert.True(t, rollout.GetUpgradingChildStatus().Discontinued)
+	condition := rollout.Status.GetCondition(apiv1.ConditionProgressiveUpgradeSucceeded)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
+	assert.Equal(t, apiv1.PhaseDeployed, rollout.Status.Phase)
 }
 
 func TestApplyDesiredControllerInstanceAnnotation(t *testing.T) {

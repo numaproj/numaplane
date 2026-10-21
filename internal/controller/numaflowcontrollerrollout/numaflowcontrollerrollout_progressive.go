@@ -277,6 +277,15 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 		upgradingStatus *apiv1.UpgradingChildStatus
 	}
 	var dependents []dependent
+	// A discontinued or Pending rollout is not part of this controller's trial chain.
+	addDependent := func(kind string, rollout ctlrcommon.RolloutObject, childGVK schema.GroupVersionKind, upgradingStatus *apiv1.UpgradingChildStatus) error {
+		outside, err := progressive.OutsideTrialChain(ctx, r.client, rollout, upgradingStatus)
+		if err != nil || outside {
+			return err
+		}
+		dependents = append(dependents, dependent{kind, rollout.GetRolloutObjectMeta().Name, childGVK, upgradingStatus})
+		return nil
+	}
 
 	var isbServiceRollouts apiv1.ISBServiceRolloutList
 	if err := r.client.List(ctx, &isbServiceRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
@@ -284,7 +293,9 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 	}
 	for i := range isbServiceRollouts.Items {
 		isbServiceRollout := &isbServiceRollouts.Items[i]
-		dependents = append(dependents, dependent{"ISBServiceRollout", isbServiceRollout.Name, numaflowv1.ISBGroupVersionKind, isbServiceRollout.GetUpgradingChildStatus()})
+		if err := addDependent("ISBServiceRollout", isbServiceRollout, numaflowv1.ISBGroupVersionKind, isbServiceRollout.GetUpgradingChildStatus()); err != nil {
+			return nil, nil, err
+		}
 	}
 	var pipelineRollouts apiv1.PipelineRolloutList
 	if err := r.client.List(ctx, &pipelineRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
@@ -292,7 +303,9 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 	}
 	for i := range pipelineRollouts.Items {
 		pipelineRollout := &pipelineRollouts.Items[i]
-		dependents = append(dependents, dependent{"PipelineRollout", pipelineRollout.Name, numaflowv1.PipelineGroupVersionKind, pipelineRollout.GetUpgradingChildStatus()})
+		if err := addDependent("PipelineRollout", pipelineRollout, numaflowv1.PipelineGroupVersionKind, pipelineRollout.GetUpgradingChildStatus()); err != nil {
+			return nil, nil, err
+		}
 	}
 	var monoVertexRollouts apiv1.MonoVertexRolloutList
 	if err := r.client.List(ctx, &monoVertexRollouts, &client.ListOptions{Namespace: namespace}); err != nil {
@@ -300,7 +313,9 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 	}
 	for i := range monoVertexRollouts.Items {
 		monoVertexRollout := &monoVertexRollouts.Items[i]
-		dependents = append(dependents, dependent{"MonoVertexRollout", monoVertexRollout.Name, numaflowv1.MonoVertexGroupVersionKind, monoVertexRollout.GetUpgradingChildStatus()})
+		if err := addDependent("MonoVertexRollout", monoVertexRollout, numaflowv1.MonoVertexGroupVersionKind, monoVertexRollout.GetUpgradingChildStatus()); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	if len(dependents) == 0 {
