@@ -9,7 +9,7 @@ spec:
     #  assessmentSchedule: "10,200,60,10"
     analysis:
       templates:
-      - templateName: pipeline-template
+      - templateName: pipeline-no-critical-errors
         clusterScope: false
   riders: # can be defined here for resources that need to be deployed per-Pipeline or per-Vertex
 
@@ -57,55 +57,64 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  name: pipeline-template
+  name: pipeline-no-critical-errors
   namespace: example-namespace
+  labels:
+    used_by: numaplane
 spec:
   args:
-  - name: upgrading-pipeline-name
-  - name: pipeline-namespace
-  - name: interval
-    value: 60s
-  - name: success-limit
-    value: "4"
-  - name: failure-limit
-    value: "6"
+    - name: upgrading-pipeline-name
+    - name: pipeline-namespace
+    # Shared by metric interval, initialDelay, and the PromQL increase() lookback.
+    # 60s spans ~2 Prometheus scrapes at the default 30s interval; matches UBC production config.
+    - name: interval
+      value: 60s
+    - name: success-limit
+      value: "3"
+    - name: no-critical-errors-failure-limit
+      value: "1"
+    - name: acknowledged-messages-failure-limit
+      value: "3"
   metrics:
-  - consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+  - name: no-critical-errors
+    consecutiveSuccessLimit: '{{args.success-limit}}'
+    failureLimit: '{{args.no-critical-errors-failure-limit}}'
     interval: '{{args.interval}}'
-    name: in
+    # Wait one evaluation interval before the first query so increase() has a full lookback window.
+    initialDelay: '{{args.interval}}'
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
-        query: (vector(1) and on() ((sum(numaflow_forwarder_read_total{namespace="{{args.pipeline-namespace}}",
-          pipeline="{{args.upgrading-pipeline-name}}", vertex="in"}) or vector(0))
-          == 0)) or (vector(1) and on() ((sum(numaflow_forwarder_ack_total{namespace="{{args.pipeline-namespace}}",
-          pipeline="{{args.upgrading-pipeline-name}}", vertex="in"}) or vector(0))
-          > 0)) or vector(0)
+        # Numaflow >= 1.8.0 (forwarder_critical_error_total, numaflow#3154).
+        # Pass when no critical errors (EOT, UDF crash, etc.) occurred on any vertex in the lookback window.
+        # absent() treats assets with no traffic / no counter yet as healthy (fallback on older Numaflow).
+        query: |
+          (
+            sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}"}[{{args.interval}}])) == 0
+          )
+          or
+          (
+            absent(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}"})
+          )
     successCondition: len(result) > 0 && result[0] > 0
-  - consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+  - name: acknowledged-messages
+    consecutiveSuccessLimit: '{{args.success-limit}}'
+    failureLimit: '{{args.acknowledged-messages-failure-limit}}'
     interval: '{{args.interval}}'
-    name: cat
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
-        query: (vector(1) and on() ((sum(numaflow_forwarder_read_total{namespace="{{args.pipeline-namespace}}",
-          pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"})
-          or vector(0)) == 0)) or (vector(1) and on() ((sum(numaflow_forwarder_ack_total{namespace="{{args.pipeline-namespace}}",
-          pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"})
-          or vector(0)) > 0)) or vector(0)
-    successCondition: len(result) > 0 && result[0] > 0
-  - consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
-    interval: '{{args.interval}}'
-    name: out
-    provider:
-      prometheus:
-        address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
-        query: (vector(1) and on() ((sum(numaflow_forwarder_read_total{namespace="{{args.pipeline-namespace}}",
-          pipeline="{{args.upgrading-pipeline-name}}", vertex="out"}) or vector(0))
-          == 0)) or (vector(1) and on() ((sum(numaflow_forwarder_ack_total{namespace="{{args.pipeline-namespace}}",
-          pipeline="{{args.upgrading-pipeline-name}}", vertex="out"}) or vector(0))
-          > 0)) or vector(0)
+        # Legacy read/ack check; provides validation on Numaflow < 1.8 where the critical-error metric is absent.
+        # Pass when no vertex has reads without acks. Unlike a pipeline-wide sum(ack) > 0, a stuck sink still fails
+        # when an upstream vertex has already acknowledged.
+        query: |
+          absent(
+            (
+              sum by (vertex) (forwarder_read_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}"}) > 0
+            )
+            unless
+            (
+              sum by (vertex) (forwarder_ack_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}"}) > 0
+            )
+          )
     successCondition: len(result) > 0 && result[0] > 0
