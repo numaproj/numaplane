@@ -611,40 +611,7 @@ func IsUpgradeReplacementRequired(
 		return false, false, err
 	}
 
-	// The desired child carries the trial stack's ISBService and controller instance, so it does not match
-	// the promoted child while that upgrade is in progress even after the user reverts this Rollout's own spec.
-	// That revert discontinues the trial when the trial is already on the current trial stack. A binding that
-	// still has to move (a new ISBService, a new controller) keeps the replacement.
-	if differentFromPromoted && sameTrialBinding(newUpgradingChildDef, existingUpgradingChildDef) {
-		rolloutDiffersFromPromoted, err := controller.CheckForDifferencesWithRolloutDef(ctx, existingPromotedChildDef, rolloutObject, common.LabelValueUpgradePromoted)
-		if err != nil {
-			return false, false, err
-		}
-		if !rolloutDiffersFromPromoted {
-			differentFromPromoted = false
-		}
-	}
-
 	return differentFromExistingUpgrading, differentFromPromoted, nil
-}
-
-// sameTrialBinding reports whether the desired child is already on the same controller instance and,
-// for a Pipeline, the same ISBService as the current trial child.
-func sameTrialBinding(desired, existing *unstructured.Unstructured) bool {
-	if desired == nil || existing == nil {
-		return false
-	}
-	if instanceAnnotation(desired) != instanceAnnotation(existing) {
-		return false
-	}
-	desiredISB, _, _ := unstructured.NestedString(desired.Object, "spec", "interStepBufferServiceName")
-	existingISB, _, _ := unstructured.NestedString(existing.Object, "spec", "interStepBufferServiceName")
-	if desiredISB != existingISB {
-		return false
-	}
-	desiredInstanceID, _, _ := unstructured.NestedString(desired.Object, "spec", "instanceID")
-	existingInstanceID, _, _ := unstructured.NestedString(existing.Object, "spec", "instanceID")
-	return desiredInstanceID == existingInstanceID
 }
 
 // checkForUpgradeReplacement checks to see if we need to replace the current Upgrading child one with a new one because the spec has changed,

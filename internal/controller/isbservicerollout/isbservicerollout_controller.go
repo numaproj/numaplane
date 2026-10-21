@@ -329,23 +329,14 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
 
-	// a trial isbsvc bound to a "recyclable" NumaflowController is discontinued, and the Pipeline Rollouts are
-	// enqueued so their Pipelines using that isbsvc are marked "recyclable" as well
-	discontinued, err := progressive.DiscontinueTrialOnRecyclableController(ctx, isbServiceRollout, r, r.client)
+	// clean up recyclable interstepbufferservices. A trial bound to a recyclable NumaflowController is
+	// discontinued here, the same way Pipeline garbage collection marks Pipelines on a recyclable ISBService.
+	allDeleted, discontinued, err := r.garbageCollectChildren(ctx, isbServiceRollout)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error discontinuing trial interstepbufferservice on a recyclable NumaflowController: %w", err)
+		return ctrl.Result{}, err
 	}
 	if discontinued {
-		if err := r.enqueueAllPipelineROsForISBServiceRO(ctx, isbServiceRollout); err != nil {
-			return ctrl.Result{}, err
-		}
 		requeueDelay = common.DefaultRequeueDelay
-	}
-
-	// clean up recyclable interstepbufferservices
-	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
 	}
 
 	// if we still have interstepbufferservices that need deleting, or if we're in the middle of an upgrade strategy, then requeue
@@ -693,6 +684,28 @@ func (r *ISBServiceRolloutReconciler) enqueueAllPipelineROsForChildISBSvc(ctx co
 		pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.GetNamespace(), Name: pipelineRollout})
 	}
 	return nil
+}
+
+// garbageCollectChildren discontinues a trial ISBService bound to a recyclable NumaflowController, then
+// deletes recyclable children. This sits with cleanup the same way PipelineRollout.garbageCollectChildren
+// marks a Pipeline recyclable when its ISBService is recyclable. Pipeline Rollouts are enqueued so their
+// Pipelines on this ISBService are marked recyclable too.
+// Returns whether every recyclable child is deleted, and whether a trial was discontinued.
+func (r *ISBServiceRolloutReconciler) garbageCollectChildren(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) (bool, bool, error) {
+	discontinued, err := progressive.DiscontinueTrialOnRecyclableController(ctx, isbServiceRollout, r, r.client)
+	if err != nil {
+		return false, false, fmt.Errorf("error discontinuing trial interstepbufferservice on a recyclable NumaflowController: %w", err)
+	}
+	if discontinued {
+		if err := r.enqueueAllPipelineROsForISBServiceRO(ctx, isbServiceRollout); err != nil {
+			return false, true, err
+		}
+	}
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	if err != nil {
+		return false, discontinued, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
+	}
+	return allDeleted, discontinued, nil
 }
 
 // enqueue all of the PipelineRollouts which are specified to use this ISBServiceRollout
