@@ -203,53 +203,58 @@ var (
 	}
 )
 
-func pipelineAnalysisTemplateSpec() argov1alpha1.AnalysisTemplateSpec {
+// pipelineAnalysisTemplateSpec builds one critical-error metric and one read/ack metric per vertex.
+// The read/ack query is the original per-vertex check. Prometheus scrapes unprefixed forwarder_* names;
+// the sample template keeps the numaflow_forwarder_* names it was tested with.
+// Ack failureLimit is 3 so three 60s failures fit the e2e assessment window. The sample keeps failure-limit 6.
+func pipelineAnalysisTemplateSpec(vertices ...string) argov1alpha1.AnalysisTemplateSpec {
+	metrics := make([]argov1alpha1.Metric, 0, len(vertices)*2)
+	for _, vertex := range vertices {
+		metrics = append(metrics, pipelineCriticalErrorMetric(vertex), pipelineAckMetric(vertex))
+	}
 	return argov1alpha1.AnalysisTemplateSpec{
-		Metrics: []argov1alpha1.Metric{
-			{
-				Name:                    "no-critical-errors",
-				FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
-				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
-				InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
-				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
-				Provider: argov1alpha1.MetricProvider{
-					Prometheus: &argov1alpha1.PrometheusMetric{
-						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
-						Query: `
+		Metrics: metrics,
+		Args:    analysisTemplateArgs,
+	}
+}
+
+func pipelineCriticalErrorMetric(vertex string) argov1alpha1.Metric {
+	return argov1alpha1.Metric{
+		Name:                    vertex + "-no-critical-errors",
+		FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
+		Interval:                argov1alpha1.DurationString(analysisMetricInterval),
+		InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
+		ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
+		Provider: argov1alpha1.MetricProvider{
+			Prometheus: &argov1alpha1.PrometheusMetric{
+				Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
+				Query: fmt.Sprintf(`
 (
-  sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}"}[{{args.interval}}])) == 0
+  sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}[{{args.interval}}])) == 0
 )
 OR
 (
-  absent(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}"})
-)`,
-					},
-				},
-				SuccessCondition: "len(result) > 0 && result[0] > 0",
-			},
-			{
-				Name:                    "acknowledged-messages",
-				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
-				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
-				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
-				Provider: argov1alpha1.MetricProvider{
-					Prometheus: &argov1alpha1.PrometheusMetric{
-						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
-						Query: `absent(
-(
-  sum by (vertex) (forwarder_read_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}"}) > 0
-)
-unless
-(
-  sum by (vertex) (forwarder_ack_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}"}) > 0
-)
-)`,
-					},
-				},
-				SuccessCondition: "len(result) > 0 && result[0] > 0",
+  absent(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"})
+)`, vertex, vertex),
 			},
 		},
-		Args: analysisTemplateArgs,
+		SuccessCondition: "len(result) > 0 && result[0] > 0",
+	}
+}
+
+func pipelineAckMetric(vertex string) argov1alpha1.Metric {
+	return argov1alpha1.Metric{
+		Name:                    vertex,
+		FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
+		Interval:                argov1alpha1.DurationString(analysisMetricInterval),
+		ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
+		Provider: argov1alpha1.MetricProvider{
+			Prometheus: &argov1alpha1.PrometheusMetric{
+				Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
+				Query:   fmt.Sprintf(`(vector(1) and on() ((sum(forwarder_read_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}) or vector(0)) == 0)) or (vector(1) and on() ((sum(forwarder_ack_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}) or vector(0)) > 0)) or vector(0)`, vertex, vertex),
+			},
+		},
+		SuccessCondition: "len(result) > 0 && result[0] > 0",
 	}
 }
 
@@ -350,8 +355,8 @@ func strategyForTemplate(templateName string) apiv1.PipelineStrategy {
 	}
 }
 
-func pipelineAnalysisTemplateSpecUnreachable() argov1alpha1.AnalysisTemplateSpec {
-	spec := pipelineAnalysisTemplateSpec()
+func pipelineAnalysisTemplateSpecUnreachable(vertices ...string) argov1alpha1.AnalysisTemplateSpec {
+	spec := pipelineAnalysisTemplateSpec(vertices...)
 	for i := range spec.Metrics {
 		if spec.Metrics[i].Provider.Prometheus != nil {
 			spec.Metrics[i].Provider.Prometheus.Address = "http://prometheus-unreachable.prometheus.svc.cluster.local:9090"
@@ -445,15 +450,17 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 	})
 
 	It("Should validate Pipeline and ISBService upgrade using Progressive strategy - Successful analysis", func() {
-		CreateAnalysisTemplate(analysisTemplateNameSuccess, Namespace, pipelineAnalysisTemplateSpec())
+		CreateAnalysisTemplate(analysisTemplateNameSuccess, Namespace, pipelineAnalysisTemplateSpec("in", "out"))
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategyForSuccessCase, apiv1.Metadata{})
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
 		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)
 
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updatedPipelineSpec)
-		VerifyAnalysisRunStatus("no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("acknowledged-messages", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("in-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("out-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("in", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("out", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 
 		DeletePipelineRollout(pipelineRolloutName)
@@ -461,17 +468,17 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 	})
 
 	It("Should validate Pipeline upgrade using Progressive strategy - failure analysis", func() {
-		CreateAnalysisTemplate(analysisTemplateNameFailure, Namespace, pipelineAnalysisTemplateSpec())
+		CreateAnalysisTemplate(analysisTemplateNameFailure, Namespace, pipelineAnalysisTemplateSpec("in", "out"))
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategyForFailureCase, apiv1.Metadata{})
 
-		// Upgrading sink reads without acking. Critical-error stays healthy; acknowledged-messages fails the run.
+		// Upgrading sink reads without acking. The out vertex's read/ack metric fails the run.
 		updatedFailureSpec := pipelineSpecWithFailingSink(updatedPipelineSpec)
 
 		By("Updating the Pipeline Topology to cause a Progressive change")
 		UpdatePipeline(pipelineRolloutName, updatedFailureSpec)
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, updatedFailureSpec)
-		VerifyAnalysisRunStatus("acknowledged-messages", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("out", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameFailure)
@@ -479,7 +486,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 	It("passes analysis for a pipeline that never reads", func() {
 		const templateName = "test-pipeline-template-idle"
-		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec())
+		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec("idle-in", "idle-out"))
 		initial := linearPipeline(generatorVertex("idle-in", 0, time.Second), logSinkVertex("idle-out"))
 		updated := linearPipeline(generatorVertex("idle-in", 0, 2*time.Second), logSinkVertex("idle-out"))
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initial, strategyForTemplate(templateName), apiv1.Metadata{})
@@ -488,8 +495,10 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		UpdatePipeline(pipelineRolloutName, updated)
 
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updated)
-		VerifyAnalysisRunStatus("no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("acknowledged-messages", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("idle-in-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("idle-out-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("idle-in", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("idle-out", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		reads, present := forwarderReadTotal(GetInstanceName(pipelineRolloutName, 1))
 		if present {
 			Expect(reads).To(Equal(float64(0)))
@@ -501,7 +510,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 	It("passes analysis when vertex names are not in, cat, and out", func() {
 		const templateName = "test-pipeline-template-renamed"
-		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec())
+		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec("alpha", "gamma"))
 		initial := linearPipeline(generatorVertex("alpha", 5, time.Second), catVertex("beta"), logSinkVertex("gamma"))
 		updated := linearPipeline(generatorVertex("alpha", 5, time.Second), logSinkVertex("gamma"))
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initial, strategyForTemplate(templateName), apiv1.Metadata{})
@@ -510,8 +519,10 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		UpdatePipeline(pipelineRolloutName, updated)
 
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updated)
-		VerifyAnalysisRunStatus("no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("acknowledged-messages", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("alpha-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("gamma-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("alpha", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("gamma", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
@@ -519,7 +530,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 	It("fails analysis when two sinks read without acking", func() {
 		const templateName = "test-pipeline-template-two-sinks"
-		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec())
+		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec("origin", "left", "right"))
 		initial := numaflowv1.PipelineSpec{
 			InterStepBufferServiceName: isbServiceRolloutName,
 			Vertices: []numaflowv1.AbstractVertex{
@@ -544,7 +555,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		UpdatePipeline(pipelineRolloutName, updated)
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initial, updated)
-		VerifyAnalysisRunStatus("acknowledged-messages", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("left", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("right", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
@@ -552,7 +564,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 	It("records an analysis error when Prometheus cannot be reached", func() {
 		const templateName = "test-pipeline-template-prom-down"
-		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpecUnreachable())
+		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpecUnreachable("in", "out"))
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, strategyForTemplate(templateName), apiv1.Metadata{})
 
 		By("Updating the Pipeline Topology to cause a Progressive change")
@@ -560,7 +572,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		// Numaplane treats AnalysisPhaseError as success: a dead provider is not a failed rollout.
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updatedPipelineSpec)
-		VerifyAnalysisRunStatus("acknowledged-messages", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
+		VerifyAnalysisRunStatus("out", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
@@ -571,7 +583,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 			Skip("set TEST_CRITICAL_ERROR=true to crash a udf and require forwarder_critical_error_total to fail the rollout")
 		}
 		const templateName = "test-pipeline-template-critical"
-		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec())
+		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec("in", "cat", "out"))
 		initial := linearPipeline(generatorVertex("in", 5, time.Second), catVertex("cat"), logSinkVertex("out"))
 		updated := linearPipeline(generatorVertex("in", 5, 2*time.Second), catVertex("cat"), logSinkVertex("out"))
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initial, strategyForTemplate(templateName), apiv1.Metadata{})
@@ -589,7 +601,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		crashUpgradingUDF(upgrading, "cat")
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), upgrading, initial, updated)
-		VerifyAnalysisRunStatus("no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("cat-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
