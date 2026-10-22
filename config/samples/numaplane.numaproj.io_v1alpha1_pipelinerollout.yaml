@@ -9,7 +9,7 @@ spec:
     #  assessmentSchedule: "10,200,60,10"
     analysis:
       templates:
-      - templateName: pipeline-no-critical-errors
+      - templateName: pipeline-template
         clusterScope: false
   riders: # can be defined here for resources that need to be deployed per-Pipeline or per-Vertex
 
@@ -57,7 +57,7 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  name: pipeline-no-critical-errors
+  name: pipeline-template
   namespace: example-namespace
   labels:
     used_by: numaplane
@@ -70,14 +70,14 @@ spec:
     - name: interval
       value: 60s
     # Read/ack metrics keep the limits this template was tested with.
-    - name: success-limit
+    - name: ack-success-limit
       value: "4"
-    - name: failure-limit
+    - name: ack-failure-limit
       value: "6"
     - name: no-critical-errors-success-limit
-      value: "3"
+      value: "4"
     - name: no-critical-errors-failure-limit
-      value: "1"
+      value: "0"
   # One critical-error metric and one read/ack metric per vertex (in, cat, out).
   metrics:
   - name: in-no-critical-errors
@@ -94,16 +94,16 @@ spec:
         # absent() treats a vertex with no traffic / no counter yet as healthy (fallback on older Numaflow).
         query: |
           (
-            sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="in"}[{{args.interval}}])) == 0
+            sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="in"}[{{args.interval}}])) == bool 0
           )
           or
           (
             absent(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="in"})
           )
     successCondition: len(result) > 0 && result[0] > 0
-  - name: in
-    consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+  - name: in-ack
+    consecutiveSuccessLimit: '{{args.ack-success-limit}}'
+    failureLimit: '{{args.ack-failure-limit}}'
     interval: '{{args.interval}}'
     provider:
       prometheus:
@@ -124,16 +124,16 @@ spec:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
         query: |
           (
-            sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"}[{{args.interval}}])) == 0
+            sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"}[{{args.interval}}])) == bool 0
           )
           or
           (
             absent(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"})
           )
     successCondition: len(result) > 0 && result[0] > 0
-  - name: cat
-    consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+  - name: cat-ack
+    consecutiveSuccessLimit: '{{args.ack-success-limit}}'
+    failureLimit: '{{args.ack-failure-limit}}'
     interval: '{{args.interval}}'
     provider:
       prometheus:
@@ -154,16 +154,16 @@ spec:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
         query: |
           (
-            sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="out"}[{{args.interval}}])) == 0
+            sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="out"}[{{args.interval}}])) == bool 0
           )
           or
           (
             absent(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="out"})
           )
     successCondition: len(result) > 0 && result[0] > 0
-  - name: out
-    consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+  - name: out-ack
+    consecutiveSuccessLimit: '{{args.ack-success-limit}}'
+    failureLimit: '{{args.ack-failure-limit}}'
     interval: '{{args.interval}}'
     provider:
       prometheus:

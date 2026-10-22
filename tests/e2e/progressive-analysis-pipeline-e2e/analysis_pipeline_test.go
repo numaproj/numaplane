@@ -226,7 +226,7 @@ func pipelineAnalysisTemplateSpec(vertices ...string) argov1alpha1.AnalysisTempl
 func pipelineCriticalErrorMetric(vertex string) argov1alpha1.Metric {
 	return argov1alpha1.Metric{
 		Name:                    vertex + "-no-critical-errors",
-		FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
+		FailureLimit:            ptr.To(intstrutil.FromInt32(0)),
 		Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 		InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
 		ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
@@ -235,7 +235,7 @@ func pipelineCriticalErrorMetric(vertex string) argov1alpha1.Metric {
 				Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
 				Query: fmt.Sprintf(`
 (
-  sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}[{{args.interval}}])) == 0
+  sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}[{{args.interval}}])) == bool 0
 )
 OR
 (
@@ -249,7 +249,7 @@ OR
 
 func pipelineAckMetric(vertex string) argov1alpha1.Metric {
 	return argov1alpha1.Metric{
-		Name:                    vertex,
+		Name:                    vertex + "-ack",
 		FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
 		Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 		ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
@@ -517,8 +517,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updatedPipelineSpec)
 		VerifyAnalysisRunStatus("in-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyAnalysisRunStatus("out-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("in", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("out", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("in-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("out-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 
 		DeletePipelineRollout(pipelineRolloutName)
@@ -536,7 +536,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		UpdatePipeline(pipelineRolloutName, updatedFailureSpec)
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, updatedFailureSpec)
-		VerifyAnalysisRunStatus("out", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("out-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameFailure)
@@ -555,8 +555,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updated)
 		VerifyAnalysisRunStatus("idle-in-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyAnalysisRunStatus("idle-out-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("idle-in", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("idle-out", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("idle-in-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("idle-out-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		reads, present := forwarderReadTotal(GetInstanceName(pipelineRolloutName, 1))
 		if present {
 			Expect(reads).To(Equal(float64(0)))
@@ -579,8 +579,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updated)
 		VerifyAnalysisRunStatus("alpha-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyAnalysisRunStatus("gamma-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("alpha", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("gamma", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("alpha-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("gamma-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
@@ -613,8 +613,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		UpdatePipeline(pipelineRolloutName, updated)
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initial, updated)
-		VerifyAnalysisRunStatus("left", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
-		VerifyAnalysisRunStatus("right", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("left-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("right-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
@@ -630,7 +630,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		// Numaplane treats AnalysisPhaseError as success: a dead provider is not a failed rollout.
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updatedPipelineSpec)
-		VerifyAnalysisRunStatus("out", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
+		VerifyAnalysisRunStatus("out-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
@@ -647,7 +647,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		UpdatePipeline(pipelineRolloutName, updated)
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initial, updated)
-		VerifyAnalysisRunStatus("cat", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("cat-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 		VerifyAnalysisRunStatus("cat-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
 		DeletePipelineRollout(pipelineRolloutName)
@@ -668,7 +668,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		UpdatePipeline(pipelineRolloutName, updated)
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initial, updated)
-		VerifyAnalysisRunStatus("in", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("in-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 		VerifyAnalysisRunStatus("in-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
 		DeletePipelineRollout(pipelineRolloutName)
