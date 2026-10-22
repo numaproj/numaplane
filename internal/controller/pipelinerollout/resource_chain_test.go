@@ -27,6 +27,16 @@ func TestPipelineAssessResourceChain(t *testing.T) {
 	pipelineChild.SetNamespace(namespace)
 	pipelineChild.SetName("pipeline-1")
 
+	// The "waiting" PipelineRollout already has a promoted child, so it is an existing rollout that has not started its trial.
+	waitingPromotedPipeline := &unstructured.Unstructured{Object: map[string]interface{}{}}
+	waitingPromotedPipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+	waitingPromotedPipeline.SetNamespace(namespace)
+	waitingPromotedPipeline.SetName("waiting-0")
+	waitingPromotedPipeline.SetLabels(map[string]string{
+		common.LabelKeyParentRollout: "waiting",
+		common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+	})
+
 	pipelineRollout := func(own apiv1.AssessmentResult) *apiv1.PipelineRollout {
 		return &apiv1.PipelineRollout{
 			ObjectMeta: metav1.ObjectMeta{Name: "pipeline", Namespace: namespace},
@@ -212,7 +222,7 @@ func TestPipelineAssessResourceChain(t *testing.T) {
 						Spec: runtime.RawExtension{Raw: []byte(`{"interStepBufferServiceName":"isb"}`)},
 					},
 				},
-			}),
+			}, waitingPromotedPipeline),
 			expected: apiv1.AssessmentResultUnknown,
 		},
 	}

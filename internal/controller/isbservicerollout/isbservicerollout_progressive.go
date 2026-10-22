@@ -234,7 +234,16 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 	var reasons []string
 	// for each PipelineRollout, we need to check that its current Upgrading Status is for a Pipeline in fact using this isbsvc
 	// otherwise, it may not have yet started the upgrade process for this isbsvc
-	for _, pipelineRollout := range pipelineRollouts {
+	for i := range pipelineRollouts {
+		pipelineRollout := &pipelineRollouts[i]
+		// A discontinued or Pending PipelineRollout is not part of this ISBService's trial chain.
+		outside, err := progressive.OutsideTrialChain(ctx, r.client, pipelineRollout, pipelineRollout.GetUpgradingChildStatus())
+		if err != nil {
+			return nil, nil, err
+		}
+		if outside {
+			continue
+		}
 		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
 		if upgradingPipelineStatus == nil || upgradingPipelineStatus.InterStepBufferServiceName != existingUpgradingChildDef.GetName() {
 			// we need to make sure the PipelineRollout has updated to use an Upgrading Pipeline which is on the new isbsvc first

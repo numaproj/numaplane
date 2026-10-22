@@ -43,11 +43,20 @@ func TestAssessDependentsFailsBeforeAllDependentsStart(t *testing.T) {
 	notStartedPipeline := &apiv1.PipelineRollout{
 		ObjectMeta: metav1.ObjectMeta{Name: "pipeline", Namespace: namespace},
 	}
+	// An existing Pipeline that has not started its trial yet: it has a promoted child.
+	promotedPipeline := &unstructured.Unstructured{Object: map[string]interface{}{}}
+	promotedPipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+	promotedPipeline.SetNamespace(namespace)
+	promotedPipeline.SetName("pipeline-0")
+	promotedPipeline.SetLabels(map[string]string{
+		common.LabelKeyParentRollout: "pipeline",
+		common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+	})
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, apiv1.AddToScheme(scheme))
 	require.NoError(t, numaflowv1.AddToScheme(scheme))
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(failedMonoVertex, monoVertex, notStartedPipeline).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(failedMonoVertex, monoVertex, notStartedPipeline, promotedPipeline).Build()
 
 	members, reasons, err := (&NumaflowControllerRolloutReconciler{client: c}).assessDependents(context.Background(), namespace, "trial")
 	require.NoError(t, err)
