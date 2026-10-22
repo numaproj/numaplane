@@ -8,6 +8,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -207,7 +208,16 @@ func WorkloadsOnTrialController(ctx context.Context, c client.Client, namespace,
 			return err
 		}
 		if upgrading == nil || upgrading.Name == "" {
-			members, reasons = appendMember(members, reasons, NewChainMember(kind, rolloutName, "", apiv1.AssessmentResultUnknown), "")
+			// A direct-applied update can adopt the trial instance on the promoted child without an upgrading child.
+			childName, result, onInstance, err := PromotedChildAlreadyOnInstance(ctx, c, rollout, instanceID)
+			if err != nil {
+				return err
+			}
+			if !onInstance {
+				childName = ""
+				result = apiv1.AssessmentResultUnknown
+			}
+			members, reasons = appendMember(members, reasons, NewChainMember(kind, rolloutName, childName, result), "")
 			return nil
 		}
 		onInstance, err := childOnControllerInstance(ctx, c, namespace, upgrading.Name, gvk, instanceID)
@@ -282,6 +292,30 @@ func unstructuredInstanceID(controller *unstructured.Unstructured) (string, erro
 		return "", fmt.Errorf("reading spec.instanceID of NumaflowController %s/%s: %w", controller.GetNamespace(), controller.GetName(), err)
 	}
 	return instanceID, nil
+}
+
+// PromotedChildAlreadyOnInstance reports the rollout's promoted child when that child is already bound
+// to instanceID, and the assessment of the rollout's own health.
+// A direct-applied change can land on the trial controller without creating an upgrading child.
+// onInstance is false when there is no promoted child on instanceID; the caller treats that as not started.
+func PromotedChildAlreadyOnInstance(
+	ctx context.Context,
+	c client.Client,
+	rollout ctlrcommon.RolloutObject,
+	instanceID string,
+) (childName string, result apiv1.AssessmentResult, onInstance bool, err error) {
+	promoted, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rollout, common.LabelValueUpgradePromoted, nil, false, c)
+	if err != nil {
+		return "", apiv1.AssessmentResultUnknown, false, err
+	}
+	if promoted == nil || numaflowtypes.ControllerInstanceIDFromResource(promoted) != instanceID {
+		return "", apiv1.AssessmentResultUnknown, false, nil
+	}
+	result = apiv1.AssessmentResultUnknown
+	if healthy := rollout.GetRolloutStatus().GetCondition(apiv1.ConditionChildResourceHealthy); healthy != nil && healthy.Status == metav1.ConditionTrue {
+		result = apiv1.AssessmentResultSuccess
+	}
+	return promoted.GetName(), result, true, nil
 }
 
 // childOnControllerInstance reports whether the named child is bound to instanceID.

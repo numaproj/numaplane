@@ -313,14 +313,35 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelin
 		return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+versionToCheck
 	})
 
+	// A bad Progressive version fails the trial child and leaves it in place. ChildResourcesHealthy is copied
+	// from the promoted child, which stays on the previous version, and dependents stay bound to the trial
+	// until that version is reverted. Pause-and-drain and no-strategy fail the rollout itself.
 	if valid {
 		VerifyNumaflowControllerRolloutReady()
+	} else if UpgradeStrategy == config.ProgressiveStrategyID {
+		VerifyTrialNumaflowControllerFailed()
+		// The rollout stays Pending while the failed trial is held. ChildResourcesHealthy stays True
+		// because it is copied from the promoted child, which is still the previous version.
+		VerifyNumaflowControllerRollout(Namespace, func(rollout apiv1.NumaflowControllerRollout) bool {
+			healthCondition := getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+			upgradeCondition := getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
+			return rollout.Status.Phase == apiv1.PhasePending &&
+				rollout.Status.UpgradeInProgress == apiv1.UpgradeStrategyProgressive &&
+				healthCondition != nil && healthCondition.Status == metav1.ConditionTrue &&
+				upgradeCondition != nil && upgradeCondition.Status == metav1.ConditionFalse
+		})
 	} else {
 		// verify NumaflowControllerRollout ChildResourcesHealthy condition == false but NumaflowControllerRollout itself is marked "Deployed"
 		VerifyNumaflowControllerRollout(Namespace, func(rollout apiv1.NumaflowControllerRollout) bool {
 			healthCondition := getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 			return rollout.Status.Phase == apiv1.PhaseDeployed && healthCondition != nil && healthCondition.Status == metav1.ConditionFalse && healthCondition.Reason == "Failed"
 		})
+	}
+
+	// While a failed Progressive trial is held, dependents upgrade onto it, so they are not NoOp and the
+	// promoted Pipeline may be scaled down. The following restore brings them back.
+	if UpgradeStrategy == config.ProgressiveStrategyID && !valid {
+		return
 	}
 
 	for _, rolloutInfo := range pipelineRollouts {
@@ -335,4 +356,24 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelin
 		}
 	}
 
+}
+
+// VerifyTrialNumaflowControllerFailed verifies that the trial NumaflowController failed.
+// An unknown version has no controller definition, so the trial's phase becomes Failed immediately.
+func VerifyTrialNumaflowControllerFailed() {
+	CheckEventually("verifying the trial NumaflowController phase is Failed", func() bool {
+		controllers, err := numaflowControllerClient.List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s,%s=%s", ParentRolloutLabel, numaflowControllerRolloutName,
+				common.LabelKeyUpgradeState, common.LabelValueUpgradeTrial),
+		})
+		if err != nil || len(controllers.Items) == 0 {
+			return false
+		}
+		for i := range controllers.Items {
+			if controllers.Items[i].Status.Phase == apiv1.PhaseFailed {
+				return true
+			}
+		}
+		return false
+	}).Should(BeTrue())
 }

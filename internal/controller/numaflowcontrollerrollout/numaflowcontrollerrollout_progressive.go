@@ -263,9 +263,10 @@ func assessNumaflowControllerHealth(numaflowController *unstructured.Unstructure
 }
 
 // assessDependents assesses the ISBServiceRollouts, PipelineRollouts, and MonoVertexRollouts in the namespace
-// against the trial controller instance. Each must have an upgrading child bound to instanceID. The result is
-// those dependents' resource assessments: Success once all of them have succeeded, and Failure as soon as one
-// of them has failed, even if others have not started upgrading onto this instance yet.
+// against the trial controller instance. Each must have a child bound to instanceID: either its upgrading child,
+// or its promoted child when a direct-applied update already adopted this instance. The result is those
+// dependents' resource assessments: Success once all of them have succeeded, and Failure as soon as one of
+// them has failed, even if others have not started upgrading onto this instance yet.
 // Return each dependent as a chain member and failure reasons for those that failed.
 func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Context, namespace string, instanceID string) ([]apiv1.ResourceChainMemberStatus, []string, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -273,6 +274,7 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 	type dependent struct {
 		kind            string
 		name            string
+		rollout         ctlrcommon.RolloutObject
 		childGVK        schema.GroupVersionKind
 		upgradingStatus *apiv1.UpgradingChildStatus
 	}
@@ -283,7 +285,13 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 		if err != nil || outside {
 			return err
 		}
-		dependents = append(dependents, dependent{kind, rollout.GetRolloutObjectMeta().Name, childGVK, upgradingStatus})
+		dependents = append(dependents, dependent{
+			kind:            kind,
+			name:            rollout.GetRolloutObjectMeta().Name,
+			rollout:         rollout,
+			childGVK:        childGVK,
+			upgradingStatus: upgradingStatus,
+		})
 		return nil
 	}
 
@@ -328,6 +336,19 @@ func (r *NumaflowControllerRolloutReconciler) assessDependents(ctx context.Conte
 	for _, dep := range dependents {
 		depLogger := numaLogger.WithValues(strings.ToLower(dep.kind), dep.name)
 		if dep.upgradingStatus == nil {
+			childName, result, onInstance, err := progressive.PromotedChildAlreadyOnInstance(ctx, r.client, dep.rollout, instanceID)
+			if err != nil {
+				return nil, nil, err
+			}
+			if onInstance {
+				members = append(members, progressive.NewChainMember(dep.kind, dep.name, childName, result))
+				if result == apiv1.AssessmentResultSuccess {
+					depLogger.Debug("assessing NumaflowController; dependent is already promoted on this controller instance")
+				} else {
+					depLogger.Debug("assessing NumaflowController; dependent is promoted on this controller instance but not healthy yet")
+				}
+				continue
+			}
 			depLogger.Debug("can't assess NumaflowController; dependent has not yet started upgrading onto this controller instance")
 			members = append(members, progressive.NewChainMember(dep.kind, dep.name, "", apiv1.AssessmentResultUnknown))
 			continue

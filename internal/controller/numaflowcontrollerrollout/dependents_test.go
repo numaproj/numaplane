@@ -67,3 +67,55 @@ func TestAssessDependentsFailsBeforeAllDependentsStart(t *testing.T) {
 		{Kind: "MonoVertexRollout", Name: "mv", ChildName: "mv-1", AssessmentResult: apiv1.AssessmentResultFailure},
 	}, members)
 }
+
+func TestAssessDependentsCountsPromotedChildAlreadyOnTrialInstance(t *testing.T) {
+	const namespace = "test"
+
+	healthyISB := &apiv1.ISBServiceRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: "isb", Namespace: namespace},
+		Status: apiv1.ISBServiceRolloutStatus{
+			Status: apiv1.Status{
+				Conditions: []metav1.Condition{{
+					Type:   string(apiv1.ConditionChildResourceHealthy),
+					Status: metav1.ConditionTrue,
+				}},
+			},
+		},
+	}
+	promotedISB := &unstructured.Unstructured{Object: map[string]interface{}{}}
+	promotedISB.SetGroupVersionKind(numaflowv1.ISBGroupVersionKind)
+	promotedISB.SetNamespace(namespace)
+	promotedISB.SetName("isb-0")
+	promotedISB.SetLabels(map[string]string{
+		common.LabelKeyParentRollout: "isb",
+		common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+	})
+	promotedISB.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "trial"})
+
+	notOnTrialPipeline := &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: "pipeline", Namespace: namespace},
+	}
+	promotedPipeline := &unstructured.Unstructured{Object: map[string]interface{}{}}
+	promotedPipeline.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+	promotedPipeline.SetNamespace(namespace)
+	promotedPipeline.SetName("pipeline-0")
+	promotedPipeline.SetLabels(map[string]string{
+		common.LabelKeyParentRollout: "pipeline",
+		common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+	})
+	promotedPipeline.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "promoted"})
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiv1.AddToScheme(scheme))
+	require.NoError(t, numaflowv1.AddToScheme(scheme))
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(healthyISB, promotedISB, notOnTrialPipeline, promotedPipeline).Build()
+
+	members, reasons, err := (&NumaflowControllerRolloutReconciler{client: c}).assessDependents(context.Background(), namespace, "trial")
+	require.NoError(t, err)
+	require.Empty(t, reasons)
+	require.Equal(t, apiv1.AssessmentResultUnknown, progressive.CombineMemberAssessments(members))
+	require.Equal(t, []apiv1.ResourceChainMemberStatus{
+		{Kind: "ISBServiceRollout", Name: "isb", ChildName: "isb-0", AssessmentResult: apiv1.AssessmentResultSuccess},
+		{Kind: "PipelineRollout", Name: "pipeline", AssessmentResult: apiv1.AssessmentResultUnknown},
+	}, members)
+}
