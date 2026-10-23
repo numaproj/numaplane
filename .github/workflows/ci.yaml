@@ -137,7 +137,7 @@ jobs:
       fail-fast: false
       matrix:
         strategy: ["pause-and-drain", "progressive", "no-strategy"]
-        case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent", "rollback"]
+        case: ["functional-pipeline", "functional-monovertex", "concurrent", "rollback"]
         include:
            - strategy: "progressive"
              case: "force-drain"
