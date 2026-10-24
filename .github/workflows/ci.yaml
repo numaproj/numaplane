@@ -150,6 +150,14 @@ jobs:
            - strategy: "progressive"
              case: "progressive-pipeline"
            - strategy: "progressive"
+             case: "progressive-nc"
+           - strategy: "progressive"
+             case: "progressive-nc-combined"
+           - strategy: "progressive"
+             case: "progressive-nc-staggered"
+           - strategy: "progressive"
+             case: "progressive-nc-failure"
+           - strategy: "progressive"
              case: "pipeline-rider"
            - strategy: "progressive"
              case: "monovertex-rider"
@@ -195,6 +203,9 @@ jobs:
       - name: Create a cluster
         run: |
           export PATH=$PATH:/usr/local/bin
+          # Each JetStream pod's config reloader takes an inotify instance; the progressive-nc
+          # suites keep many ISBServices alive at once and exceed the default limit of 128.
+          sudo sysctl -w fs.inotify.max_user_instances=1024
           k3d cluster create e2e  --runtime-ulimit "nofile=65535:65535"
           k3d kubeconfig get e2e > ~/.kube/config
           echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts

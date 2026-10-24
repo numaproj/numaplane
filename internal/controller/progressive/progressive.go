@@ -506,7 +506,7 @@ func processUpgradingChild(
 	case apiv1.AssessmentResultFailure:
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 
-		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultFailure
 			status.ResourceChainAssessmentResult = apiv1.AssessmentResultFailure
 			// A previous failure skips AssessResourceChain, so chainMembers is nil.
@@ -520,6 +520,14 @@ func processUpgradingChild(
 		err = ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateFailed, existingUpgradingChildDef)
 		if err != nil {
 			return true, true, 0, err
+		}
+
+		// A trial whose own assessment is not final keeps running until it is, even though another
+		// member failed the chain. Scaling it down first would assess an empty child as healthy.
+		if childStatus.EffectiveResourceAssessment() == apiv1.AssessmentResultUnknown {
+			numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).
+				Debug("resource chain failed; finishing this trial's own assessment before post-failure processing")
+			return true, true, assessmentSchedule.Interval, nil
 		}
 
 		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)

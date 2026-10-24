@@ -181,16 +181,51 @@ func VerifyPromotedPipelineRunning(namespace string, pipelineRolloutName string)
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 	}).Should(Not(Equal(metav1.ConditionTrue)))
 
-	// Get Pipeline Pods to verify they're all up
+	// Get Pipeline Pods to verify they're all up. A just-finished upgrade can still have the
+	// promoted child scaled to zero, so wait until its scale matches the rollout before counting pods.
 	By("Verifying that the Pipeline is ready")
-	// check "vertex" Pods
-	pipeline, err := GetPromotedPipeline(namespace, pipelineRolloutName)
-	Expect(err).ShouldNot(HaveOccurred())
-	spec, err := GetPipelineSpec(pipeline)
-	Expect(err).ShouldNot(HaveOccurred())
+	var pipelineName string
+	var spec numaflowv1.PipelineSpec
+	CheckEventually("verifying promoted Pipeline scale matches the rollout", func() bool {
+		pipeline, err := GetPromotedPipeline(namespace, pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+		childSpec, err := GetPipelineSpec(pipeline)
+		if err != nil {
+			return false
+		}
+		rolloutSpec, err := GetPipelineRolloutPipelineSpec(pipelineRolloutName)
+		if err != nil || len(childSpec.Vertices) != len(rolloutSpec.Vertices) {
+			return false
+		}
+		for i := range rolloutSpec.Vertices {
+			if scaleMin(childSpec.Vertices[i].Scale) != scaleMin(rolloutSpec.Vertices[i].Scale) ||
+				scaleMax(childSpec.Vertices[i].Scale) != scaleMax(rolloutSpec.Vertices[i].Scale) {
+				return false
+			}
+		}
+		pipelineName = pipeline.GetName()
+		spec = childSpec
+		return true
+	}).Should(BeTrue())
 
-	VerifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex)
-	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
+	VerifyVerticesPodsRunning(namespace, pipelineName, spec.Vertices, ComponentVertex)
+	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipelineName))
+}
+
+func scaleMin(scale numaflowv1.Scale) int32 {
+	if scale.Min == nil {
+		return 0
+	}
+	return *scale.Min
+}
+
+func scaleMax(scale numaflowv1.Scale) int32 {
+	if scale.Max == nil {
+		return int32(numaflowv1.DefaultMaxReplicas)
+	}
+	return *scale.Max
 }
 
 func VerifyPromotedPipelinePaused(namespace string, pipelineRolloutName string) {

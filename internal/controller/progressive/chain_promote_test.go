@@ -44,10 +44,13 @@ func TestControllerChainFailed(t *testing.T) {
 		name        string
 		strategy    apiv1.UpgradeStrategy
 		chainResult apiv1.AssessmentResult
+		resultState common.ResultState
 		expected    bool
 	}{
 		{name: "progressive upgrade with a failed chain", strategy: apiv1.UpgradeStrategyProgressive, chainResult: apiv1.AssessmentResultFailure, expected: true},
 		{name: "progressive upgrade with a successful chain", strategy: apiv1.UpgradeStrategyProgressive, chainResult: apiv1.AssessmentResultSuccess, expected: false},
+		{name: "chain still being assessed", strategy: apiv1.UpgradeStrategyProgressive, chainResult: apiv1.AssessmentResultUnknown, expected: false},
+		{name: "chain reassessed after a failed member was replaced", strategy: apiv1.UpgradeStrategyProgressive, chainResult: apiv1.AssessmentResultUnknown, resultState: common.LabelValueResultStateFailed, expected: true},
 		{name: "no progressive upgrade in progress", strategy: apiv1.UpgradeStrategyNoOp, chainResult: apiv1.AssessmentResultFailure, expected: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -67,6 +70,9 @@ func TestControllerChainFailed(t *testing.T) {
 				},
 			}
 			trial := ctlrcommon.CreateTestNumaflowController(namespace, "controller", "controller-1", common.LabelValueUpgradeTrial, "trial")
+			if tc.resultState != "" {
+				trial.Labels[common.LabelKeyProgressiveResultState] = string(tc.resultState)
+			}
 			c := newChainTestClient(t, rollout, trial)
 
 			failed, err := ControllerChainFailed(ctx, c, namespace)

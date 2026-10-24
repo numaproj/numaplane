@@ -385,6 +385,102 @@ func Test_processUpgradingChild(t *testing.T) {
 	}
 }
 
+// otherMemberFailedController reports a chain that another member failed, with this resource's own
+// assessment set by ownResult, and counts post-failure processing calls.
+type otherMemberFailedController struct {
+	fakeProgressiveController
+	ownResult        apiv1.AssessmentResult
+	postFailureCalls int
+}
+
+func (o *otherMemberFailedController) AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured, schedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
+	return o.ownResult, "", nil
+}
+
+func (o *otherMemberFailedController) AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error) {
+	members := []apiv1.ResourceChainMemberStatus{
+		NewChainMember("MonoVertexRollout", rolloutObject.GetRolloutObjectMeta().Name, existingUpgradingChildDef.GetName(), o.ownResult),
+		NewChainMember("PipelineRollout", "other", "other-1", apiv1.AssessmentResultFailure),
+	}
+	return apiv1.AssessmentResultFailure, members, []string{"PipelineRollout other failed"}, nil
+}
+
+func (o *otherMemberFailedController) ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	o.postFailureCalls++
+	return false, nil
+}
+
+func (o *otherMemberFailedController) ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	o.postFailureCalls++
+	return false, nil
+}
+
+func TestProcessUpgradingChildFinishesOwnAssessmentBeforePostFailure(t *testing.T) {
+	restConfig, numaflowClientSet, k8sClient, _, err := commontest.PrepareK8SEnvironment()
+	require.NoError(t, err)
+	require.NoError(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	require.NoError(t, err)
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	require.NoError(t, config.GetConfigManagerInstance().LoadAllConfigs(func(error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2")))
+
+	ctx := context.Background()
+	namespace := ctlrcommon.DefaultTestNamespace
+
+	for _, tc := range []struct {
+		name                     string
+		ownResult                apiv1.AssessmentResult
+		expectedPostFailureCalls int
+	}{
+		{name: "own assessment still running", ownResult: apiv1.AssessmentResultUnknown, expectedPostFailureCalls: 0},
+		{name: "own assessment succeeded", ownResult: apiv1.AssessmentResultSuccess, expectedPostFailureCalls: 2},
+		{name: "own assessment failed", ownResult: apiv1.AssessmentResultFailure, expectedPostFailureCalls: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}))
+			promoted := createMonoVertex("test")
+			trial := createMonoVertex("test-trial")
+			for _, mv := range []*numaflowv1.MonoVertex{promoted, trial} {
+				_, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, mv, metav1.CreateOptions{})
+				require.NoError(t, err)
+			}
+
+			rollout := setMonoVertexProgressiveStatus(
+				defaultMonoVertexRollout.DeepCopy(),
+				&apiv1.UpgradingMonoVertexStatus{
+					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+						UpgradingChildStatus: apiv1.UpgradingChildStatus{
+							Name:                     trial.Name,
+							BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							InitializationComplete:   true,
+						},
+					},
+				},
+				&apiv1.PromotedMonoVertexStatus{
+					PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+						PromotedChildStatus:           apiv1.PromotedChildStatus{Name: promoted.Name},
+						ScaleValuesRestoredToOriginal: true,
+					},
+				},
+			)
+
+			controller := &otherMemberFailedController{ownResult: tc.ownResult}
+			done, failed, delay, err := processUpgradingChild(ctx, rollout, controller, monoVertexToUnstruct(promoted), monoVertexToUnstruct(trial), k8sClient)
+			require.NoError(t, err)
+			assert.True(t, done)
+			assert.True(t, failed)
+			assert.Equal(t, 10*time.Second, delay)
+			assert.Equal(t, tc.expectedPostFailureCalls, controller.postFailureCalls)
+
+			childStatus := rollout.GetUpgradingChildStatus()
+			assert.Equal(t, tc.ownResult, childStatus.ResourceAssessmentResult)
+			assert.Equal(t, apiv1.AssessmentResultFailure, childStatus.ResourceChainAssessmentResult)
+			assert.Contains(t, childStatus.FailureReasons, "PipelineRollout other failed")
+		})
+	}
+}
+
 func setMonoVertexProgressiveStatus(mvRollout *apiv1.MonoVertexRollout, upgradingChildStatus *apiv1.UpgradingMonoVertexStatus, promotedChildStatus *apiv1.PromotedMonoVertexStatus) *apiv1.MonoVertexRollout {
 	mvRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = upgradingChildStatus
 	mvRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus = promotedChildStatus
