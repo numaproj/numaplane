@@ -231,6 +231,17 @@ func UpdateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (
 	})
 	Expect(err).ShouldNot(HaveOccurred())
 }
+
+// UpdateMonoVertexSpec replaces the MonoVertex spec on the rollout.
+func UpdateMonoVertexSpec(name string, spec numaflowv1.MonoVertexSpec) {
+	rawSpec, err := json.Marshal(spec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdateMonoVertexRolloutInK8S(name, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+		rollout.Spec.MonoVertex.Spec.Raw = rawSpec
+		return rollout, nil
+	})
+}
+
 func UpdateMonoVertexInK8S(name string, f func(*unstructured.Unstructured) (*unstructured.Unstructured, error)) {
 	By("updating MonoVertex")
 
@@ -474,7 +485,9 @@ func DeleteMonoVertexRollout(name string) {
 	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
 
 	CheckEventually("Verifying MonoVertex deletion", func() bool {
-		list, err := dynamicClient.Resource(GetGVRForMonoVertex()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+		list, err := dynamicClient.Resource(GetGVRForMonoVertex()).Namespace(Namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", ParentRolloutLabel, name),
+		})
 		if err != nil {
 			return false
 		}
