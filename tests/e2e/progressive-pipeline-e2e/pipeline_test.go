@@ -215,26 +215,28 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		// Verify ISBServiceRollout Progressive Status
 		VerifyISBServiceProgressiveFailure(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3))
 
-		By("Updating the Pipeline to set the 'force promote' Label")
+		By("Updating the Pipeline to set the 'force promote chain' Label")
 		UpdatePipelineInK8S(GetInstanceName(pipelineRolloutName, 1), func(pipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 			labels := pipeline.GetLabels()
 			if labels == nil {
 				labels = make(map[string]string)
 			}
-			labels[common.LabelKeyForcePromote] = "true"
+			// Individual force-promote is ignored once the chain assessment is Failure.
+			labels[common.LabelKeyForcePromoteChain] = "true"
 			pipeline.SetLabels(labels)
 			return pipeline, nil
 		})
 
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, initialPipelineSpec)
 
-		By("Updating the ISBService to set the 'force promote' Label")
+		By("Updating the ISBService to set the 'force promote chain' Label")
 		UpdateISBServiceInK8S(GetInstanceName(isbServiceRolloutName, 3), func(isbservice *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 			labels := isbservice.GetLabels()
 			if labels == nil {
 				labels = make(map[string]string)
 			}
-			labels[common.LabelKeyForcePromote] = "true"
+			// Individual force-promote is ignored once the chain assessment is Failure.
+			labels[common.LabelKeyForcePromoteChain] = "true"
 			isbservice.SetLabels(labels)
 			return isbservice, nil
 		})

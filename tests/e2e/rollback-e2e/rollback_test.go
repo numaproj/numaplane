@@ -18,7 +18,6 @@ package e2e
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -351,23 +350,31 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 			By("verifying Pipeline and MonoVertex are back to healthy after rollback")
 
-			// Verify Pipeline
+			// Reverting only the Pipeline and MonoVertex, while the controller trial remains, creates the
+			// next child on that trial with the restored spec and promotes it. The original child becomes recyclable.
 			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-			CheckEventually(fmt.Sprintf("verifying just 1 promoted Pipeline, with expected name %s", promotedPipelineName), func() bool {
-				currentPromotedName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+			CheckEventually("verifying one promoted Pipeline", func() bool {
+				_, err := GetPromotedPipelineName(Namespace, pipelineRolloutName)
 				numChildren := GetNumberOfNonRecyclableChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
-				return currentPromotedName == promotedPipelineName && numChildren == 1
-			}).Should(Equal(true))
+				return err == nil && numChildren == 1
+			}).Should(BeTrue())
+			VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+				return len(retrievedPipelineSpec.Vertices) == len(initialPipelineSpec.Vertices)
+			})
 			VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 			VerifyPipelineRolloutHealthy(pipelineRolloutName)
 
-			// Verify MonoVertex
 			VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
-			CheckEventually(fmt.Sprintf("verifying just 1 promoted MonoVertex, with expected name %s", promotedMonoVertexName), func() bool {
-				currentPromotedName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
-				numChildren := GetNumberOfChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
-				return currentPromotedName == promotedMonoVertexName && numChildren == 1
-			}).Should(Equal(true))
+			CheckEventually("verifying one promoted MonoVertex", func() bool {
+				_, err := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
+				numChildren := GetNumberOfNonRecyclableChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
+				return err == nil && numChildren == 1
+			}).Should(BeTrue())
+			VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+				return retrievedMonoVertexSpec.Source != nil && retrievedMonoVertexSpec.Source.UDSource != nil &&
+					retrievedMonoVertexSpec.Source.UDSource.Container != nil &&
+					retrievedMonoVertexSpec.Source.UDSource.Container.Image == initialMVImage
+			})
 			VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 			VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
 

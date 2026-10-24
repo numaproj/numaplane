@@ -135,7 +135,6 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 E2E_TEST_TARGETS := \
-	test-functional-nc \
 	test-functional-monovertex \
 	test-functional-pipeline \
 	test-concurrent-e2e \

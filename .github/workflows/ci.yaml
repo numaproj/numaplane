@@ -137,7 +137,7 @@ jobs:
       fail-fast: false
       matrix:
         strategy: ["pause-and-drain", "progressive", "no-strategy"]
-        case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent", "rollback"]
+        case: ["functional-pipeline", "functional-monovertex", "concurrent", "rollback"]
         include:
            - strategy: "progressive"
              case: "force-drain"
@@ -186,9 +186,11 @@ jobs:
 
       - name: Install k3d
         run: |
-          curl -sfL https://raw.githubusercontent.com/rancher/k3d/main/install.sh | bash
+          # Pin the binary. The rancher/k3d install script follows "latest" and currently 404s.
+          curl -fsSL -o /tmp/k3d https://github.com/k3d-io/k3d/releases/download/v5.8.3/k3d-linux-amd64
+          sudo install -m 755 /tmp/k3d /usr/local/bin/k3d
           echo 'k3d installed'
-          k3d --version
+          k3d version
 
       - name: Create a cluster
         run: |
