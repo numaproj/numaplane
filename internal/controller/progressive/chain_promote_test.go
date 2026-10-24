@@ -36,6 +36,17 @@ func TestChainPromoteAnnotationMatchesExactChild(t *testing.T) {
 	assert.False(t, ChainPromoteAnnotationMatches(replaced))
 }
 
+func TestForcePromoteChainApplies(t *testing.T) {
+	child := &unstructured.Unstructured{}
+	child.SetName("isb-1")
+	assert.False(t, ForcePromoteChainApplies(child, "isb-1"))
+
+	child.SetLabels(map[string]string{common.LabelKeyForcePromoteChain: "true"})
+	assert.True(t, ForcePromoteChainApplies(child, "isb-1"))
+	assert.False(t, ForcePromoteChainApplies(child, "isb-2"))
+	assert.False(t, ForcePromoteChainApplies(nil, "isb-1"))
+}
+
 func TestControllerChainFailed(t *testing.T) {
 	const namespace = "test"
 	ctx := context.Background()

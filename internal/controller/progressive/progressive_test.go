@@ -1135,6 +1135,84 @@ func TestProcessResourcePromotesAnnotatedTrialBeforeReplacement(t *testing.T) {
 	assert.Equal(t, apiv1.PhaseDeployed, rollout.Status.Phase)
 }
 
+func TestProcessResourcePromotesForcePromoteChainTrialBeforeReplacement(t *testing.T) {
+	restConfig, numaflowClientSet, k8sClient, _, err := commontest.PrepareK8SEnvironment()
+	require.NoError(t, err)
+	require.NoError(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	require.NoError(t, err)
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	require.NoError(t, config.GetConfigManagerInstance().LoadAllConfigs(func(error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2")))
+
+	ctx := context.Background()
+	namespace := ctlrcommon.DefaultTestNamespace
+	require.NoError(t, numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}))
+
+	promoted := createMonoVertex("mv-promoted")
+	promoted.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+	trial := createMonoVertex("mv-trial")
+	trial.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
+	trial.Labels[common.LabelKeyForcePromoteChain] = "true"
+
+	createdPromoted, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, promoted, metav1.CreateOptions{})
+	require.NoError(t, err)
+	createdTrial, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, trial, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	rollout := setMonoVertexProgressiveStatus(
+		&apiv1.MonoVertexRollout{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       ctlrcommon.DefaultTestMonoVertexRolloutName,
+				Namespace:  namespace,
+				Generation: 3,
+			},
+		},
+		&apiv1.UpgradingMonoVertexStatus{
+			UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+				UpgradingChildStatus: apiv1.UpgradingChildStatus{
+					Name:                          createdTrial.Name,
+					AssessmentResult:              apiv1.AssessmentResultFailure,
+					ResourceAssessmentResult:      apiv1.AssessmentResultFailure,
+					ResourceChainAssessmentResult: apiv1.AssessmentResultFailure,
+					BasicAssessmentStartTime:      &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					InitializationComplete:        true,
+				},
+			},
+		},
+		&apiv1.PromotedMonoVertexStatus{
+			PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+				PromotedChildStatus: apiv1.PromotedChildStatus{Name: createdPromoted.Name},
+			},
+		},
+	)
+	rollout.Status.MarkProgressiveUpgradeFailed("progressive upgrade failed", rollout.Generation)
+
+	promotedUn := monoVertexToUnstruct(createdPromoted)
+	promotedUn.SetGroupVersionKind(numaflowv1.MonoVertexGroupVersionKind)
+
+	controller := &specChangeController{}
+	done, failed, _, err := ProcessResource(ctx, rollout, promotedUn, true, controller, k8sClient)
+	require.NoError(t, err)
+	assert.True(t, done)
+	assert.False(t, failed)
+	assert.False(t, controller.replacementAttempted, "a spec change must wait until the force-promote-chain trial is promoted")
+
+	gotTrial, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, createdTrial.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradePromoted), gotTrial.Labels[common.LabelKeyUpgradeState])
+	assert.Equal(t, string(common.LabelValueResultStateForcePromoted), gotTrial.Labels[common.LabelKeyProgressiveResultState])
+
+	gotPromoted, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, createdPromoted.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradeRecyclable), gotPromoted.Labels[common.LabelKeyUpgradeState])
+
+	childStatus := rollout.GetUpgradingChildStatus()
+	require.NotNil(t, childStatus)
+	assert.True(t, childStatus.ForcedSuccess)
+	assert.Equal(t, apiv1.AssessmentResultSuccess, childStatus.ResourceChainAssessmentResult)
+}
+
 func TestDiscontinueTrialOnRecyclableController(t *testing.T) {
 	restConfig, numaflowClientSet, k8sClient, _, err := commontest.PrepareK8SEnvironment()
 	require.NoError(t, err)

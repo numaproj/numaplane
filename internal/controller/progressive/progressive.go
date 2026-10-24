@@ -197,11 +197,14 @@ func ProcessResource(
 		}
 	}
 
-	// Honor a chain-promote annotation while this child is still the current trial, and promote it
-	// through the normal path. A spec change is applied only after that, on the next reconcile,
-	// which creates the replacement trial. Replacing first would mark this child recyclable and
-	// skip Rollout status, the progressive condition, and cleanup.
-	if ChainPromoteApplies(currentUpgradingChildDef, childStatus.Name) {
+	// Honor a chain-promote annotation or a force-promote-chain label while this child is still the
+	// current trial, and promote it through the normal path. A spec change is applied only after
+	// that, on the next reconcile, which creates the replacement trial. Replacing first would mark
+	// this child recyclable and skip Rollout status, the progressive condition, and cleanup.
+	// While the controller is being promoted, the desired child can briefly name the previous
+	// controller instance, which would otherwise look like a spec change.
+	if ChainPromoteApplies(currentUpgradingChildDef, childStatus.Name) ||
+		ForcePromoteChainApplies(currentUpgradingChildDef, childStatus.Name) {
 		return processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	}
 

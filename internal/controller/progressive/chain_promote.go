@@ -45,6 +45,17 @@ func ChainPromoteApplies(obj *unstructured.Unstructured, currentTrialChildName s
 	return ChainPromoteAnnotationMatches(obj) && obj.GetName() == currentTrialChildName
 }
 
+// ForcePromoteChainApplies reports whether obj is still the rollout's current trial child and carries
+// the force-promote-chain label. Like a chain-promote annotation, it must be honored before a spec
+// change replaces that trial child.
+func ForcePromoteChainApplies(obj *unstructured.Unstructured, currentTrialChildName string) bool {
+	if obj == nil || obj.GetName() != currentTrialChildName {
+		return false
+	}
+	_, found := obj.GetLabels()[common.LabelKeyForcePromoteChain]
+	return found
+}
+
 func parseChainPromoteAnnotation(value string) (string, string, bool) {
 	name, uid, ok := strings.Cut(value, "/")
 	if !ok || name == "" {
