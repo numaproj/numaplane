@@ -349,10 +349,6 @@ func WaitForTrialNumaflowController(version string) apiv1.NumaflowController {
 	return found
 }
 
-func controllerAssessmentMatches(expected apiv1.AssessmentResult) bool {
-	return controllerAssessmentMatchesVersion(expected, "")
-}
-
 // controllerAssessmentMatchesVersion matches the assessment. A non-empty version ignores a previous
 // upgrade that is still recorded: that upgrade can still say Success for a few seconds after the next
 // version bump, and a discontinued Failure can still name the version that was just reverted.
