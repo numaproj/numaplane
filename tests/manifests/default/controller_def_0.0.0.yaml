@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: numaflow-controller-definitions-0.0.0
+  namespace: numaplane-system
+  labels:
+    "numaplane.numaproj.io/config": numaflow-controller-definitions
+data:
+  controller_definitions.yaml: |-
+    controllerDefinitions:
+      - version: "0.0.0"
+        # The definition exists, so Numaplane creates a trial NumaflowController.
+        # The image does not, so that trial's Deployment never becomes healthy.
+        fullSpec: |-
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: numaflow-controller-config{{ .InstanceSuffix }}
+          data:
+            controller-config.yaml: "broken: true"
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: numaflow-role{{ .InstanceSuffix }}
+          rules:
+            - apiGroups: [""]
+              resources: ["configmaps"]
+              verbs: ["get"]
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: numaflow-controller{{ .InstanceSuffix }}
+          spec:
+            replicas: 1
+            progressDeadlineSeconds: 30
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: controller-manager
+                app.kubernetes.io/part-of: numaflow
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: controller-manager
+                  app.kubernetes.io/part-of: numaflow
+              spec:
+                containers:
+                  - name: controller-manager
+                    image: quay.io/numaproj/numaflow:v0.0.0-e2e-broken
+                    imagePullPolicy: Always
+                    args:
+                      - controller

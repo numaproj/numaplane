@@ -397,7 +397,9 @@ func DeleteISBServiceRollout(name string) {
 	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
 
 	CheckEventually("Verifying ISBService deletion", func() bool {
-		list, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+		list, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", ParentRolloutLabel, name),
+		})
 		if err != nil {
 			return false
 		}
