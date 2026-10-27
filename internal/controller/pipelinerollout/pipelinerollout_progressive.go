@@ -106,7 +106,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 			return apiv1.AssessmentResultFailure, "Basic Resource Health Check failed", nil
 		}
 
-		// function for checking readiness of Pipeline Vertex replicas
+		// verifyReplicasFunc checks readiness of Pipeline Vertex replicas and returns a named reason for each short vertex.
 		verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, []string, error) {
 			verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 				numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
