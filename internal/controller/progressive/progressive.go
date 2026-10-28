@@ -348,7 +348,7 @@ func promoteForcePromoteChain(
 	childStatus.ForcedSuccess = true
 	childStatus.ForcedSuccessReason = string(SkipProgressiveAssessmentReasonForcePromoteChain)
 	numaLogger.Debug("Upgrading child force-promote-chain")
-	if err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef); err != nil {
+	if err := markResolvedProgressiveResult(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef); err != nil {
 		return false, false, 0, err
 	}
 	done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
@@ -398,7 +398,7 @@ func processUpgradingChild(
 	// Promote this exact child without running health checks again. declareSuccess records the
 	// assessment results after the child is relabeled.
 	if ChainPromoteApplies(existingUpgradingChildDef, childStatus.Name) {
-		if err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef); err != nil {
+		if err := markResolvedProgressiveResult(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef); err != nil {
 			return false, false, 0, err
 		}
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
@@ -430,7 +430,7 @@ func processUpgradingChild(
 
 		numaLogger.WithValues("reason", SkipProgressiveAssessmentReasonForcePromote).Debug("Upgrading child force promoted")
 
-		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef)
+		err := markResolvedProgressiveResult(ctx, c, common.LabelValueResultStateForcePromoted, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
@@ -520,8 +520,9 @@ func processUpgradingChild(
 			status.FailureReasons = appendFailureReasons(status.FailureReasons, chainFailureReasons)
 		})
 
-		err = ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateFailed, existingUpgradingChildDef)
-		if err != nil {
+		// The result label is this resource's own assessment. A chain failure still marks the Rollout
+		// ProgressiveUpgradeSucceeded=False above, and latches the controller so new workloads stay Pending.
+		if err := syncProgressiveFailureLabels(ctx, c, existingUpgradingChildDef, childStatus.EffectiveResourceAssessment(), apiv1.AssessmentResultFailure); err != nil {
 			return true, true, 0, err
 		}
 
@@ -553,7 +554,7 @@ func processUpgradingChild(
 		return true, true, assessmentSchedule.Interval, nil
 
 	case apiv1.AssessmentResultSuccess:
-		err := ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef)
+		err := markResolvedProgressiveResult(ctx, c, common.LabelValueResultStateSucceeded, existingUpgradingChildDef)
 		if err != nil {
 			return true, false, 0, err
 		}
@@ -574,6 +575,7 @@ func processUpgradingChild(
 		}
 
 	default:
+		ownAssessment := childStatus.EffectiveResourceAssessment()
 		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultUnknown
 			status.ResourceChainAssessmentResult = apiv1.AssessmentResultUnknown
@@ -581,8 +583,55 @@ func processUpgradingChild(
 				status.ResourceChainMembers = chainMembers
 			}
 		})
+		// A replaced member makes the chain Unknown again. Keep the controller latch, and stop
+		// reporting failed on a resource whose own assessment is not Failure.
+		if err := syncProgressiveFailureLabels(ctx, c, existingUpgradingChildDef, ownAssessment, assessment); err != nil {
+			return false, false, 0, err
+		}
 
 		return false, false, assessmentSchedule.Interval, nil
+	}
+}
+
+// markResolvedProgressiveResult records that this child was promoted and clears a chain-failure latch.
+func markResolvedProgressiveResult(ctx context.Context, c client.Client, result common.ResultState, child *unstructured.Unstructured) error {
+	if err := ctlrcommon.UpdateResultState(ctx, c, result, child); err != nil {
+		return err
+	}
+	return kubernetes.RemoveAndPatchLabels(ctx, c, child, []string{common.LabelKeyProgressiveChainFailed})
+}
+
+// syncProgressiveFailureLabels writes progressive-result-state from this resource's own assessment.
+// A NumaflowController whose chain has failed also gets progressive-chain-failed, including when the
+// controller itself is healthy. That label is what keeps new workloads Pending after the chain
+// assessment returns to Unknown.
+func syncProgressiveFailureLabels(ctx context.Context, c client.Client, child *unstructured.Unstructured, ownAssessment, chainAssessment apiv1.AssessmentResult) error {
+	if child == nil {
+		return nil
+	}
+	labels := child.GetLabels()
+	resultLabel := labels[common.LabelKeyProgressiveResultState]
+	if child.GetKind() == apiv1.NumaflowControllerGroupVersionKind.Kind &&
+		labels[common.LabelKeyProgressiveChainFailed] != "true" &&
+		(chainAssessment == apiv1.AssessmentResultFailure || (resultLabel == string(common.LabelValueResultStateFailed) && ownAssessment != apiv1.AssessmentResultFailure)) {
+		if err := kubernetes.SetAndPatchLabels(ctx, c, child, map[string]string{
+			common.LabelKeyProgressiveChainFailed: "true",
+		}); err != nil {
+			return err
+		}
+	}
+
+	switch ownAssessment {
+	case apiv1.AssessmentResultFailure:
+		if resultLabel == string(common.LabelValueResultStateFailed) {
+			return nil
+		}
+		return ctlrcommon.UpdateResultState(ctx, c, common.LabelValueResultStateFailed, child)
+	default:
+		if resultLabel != string(common.LabelValueResultStateFailed) {
+			return nil
+		}
+		return kubernetes.RemoveAndPatchLabels(ctx, c, child, []string{common.LabelKeyProgressiveResultState})
 	}
 }
 

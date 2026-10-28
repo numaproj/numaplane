@@ -182,6 +182,36 @@ func SetAndPatchLabels(ctx context.Context, c client.Client, obj *unstructured.U
 	return PatchLabels(ctx, c, obj, labels)
 }
 
+// RemoveAndPatchLabels removes label keys from the in-memory object and from the live object.
+func RemoveAndPatchLabels(ctx context.Context, c client.Client, obj *unstructured.Unstructured, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	existing := obj.GetLabels()
+	if len(existing) == 0 {
+		return nil
+	}
+	nullLabels := make(map[string]any, len(keys))
+	for _, key := range keys {
+		if _, ok := existing[key]; !ok {
+			continue
+		}
+		delete(existing, key)
+		nullLabels[key] = nil
+	}
+	if len(nullLabels) == 0 {
+		return nil
+	}
+	obj.SetLabels(existing)
+
+	labelsJSON, err := json.Marshal(nullLabels)
+	if err != nil {
+		return fmt.Errorf("failed to marshal labels: %w", err)
+	}
+	patchJSON := fmt.Sprintf(`{"metadata":{"labels":%s}}`, string(labelsJSON))
+	return PatchResource(ctx, c, obj, patchJSON, k8stypes.MergePatchType)
+}
+
 // GetAnnotation returns the annotation identified by "key"
 func GetAnnotation(un *unstructured.Unstructured, key string) (string, error) {
 	annotations, err := nestedNullableStringMap(un.Object, "metadata", "annotations")
