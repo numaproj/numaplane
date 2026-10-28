@@ -99,6 +99,7 @@ func TrialControllerResourceAssessment(ctx context.Context, c client.Client, nam
 // PipelinesOnTrialISB returns the resource assessments of PipelineRollouts that belong on the trial
 // ISBService isbsvcName, excluding excludeRolloutName.
 // A Pipeline already rolling onto that ISBService contributes its resource assessment.
+// A Pipeline with no upgrading child whose promoted child is already on that ISBService contributes its own health.
 // A Pipeline whose spec uses the same ISBServiceRollout, but whose upgrading child is not on this
 // ISBService yet, contributes Unknown so this Pipeline cannot promote ahead of it.
 func PipelinesOnTrialISB(ctx context.Context, c client.Client, namespace, isbsvcName, excludeRolloutName string) ([]apiv1.ResourceChainMemberStatus, []string, error) {
@@ -125,6 +126,17 @@ func PipelinesOnTrialISB(ctx context.Context, c client.Client, namespace, isbsvc
 			continue
 		}
 		upgrading := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
+		if upgrading == nil || upgrading.Name == "" {
+			// A direct-applied update can move the promoted child onto the trial ISBService without an upgrading child.
+			childName, result, onISB, err := promotedPipelineAlreadyOnISB(ctx, c, pipelineRollout, isbsvcName)
+			if err != nil {
+				return nil, nil, err
+			}
+			if onISB {
+				members, reasons = appendMember(members, reasons, NewChainMember("PipelineRollout", pipelineRollout.Name, childName, result), "")
+				continue
+			}
+		}
 		onThisISB := upgrading != nil && upgrading.InterStepBufferServiceName == isbsvcName
 		usesParent := false
 		if parentRollout != "" {
@@ -145,6 +157,40 @@ func PipelinesOnTrialISB(ctx context.Context, c client.Client, namespace, isbsvc
 			resourceFailureReason("PipelineRollout", pipelineRollout.Name, upgrading.Name, &upgrading.UpgradingChildStatus))
 	}
 	return members, reasons, nil
+}
+
+// promotedPipelineAlreadyOnISB reports the rollout's promoted Pipeline when that Pipeline already names
+// isbsvcName, and the assessment of the rollout's own health.
+// onISB is false when there is no promoted Pipeline on isbsvcName; the caller treats that as not started.
+func promotedPipelineAlreadyOnISB(
+	ctx context.Context,
+	c client.Client,
+	pipelineRollout *apiv1.PipelineRollout,
+	isbsvcName string,
+) (childName string, result apiv1.AssessmentResult, onISB bool, err error) {
+	promoted, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, false, c)
+	if err != nil {
+		return "", apiv1.AssessmentResultUnknown, false, err
+	}
+	if promoted == nil {
+		return "", apiv1.AssessmentResultUnknown, false, nil
+	}
+	promotedISB, err := numaflowtypes.GetPipelineISBSVCName(promoted)
+	if err != nil {
+		return "", apiv1.AssessmentResultUnknown, false, fmt.Errorf("reading spec.interStepBufferServiceName of Pipeline %s/%s: %w", promoted.GetNamespace(), promoted.GetName(), err)
+	}
+	if promotedISB != isbsvcName {
+		return "", apiv1.AssessmentResultUnknown, false, nil
+	}
+	return promoted.GetName(), ownHealthAssessment(pipelineRollout), true, nil
+}
+
+// ownHealthAssessment is Success when the rollout reports its child healthy, and Unknown otherwise.
+func ownHealthAssessment(rollout ctlrcommon.RolloutObject) apiv1.AssessmentResult {
+	if healthy := rollout.GetRolloutStatus().GetCondition(apiv1.ConditionChildResourceHealthy); healthy != nil && healthy.Status == metav1.ConditionTrue {
+		return apiv1.AssessmentResultSuccess
+	}
+	return apiv1.AssessmentResultUnknown
 }
 
 // trialISBParentRollout returns the ISBServiceRollout that owns the named ISBService child.
@@ -311,11 +357,7 @@ func PromotedChildAlreadyOnInstance(
 	if promoted == nil || numaflowtypes.ControllerInstanceIDFromResource(promoted) != instanceID {
 		return "", apiv1.AssessmentResultUnknown, false, nil
 	}
-	result = apiv1.AssessmentResultUnknown
-	if healthy := rollout.GetRolloutStatus().GetCondition(apiv1.ConditionChildResourceHealthy); healthy != nil && healthy.Status == metav1.ConditionTrue {
-		result = apiv1.AssessmentResultSuccess
-	}
-	return promoted.GetName(), result, true, nil
+	return promoted.GetName(), ownHealthAssessment(rollout), true, nil
 }
 
 // childOnControllerInstance reports whether the named child is bound to instanceID.
