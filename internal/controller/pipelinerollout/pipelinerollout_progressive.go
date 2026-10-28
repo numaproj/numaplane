@@ -53,6 +53,28 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	return pipeline, nil
 }
 
+// assessVertexReplicaReadiness reports whether every vertex has enough ready replicas.
+// Reasons from vertices that are short on replicas are accumulated and annotated with the vertex name.
+func assessVertexReplicaReadiness(vertices []unstructured.Unstructured) (bool, []string, error) {
+	var failureReasons []string
+	allReady := true
+	for i := range vertices {
+		vertex := &vertices[i]
+		ready, vertexFailureReasons, err := progressive.AreVertexReplicasReady(vertex)
+		if err != nil {
+			return false, failureReasons, err
+		}
+		if ready {
+			continue
+		}
+		allReady = false
+		for _, reason := range vertexFailureReasons {
+			failureReasons = append(failureReasons, fmt.Sprintf("%s (vertex: %s)", reason, vertex.GetName()))
+		}
+	}
+	return allReady, failureReasons, nil
+}
+
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
 func (r *PipelineRolloutReconciler) AssessUpgradingChild(
@@ -84,33 +106,16 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 			return apiv1.AssessmentResultFailure, "Basic Resource Health Check failed", nil
 		}
 
-		// function for checking readiness of Pipeline Vertex replicas
+		// verifyReplicasFunc checks readiness of Pipeline Vertex replicas and returns a named reason for each short vertex.
 		verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, []string, error) {
 			verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 				numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
 				fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPipelineName, existingUpgradingChildDef.GetName()), "")
-
-			var failureReasons []string
 			if err != nil {
-				return false, failureReasons, err
+				return false, nil, err
 			}
 
-			areAllVerticesReplicasReady := true
-			for _, vertex := range verticesList.Items {
-				areVertexReplicasReady, failureReasons, err := progressive.AreVertexReplicasReady(&vertex)
-				if err != nil {
-					return false, failureReasons, err
-				}
-
-				if !areVertexReplicasReady {
-					areAllVerticesReplicasReady = false
-					for _, failureReason := range failureReasons {
-						failureReasons = append(failureReasons, fmt.Sprintf("%s (vertex: %s)", failureReason, vertex.GetName()))
-					}
-				}
-			}
-
-			return areAllVerticesReplicasReady, failureReasons, nil
+			return assessVertexReplicaReadiness(verticesList.Items)
 		}
 
 		// First perform basic resource health check
