@@ -1041,3 +1041,27 @@ func TestUnstructuredToRawExtension(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoveAndPatchLabels(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("no keys", func(t *testing.T) {
+		obj := &unstructured.Unstructured{}
+		obj.SetLabels(map[string]string{"keep": "yes"})
+		assert.NoError(t, RemoveAndPatchLabels(ctx, nil, obj, nil))
+		assert.Equal(t, map[string]string{"keep": "yes"}, obj.GetLabels())
+	})
+
+	t.Run("no labels", func(t *testing.T) {
+		obj := &unstructured.Unstructured{}
+		assert.NoError(t, RemoveAndPatchLabels(ctx, nil, obj, []string{"missing"}))
+		assert.Empty(t, obj.GetLabels())
+	})
+
+	t.Run("key not present", func(t *testing.T) {
+		obj := &unstructured.Unstructured{}
+		obj.SetLabels(map[string]string{"keep": "yes"})
+		assert.NoError(t, RemoveAndPatchLabels(ctx, nil, obj, []string{"missing"}))
+		assert.Equal(t, map[string]string{"keep": "yes"}, obj.GetLabels())
+	})
+}

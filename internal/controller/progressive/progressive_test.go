@@ -3,6 +3,7 @@ package progressive
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -571,6 +572,86 @@ type scriptedAssessmentController struct {
 
 func (s *scriptedAssessmentController) AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured, schedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
 	return s.own, "", nil
+}
+
+type patchErrorClient struct {
+	client.Client
+}
+
+func (patchErrorClient) Patch(context.Context, client.Object, client.Patch, ...client.PatchOption) error {
+	return errors.New("patch failed")
+}
+
+func TestProgressiveFailureLabelEdges(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("nil child", func(t *testing.T) {
+		require.NoError(t, syncProgressiveFailureLabels(ctx, nil, nil, apiv1.AssessmentResultFailure, apiv1.AssessmentResultFailure))
+	})
+
+	t.Run("failed label already recorded", func(t *testing.T) {
+		child := &unstructured.Unstructured{}
+		child.SetLabels(map[string]string{
+			common.LabelKeyProgressiveResultState: string(common.LabelValueResultStateFailed),
+		})
+		require.NoError(t, syncProgressiveFailureLabels(ctx, nil, child, apiv1.AssessmentResultFailure, apiv1.AssessmentResultFailure))
+		assert.Equal(t, string(common.LabelValueResultStateFailed), child.GetLabels()[common.LabelKeyProgressiveResultState])
+	})
+
+	t.Run("chain latch patch failure", func(t *testing.T) {
+		child := &unstructured.Unstructured{}
+		child.SetGroupVersionKind(apiv1.NumaflowControllerGroupVersionKind)
+		require.Error(t, syncProgressiveFailureLabels(ctx, patchErrorClient{}, child, apiv1.AssessmentResultSuccess, apiv1.AssessmentResultFailure))
+	})
+
+	t.Run("resolved result patch failure", func(t *testing.T) {
+		child := &unstructured.Unstructured{}
+		child.SetName("child")
+		child.SetNamespace(ctlrcommon.DefaultTestNamespace)
+		require.Error(t, markResolvedProgressiveResult(ctx, patchErrorClient{}, common.LabelValueResultStateSucceeded, child))
+	})
+
+	getwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, config.GetConfigManagerInstance().LoadAllConfigs(func(error) {}, config.WithConfigsPath(filepath.Join(getwd, "../../../", "tests", "config")), config.WithConfigFileName("testconfig2")))
+
+	t.Run("chain failure returns the label patch error", func(t *testing.T) {
+		rollout := setMonoVertexProgressiveStatus(
+			defaultMonoVertexRollout.DeepCopy(),
+			&apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                     "patch-error",
+						BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						InitializationComplete:   true,
+					},
+				},
+			},
+			nil,
+		)
+		_, _, _, err := processUpgradingChild(ctx, rollout, &otherMemberFailedController{ownResult: apiv1.AssessmentResultFailure}, monoVertexToUnstruct(createMonoVertex("promoted")), monoVertexToUnstruct(createMonoVertex("patch-error")), patchErrorClient{})
+		require.Error(t, err)
+	})
+
+	t.Run("reassessment returns the label removal error", func(t *testing.T) {
+		trial := createMonoVertex("patch-remove")
+		trial.Labels[common.LabelKeyProgressiveResultState] = string(common.LabelValueResultStateFailed)
+		rollout := setMonoVertexProgressiveStatus(
+			defaultMonoVertexRollout.DeepCopy(),
+			&apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                     trial.Name,
+						BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						InitializationComplete:   true,
+					},
+				},
+			},
+			nil,
+		)
+		_, _, _, err := processUpgradingChild(ctx, rollout, &scriptedAssessmentController{own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultUnknown}, monoVertexToUnstruct(createMonoVertex("promoted")), monoVertexToUnstruct(trial), patchErrorClient{})
+		require.Error(t, err)
+	})
 }
 
 func (s *scriptedAssessmentController) AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error) {
