@@ -171,13 +171,14 @@ const (
 	LabelKeyNumaflowMonoVertexName = KeyNumaflowPrefix + "mono-vertex-name"
 
 	// LabelKeyProgressiveChainFailed is set on every current trial child when its chain assessment
-	// has failed. Argo CD uses it to show Force Promote Chain. On the trial NumaflowController it
-	// also keeps new workloads Pending after a failed member is replaced and the chain assessment
-	// returns to Unknown, until the chain succeeds, is reverted, or is force-promoted.
+	// has failed and the chain has more than one rollout. A resource upgrading on its own does not get it.
+	// Argo CD uses it to show Force Promote Chain instead of Force Promote. On the trial
+	// NumaflowController it also keeps new workloads Pending after a failed member is replaced and
+	// the chain assessment returns to Unknown, until the chain succeeds, is reverted, or is force-promoted.
 	LabelKeyProgressiveChainFailed = KeyNumaplanePrefix + "progressive-chain-failed"
 
 	// LabelKeyForcePromote is the label key used to force promote the upgrading child during a progressive upgrade.
-	// It is ignored while that child's chain assessment is Failure. Use LabelKeyForcePromoteChain instead.
+	// It is ignored while a chain of more than one rollout has failed. Use LabelKeyForcePromoteChain instead.
 	LabelKeyForcePromote = KeyNumaplanePrefix + "force-promote"
 
 	// LabelKeyForcePromoteChain promotes every current trial resource in the chain.

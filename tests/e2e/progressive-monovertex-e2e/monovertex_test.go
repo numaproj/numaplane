@@ -126,14 +126,14 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage, initialMonoVertexSpec, udTransformer)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
 
-		By("Updating the MonoVertex to set the 'force promote chain' Label")
+		By("Updating the MonoVertex to set the 'force promote' Label")
 		UpdateMonoVertexInK8S(GetInstanceName(monoVertexRolloutName, 1), func(monovertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 			labels := monovertex.GetLabels()
 			if labels == nil {
 				labels = make(map[string]string)
 			}
-			// Individual force-promote is ignored once the chain assessment is Failure.
-			labels[common.LabelKeyForcePromoteChain] = "true"
+			// The MonoVertex is upgrading on its own, so the individual force-promote applies.
+			labels[common.LabelKeyForcePromote] = "true"
 			monovertex.SetLabels(labels)
 			return monovertex, nil
 		})

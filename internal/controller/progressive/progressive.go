@@ -420,10 +420,13 @@ func processUpgradingChild(
 		return promoteForcePromoteChain(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, assessmentSchedule, c)
 	}
 
-	// Individual force promote is disabled while the chain assessment is Failure.
-	// The ArgoCD UI "force promote" label otherwise overrides the chain assessment and promotes this child now.
+	// Individual force promote is disabled while a chain of more than one rollout has failed, because
+	// promoting one member would break the atomic promotion; use force-promote-chain instead.
+	// A resource upgrading on its own keeps it. The ArgoCD UI "force promote" label otherwise
+	// overrides the chain assessment and promotes this child now.
 	_, forcePromote := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromote]
-	chainAlreadyFailed := childStatus.ResourceChainAssessmentResult == apiv1.AssessmentResultFailure
+	chainAlreadyFailed := childStatus.ResourceChainAssessmentResult == apiv1.AssessmentResultFailure &&
+		inResourceChain(childStatus.ResourceChainMembers)
 	if forcePromote && !chainAlreadyFailed {
 		childStatus.ForcedSuccess = true
 		childStatus.ForcedSuccessReason = string(SkipProgressiveAssessmentReasonForcePromote)
@@ -521,10 +524,10 @@ func processUpgradingChild(
 		})
 
 		// The result label is this resource's own assessment. A chain failure still marks the Rollout
-		// ProgressiveUpgradeSucceeded=False above, and sets progressive-chain-failed on this trial
-		// so Argo CD can offer Force Promote Chain. On the controller that label also keeps new
-		// workloads Pending.
-		if err := syncProgressiveFailureLabels(ctx, c, existingUpgradingChildDef, childStatus.EffectiveResourceAssessment(), apiv1.AssessmentResultFailure); err != nil {
+		// ProgressiveUpgradeSucceeded=False above. When the chain has other members, it also sets
+		// progressive-chain-failed on this trial so Argo CD can offer Force Promote Chain. On the
+		// controller that label also keeps new workloads Pending.
+		if err := syncProgressiveFailureLabels(ctx, c, existingUpgradingChildDef, childStatus.EffectiveResourceAssessment(), apiv1.AssessmentResultFailure, inResourceChain(childStatus.ResourceChainMembers)); err != nil {
 			return true, true, 0, err
 		}
 
@@ -578,7 +581,7 @@ func processUpgradingChild(
 
 	default:
 		ownAssessment := childStatus.EffectiveResourceAssessment()
-		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultUnknown
 			status.ResourceChainAssessmentResult = apiv1.AssessmentResultUnknown
 			if chainMembers != nil {
@@ -587,7 +590,7 @@ func processUpgradingChild(
 		})
 		// A replaced member makes the chain Unknown again. Keep an existing chain-failed label, and stop
 		// reporting failed on a resource whose own assessment is not Failure.
-		if err := syncProgressiveFailureLabels(ctx, c, existingUpgradingChildDef, ownAssessment, assessment); err != nil {
+		if err := syncProgressiveFailureLabels(ctx, c, existingUpgradingChildDef, ownAssessment, assessment, inResourceChain(childStatus.ResourceChainMembers)); err != nil {
 			return false, false, 0, err
 		}
 
@@ -603,17 +606,29 @@ func markResolvedProgressiveResult(ctx context.Context, c client.Client, result 
 	return kubernetes.RemoveAndPatchLabels(ctx, c, child, []string{common.LabelKeyProgressiveChainFailed})
 }
 
+// inResourceChain reports whether members name more than one rollout.
+// A resource upgrading on its own has nothing to promote atomically with it.
+func inResourceChain(members []apiv1.ResourceChainMemberStatus) bool {
+	for _, member := range members {
+		if member.Kind != members[0].Kind || member.Name != members[0].Name {
+			return true
+		}
+	}
+	return false
+}
+
 // syncProgressiveFailureLabels writes progressive-result-state from this resource's own assessment.
-// Every trial child whose chain has failed also gets progressive-chain-failed, including when this
-// child is healthy. Argo CD uses that label to show Force Promote Chain. On the trial
-// NumaflowController it also keeps new workloads Pending after the chain assessment returns to Unknown.
-func syncProgressiveFailureLabels(ctx context.Context, c client.Client, child *unstructured.Unstructured, ownAssessment, chainAssessment apiv1.AssessmentResult) error {
+// When inChain is set, a trial child whose chain has failed also gets progressive-chain-failed,
+// including when this child is healthy. Argo CD uses that label to show Force Promote Chain instead
+// of Force Promote. On the trial NumaflowController it also keeps new workloads Pending after the
+// chain assessment returns to Unknown.
+func syncProgressiveFailureLabels(ctx context.Context, c client.Client, child *unstructured.Unstructured, ownAssessment, chainAssessment apiv1.AssessmentResult, inChain bool) error {
 	if child == nil {
 		return nil
 	}
 	labels := child.GetLabels()
 	resultLabel := labels[common.LabelKeyProgressiveResultState]
-	if labels[common.LabelKeyProgressiveChainFailed] != "true" &&
+	if inChain && labels[common.LabelKeyProgressiveChainFailed] != "true" &&
 		(chainAssessment == apiv1.AssessmentResultFailure || (resultLabel == string(common.LabelValueResultStateFailed) && ownAssessment != apiv1.AssessmentResultFailure)) {
 		if err := kubernetes.SetAndPatchLabels(ctx, c, child, map[string]string{
 			common.LabelKeyProgressiveChainFailed: "true",
