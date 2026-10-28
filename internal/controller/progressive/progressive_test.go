@@ -496,8 +496,7 @@ func TestProcessUpgradingChildFinishesOwnAssessmentBeforePostFailure(t *testing.
 				_, markedFailed := got.Labels[common.LabelKeyProgressiveResultState]
 				assert.False(t, markedFailed)
 			}
-			_, chainLatched := got.Labels[common.LabelKeyProgressiveChainFailed]
-			assert.False(t, chainLatched)
+			assert.Equal(t, "true", got.Labels[common.LabelKeyProgressiveChainFailed])
 		})
 	}
 
@@ -593,9 +592,11 @@ func TestProgressiveFailureLabelEdges(t *testing.T) {
 		child := &unstructured.Unstructured{}
 		child.SetLabels(map[string]string{
 			common.LabelKeyProgressiveResultState: string(common.LabelValueResultStateFailed),
+			common.LabelKeyProgressiveChainFailed: "true",
 		})
 		require.NoError(t, syncProgressiveFailureLabels(ctx, nil, child, apiv1.AssessmentResultFailure, apiv1.AssessmentResultFailure))
 		assert.Equal(t, string(common.LabelValueResultStateFailed), child.GetLabels()[common.LabelKeyProgressiveResultState])
+		assert.Equal(t, "true", child.GetLabels()[common.LabelKeyProgressiveChainFailed])
 	})
 
 	t.Run("chain latch patch failure", func(t *testing.T) {

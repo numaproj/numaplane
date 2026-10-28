@@ -521,7 +521,9 @@ func processUpgradingChild(
 		})
 
 		// The result label is this resource's own assessment. A chain failure still marks the Rollout
-		// ProgressiveUpgradeSucceeded=False above, and latches the controller so new workloads stay Pending.
+		// ProgressiveUpgradeSucceeded=False above, and sets progressive-chain-failed on this trial
+		// so Argo CD can offer Force Promote Chain. On the controller that label also keeps new
+		// workloads Pending.
 		if err := syncProgressiveFailureLabels(ctx, c, existingUpgradingChildDef, childStatus.EffectiveResourceAssessment(), apiv1.AssessmentResultFailure); err != nil {
 			return true, true, 0, err
 		}
@@ -583,7 +585,7 @@ func processUpgradingChild(
 				status.ResourceChainMembers = chainMembers
 			}
 		})
-		// A replaced member makes the chain Unknown again. Keep the controller latch, and stop
+		// A replaced member makes the chain Unknown again. Keep an existing chain-failed label, and stop
 		// reporting failed on a resource whose own assessment is not Failure.
 		if err := syncProgressiveFailureLabels(ctx, c, existingUpgradingChildDef, ownAssessment, assessment); err != nil {
 			return false, false, 0, err
@@ -602,17 +604,16 @@ func markResolvedProgressiveResult(ctx context.Context, c client.Client, result 
 }
 
 // syncProgressiveFailureLabels writes progressive-result-state from this resource's own assessment.
-// A NumaflowController whose chain has failed also gets progressive-chain-failed, including when the
-// controller itself is healthy. That label is what keeps new workloads Pending after the chain
-// assessment returns to Unknown.
+// Every trial child whose chain has failed also gets progressive-chain-failed, including when this
+// child is healthy. Argo CD uses that label to show Force Promote Chain. On the trial
+// NumaflowController it also keeps new workloads Pending after the chain assessment returns to Unknown.
 func syncProgressiveFailureLabels(ctx context.Context, c client.Client, child *unstructured.Unstructured, ownAssessment, chainAssessment apiv1.AssessmentResult) error {
 	if child == nil {
 		return nil
 	}
 	labels := child.GetLabels()
 	resultLabel := labels[common.LabelKeyProgressiveResultState]
-	if child.GetKind() == apiv1.NumaflowControllerGroupVersionKind.Kind &&
-		labels[common.LabelKeyProgressiveChainFailed] != "true" &&
+	if labels[common.LabelKeyProgressiveChainFailed] != "true" &&
 		(chainAssessment == apiv1.AssessmentResultFailure || (resultLabel == string(common.LabelValueResultStateFailed) && ownAssessment != apiv1.AssessmentResultFailure)) {
 		if err := kubernetes.SetAndPatchLabels(ctx, c, child, map[string]string{
 			common.LabelKeyProgressiveChainFailed: "true",

@@ -170,9 +170,10 @@ const (
 	// LabelKeyNumaflowMonoVertexName is the label key used to identify the pod with a specific monovertex vertex
 	LabelKeyNumaflowMonoVertexName = KeyNumaflowPrefix + "mono-vertex-name"
 
-	// LabelKeyProgressiveChainFailed is set on a trial NumaflowController when its chain assessment
-	// has failed. It stays after a failed member is replaced and the chain assessment returns to
-	// Unknown, so new workloads stay Pending until the chain succeeds, is reverted, or is force-promoted.
+	// LabelKeyProgressiveChainFailed is set on every current trial child when its chain assessment
+	// has failed. Argo CD uses it to show Force Promote Chain. On the trial NumaflowController it
+	// also keeps new workloads Pending after a failed member is replaced and the chain assessment
+	// returns to Unknown, until the chain succeeds, is reverted, or is force-promoted.
 	LabelKeyProgressiveChainFailed = KeyNumaplanePrefix + "progressive-chain-failed"
 
 	// LabelKeyForcePromote is the label key used to force promote the upgrading child during a progressive upgrade.
