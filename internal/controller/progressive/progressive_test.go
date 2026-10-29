@@ -490,12 +490,11 @@ func TestProcessUpgradingChildFinishesOwnAssessmentBeforePostFailure(t *testing.
 
 			got, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, trial.Name, metav1.GetOptions{})
 			require.NoError(t, err)
-			if tc.ownResult == apiv1.AssessmentResultFailure {
-				assert.Equal(t, string(common.LabelValueResultStateFailed), got.Labels[common.LabelKeyProgressiveResultState])
-			} else {
-				_, markedFailed := got.Labels[common.LabelKeyProgressiveResultState]
-				assert.False(t, markedFailed)
-			}
+			wantResult := map[apiv1.AssessmentResult]common.ResultState{
+				apiv1.AssessmentResultFailure: common.LabelValueResultStateFailed,
+				apiv1.AssessmentResultSuccess: common.LabelValueResultStateSucceeded,
+			}[tc.ownResult]
+			assert.Equal(t, string(wantResult), got.Labels[common.LabelKeyProgressiveResultState])
 			assert.Equal(t, "true", got.Labels[common.LabelKeyProgressiveChainFailed])
 		})
 	}
@@ -508,14 +507,15 @@ func TestProcessUpgradingChildFinishesOwnAssessmentBeforePostFailure(t *testing.
 			chain       apiv1.AssessmentResult
 			stampFailed bool
 			alone       bool
-			wantFailed  bool
+			wantResult  common.ResultState
 			wantLatch   bool
 			wantRollout bool
 		}{
-			{name: "healthy controller in a failed chain", childName: "controller-healthy", own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultFailure, wantLatch: true, wantRollout: true},
-			{name: "failed controller", childName: "controller-failed", own: apiv1.AssessmentResultFailure, chain: apiv1.AssessmentResultFailure, wantFailed: true, wantLatch: true, wantRollout: true},
-			{name: "failed controller upgrading alone", childName: "controller-alone", own: apiv1.AssessmentResultFailure, chain: apiv1.AssessmentResultFailure, alone: true, wantFailed: true, wantRollout: true},
-			{name: "reassessment keeps the hold and clears a stale failure", childName: "controller-reassess", own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultUnknown, stampFailed: true, wantLatch: true},
+			{name: "healthy controller in a failed chain", childName: "controller-healthy", own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultFailure, wantResult: common.LabelValueResultStateSucceeded, wantLatch: true, wantRollout: true},
+			{name: "failed controller", childName: "controller-failed", own: apiv1.AssessmentResultFailure, chain: apiv1.AssessmentResultFailure, wantResult: common.LabelValueResultStateFailed, wantLatch: true, wantRollout: true},
+			{name: "failed controller upgrading alone", childName: "controller-alone", own: apiv1.AssessmentResultFailure, chain: apiv1.AssessmentResultFailure, alone: true, wantResult: common.LabelValueResultStateFailed, wantRollout: true},
+			{name: "reassessment keeps the hold and replaces a stale failure", childName: "controller-reassess", own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultUnknown, stampFailed: true, wantResult: common.LabelValueResultStateSucceeded, wantLatch: true},
+			{name: "own assessment still running leaves the label unset", childName: "controller-running", own: apiv1.AssessmentResultUnknown, chain: apiv1.AssessmentResultUnknown},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				child := ctlrcommon.CreateTestNumaflowController(namespace, "controller", tc.childName, common.LabelValueUpgradeTrial, "trial")
@@ -547,12 +547,7 @@ func TestProcessUpgradingChildFinishesOwnAssessmentBeforePostFailure(t *testing.
 
 				var got apiv1.NumaflowController
 				require.NoError(t, k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: tc.childName}, &got))
-				if tc.wantFailed {
-					assert.Equal(t, string(common.LabelValueResultStateFailed), got.Labels[common.LabelKeyProgressiveResultState])
-				} else {
-					_, markedFailed := got.Labels[common.LabelKeyProgressiveResultState]
-					assert.False(t, markedFailed)
-				}
+				assert.Equal(t, string(tc.wantResult), got.Labels[common.LabelKeyProgressiveResultState])
 				assert.Equal(t, tc.wantLatch, got.Labels[common.LabelKeyProgressiveChainFailed] == "true")
 				if tc.wantRollout {
 					condition := rollout.Status.GetCondition(apiv1.ConditionProgressiveUpgradeSucceeded)
@@ -670,6 +665,43 @@ func TestProcessUpgradingChildForcePromoteOutsideAChain(t *testing.T) {
 	}
 }
 
+func TestProgressiveResultStateFollowsOwnHealth(t *testing.T) {
+	forcedBy := func(reason SkipProgressiveAssessmentReason) *apiv1.UpgradingChildStatus {
+		return &apiv1.UpgradingChildStatus{ResourceAssessmentResult: apiv1.AssessmentResultSuccess, ForcedSuccess: true, ForcedSuccessReason: string(reason)}
+	}
+	succeeded := &apiv1.UpgradingChildStatus{ResourceAssessmentResult: apiv1.AssessmentResultSuccess}
+	failed := &apiv1.UpgradingChildStatus{ResourceAssessmentResult: apiv1.AssessmentResultFailure}
+	running := &apiv1.UpgradingChildStatus{ResourceAssessmentResult: apiv1.AssessmentResultUnknown}
+	legacyFailed := &apiv1.UpgradingChildStatus{AssessmentResult: apiv1.AssessmentResultFailure}
+
+	t.Run("own health", func(t *testing.T) {
+		assert.Equal(t, common.LabelValueResultStateSucceeded, ownResultState(succeeded))
+		assert.Equal(t, common.LabelValueResultStateFailed, ownResultState(failed))
+		assert.Equal(t, common.LabelValueResultStateFailed, ownResultState(legacyFailed))
+		assert.Equal(t, common.ResultState(""), ownResultState(running))
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, ownResultState(forcedBy(SkipProgressiveAssessmentReasonRolloutConfiguration)))
+		assert.Equal(t, common.LabelValueResultStateSucceeded, ownResultState(forcedBy(SkipProgressiveAssessmentReasonNoDataIngestion)))
+	})
+
+	t.Run("promoted because the chain succeeded", func(t *testing.T) {
+		assert.Equal(t, common.LabelValueResultStateSucceeded, promotedResultState(succeeded))
+		assert.Equal(t, common.LabelValueResultStateSucceeded, promotedResultState(running))
+		assert.Equal(t, common.LabelValueResultStateSucceeded, promotedResultState(failed), "a stale stored failure does not mark a promoted child failed")
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, promotedResultState(forcedBy(SkipProgressiveAssessmentReasonRolloutConfiguration)))
+	})
+
+	t.Run("promoted by a user override", func(t *testing.T) {
+		child := &unstructured.Unstructured{}
+		assert.Equal(t, common.LabelValueResultStateSucceeded, overriddenResultState(succeeded, child), "a healthy chain member stays succeeded")
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, overriddenResultState(failed, child))
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, overriddenResultState(running, child))
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, overriddenResultState(forcedBy(SkipProgressiveAssessmentReasonRolloutConfiguration), child))
+
+		child.SetLabels(map[string]string{common.LabelKeyProgressiveResultState: string(common.LabelValueResultStateForcePromoted)})
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, overriddenResultState(forcedBy(SkipProgressiveAssessmentReasonForcePromote), child), "a retried override keeps force-promoted")
+	})
+}
+
 func TestInResourceChain(t *testing.T) {
 	self := NewChainMember("PipelineRollout", "p", "p-1", apiv1.AssessmentResultFailure)
 	assert.False(t, inResourceChain(nil))
@@ -700,11 +732,11 @@ func (patchErrorClient) Patch(context.Context, client.Object, client.Patch, ...c
 	return errors.New("patch failed")
 }
 
-func TestProgressiveFailureLabelEdges(t *testing.T) {
+func TestProgressiveResultLabelEdges(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("nil child", func(t *testing.T) {
-		require.NoError(t, syncProgressiveFailureLabels(ctx, nil, nil, apiv1.AssessmentResultFailure, apiv1.AssessmentResultFailure, true))
+		require.NoError(t, syncProgressiveResultLabels(ctx, nil, nil, common.LabelValueResultStateFailed, apiv1.AssessmentResultFailure, true))
 	})
 
 	t.Run("failed label already recorded", func(t *testing.T) {
@@ -713,7 +745,7 @@ func TestProgressiveFailureLabelEdges(t *testing.T) {
 			common.LabelKeyProgressiveResultState: string(common.LabelValueResultStateFailed),
 			common.LabelKeyProgressiveChainFailed: "true",
 		})
-		require.NoError(t, syncProgressiveFailureLabels(ctx, nil, child, apiv1.AssessmentResultFailure, apiv1.AssessmentResultFailure, true))
+		require.NoError(t, syncProgressiveResultLabels(ctx, nil, child, common.LabelValueResultStateFailed, apiv1.AssessmentResultFailure, true))
 		assert.Equal(t, string(common.LabelValueResultStateFailed), child.GetLabels()[common.LabelKeyProgressiveResultState])
 		assert.Equal(t, "true", child.GetLabels()[common.LabelKeyProgressiveChainFailed])
 	})
@@ -721,7 +753,7 @@ func TestProgressiveFailureLabelEdges(t *testing.T) {
 	t.Run("chain latch patch failure", func(t *testing.T) {
 		child := &unstructured.Unstructured{}
 		child.SetGroupVersionKind(apiv1.NumaflowControllerGroupVersionKind)
-		require.Error(t, syncProgressiveFailureLabels(ctx, patchErrorClient{}, child, apiv1.AssessmentResultSuccess, apiv1.AssessmentResultFailure, true))
+		require.Error(t, syncProgressiveResultLabels(ctx, patchErrorClient{}, child, common.LabelValueResultStateSucceeded, apiv1.AssessmentResultFailure, true))
 	})
 
 	t.Run("resolved result patch failure", func(t *testing.T) {

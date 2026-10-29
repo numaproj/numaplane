@@ -97,21 +97,22 @@ const (
 	// this includes both the case of pausing for Pipeline updating as well as for NumaflowController and isbsvc updating
 	LabelKeyAllowDataLoss = KeyNumaplanePrefix + "allow-data-loss"
 
-	// LabelKeyProgressiveResultState records the progressive outcome of this child.
-	// failed reflects only this child's own assessment, so Argo CD health marks just the resource
-	// that failed; a chain failure is recorded with LabelKeyProgressiveChainFailed.
-	// succeeded and force-promoted record how the child was promoted, which can depend on its chain.
+	// LabelKeyProgressiveResultState is the health of this child on its own during a progressive upgrade.
+	// It does not reflect the other members of its chain: a chain failure is recorded with
+	// LabelKeyProgressiveChainFailed. The label is absent while this child's own assessment is not final.
+	// Argo CD health reads it, so only the resource that failed shows as Degraded.
 	LabelKeyProgressiveResultState = KeyNumaplanePrefix + "progressive-result-state"
 
 	// LabelValueResultStateFailed means this child's own progressive assessment failed.
 	LabelValueResultStateFailed ResultState = "failed"
 
-	// LabelValueResultStateForcePromoted means this child was promoted by force-promote, or by
-	// force-promote-chain on its chain, regardless of its own assessment.
+	// LabelValueResultStateForcePromoted means a user override decided this child's health instead of
+	// its own assessment: the Progressive strategy's forcePromote, or force-promote or
+	// force-promote-chain on a child whose own assessment had not succeeded.
 	LabelValueResultStateForcePromoted ResultState = "force-promoted"
 
-	// LabelValueResultStateSucceeded means this child was promoted because it and every other
-	// member of its chain succeeded.
+	// LabelValueResultStateSucceeded means this child's own progressive assessment succeeded.
+	// The child may still wait for the rest of its chain before it is promoted.
 	LabelValueResultStateSucceeded ResultState = "succeeded"
 
 	// LabelKeyUpgradeState is the label key used to identify the upgrade state of a resource that is managed by
