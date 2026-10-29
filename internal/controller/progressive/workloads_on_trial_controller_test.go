@@ -60,6 +60,27 @@ func TestWorkloadsOnTrialControllerCountsPromotedChild(t *testing.T) {
 	}, members)
 }
 
+func TestWorkloadsOnTrialControllerIgnoresHealthFromAnEarlierGeneration(t *testing.T) {
+	const namespace = "test"
+	isb := isbRollout(namespace, "isb", metav1.ConditionTrue)
+	isb.Generation = 2
+	isb.Status.Conditions[0].ObservedGeneration = 1
+	c := fakeClient(t,
+		trialControllerRollout(namespace),
+		ctlrcommon.CreateTestNumaflowController(namespace, "controller", "controller-1", common.LabelValueUpgradeTrial, "trial"),
+		isb,
+		promotedChildOnInstance(numaflowv1.ISBGroupVersionKind, namespace, "isb-0", "isb", "trial"),
+	)
+
+	members, reasons, present, err := WorkloadsOnTrialController(context.Background(), c, namespace, "", "")
+	require.NoError(t, err)
+	require.True(t, present)
+	require.Empty(t, reasons)
+	require.Equal(t, []apiv1.ResourceChainMemberStatus{
+		{Kind: "ISBServiceRollout", Name: "isb", ChildName: "isb-0", AssessmentResult: apiv1.AssessmentResultUnknown},
+	}, members)
+}
+
 func TestWorkloadsOnTrialControllerSkipsTheExcludedRollout(t *testing.T) {
 	const namespace = "test"
 	c := fakeClient(t,
