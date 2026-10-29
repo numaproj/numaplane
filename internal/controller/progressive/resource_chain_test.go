@@ -81,36 +81,52 @@ func TestCombineMemberAssessments(t *testing.T) {
 func TestPipelinesOnTrialISBCountsPromotedChild(t *testing.T) {
 	const namespace = "test"
 
+	const generation = 2
+
 	testCases := []struct {
-		name        string
-		healthy     metav1.ConditionStatus
-		promotedISB string
-		want        apiv1.ResourceChainMemberStatus
+		name             string
+		healthy          metav1.ConditionStatus
+		healthGeneration int64
+		promotedISB      string
+		want             apiv1.ResourceChainMemberStatus
 	}{
 		{
-			name:        "healthy promoted child on the trial ISBService",
-			healthy:     metav1.ConditionTrue,
-			promotedISB: trialISBName,
-			want:        apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", ChildName: "pipeline-0", AssessmentResult: apiv1.AssessmentResultSuccess},
+			name:             "healthy promoted child on the trial ISBService",
+			healthy:          metav1.ConditionTrue,
+			healthGeneration: generation,
+			promotedISB:      trialISBName,
+			want:             apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", ChildName: "pipeline-0", AssessmentResult: apiv1.AssessmentResultSuccess},
 		},
 		{
-			name:        "unhealthy promoted child on the trial ISBService",
-			healthy:     metav1.ConditionFalse,
-			promotedISB: trialISBName,
-			want:        apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", ChildName: "pipeline-0", AssessmentResult: apiv1.AssessmentResultUnknown},
+			name:             "health from an earlier generation on the trial ISBService",
+			healthy:          metav1.ConditionTrue,
+			healthGeneration: generation - 1,
+			promotedISB:      trialISBName,
+			want:             apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", ChildName: "pipeline-0", AssessmentResult: apiv1.AssessmentResultUnknown},
 		},
 		{
-			name:        "healthy promoted child still on the promoted ISBService",
-			healthy:     metav1.ConditionTrue,
-			promotedISB: promotedISBName,
-			want:        apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", AssessmentResult: apiv1.AssessmentResultUnknown},
+			name:             "unhealthy promoted child on the trial ISBService",
+			healthy:          metav1.ConditionFalse,
+			healthGeneration: generation,
+			promotedISB:      trialISBName,
+			want:             apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", ChildName: "pipeline-0", AssessmentResult: apiv1.AssessmentResultUnknown},
+		},
+		{
+			name:             "healthy promoted child still on the promoted ISBService",
+			healthy:          metav1.ConditionTrue,
+			healthGeneration: generation,
+			promotedISB:      promotedISBName,
+			want:             apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", AssessmentResult: apiv1.AssessmentResultUnknown},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			rollout := pipelineRolloutUsingISB(namespace, "pipeline", "isb", tc.healthy)
+			rollout.Generation = generation
+			rollout.Status.Conditions[0].ObservedGeneration = tc.healthGeneration
 			c := fakeClient(t,
 				trialChild(numaflowv1.ISBGroupVersionKind, namespace, trialISBName, "isb", trialISBName),
-				pipelineRolloutUsingISB(namespace, "pipeline", "isb", tc.healthy),
+				rollout,
 				promotedPipelineOnISB(namespace, "pipeline-0", "pipeline", tc.promotedISB),
 			)
 

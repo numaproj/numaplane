@@ -185,9 +185,10 @@ func promotedPipelineAlreadyOnISB(
 	return promoted.GetName(), ownHealthAssessment(pipelineRollout), true, nil
 }
 
-// ownHealthAssessment is Success when the rollout reports its child healthy, and Unknown otherwise.
+// ownHealthAssessment is Success when the rollout reports its child healthy for its current generation, and Unknown otherwise.
 func ownHealthAssessment(rollout ctlrcommon.RolloutObject) apiv1.AssessmentResult {
-	if healthy := rollout.GetRolloutStatus().GetCondition(apiv1.ConditionChildResourceHealthy); healthy != nil && healthy.Status == metav1.ConditionTrue {
+	if healthy := rollout.GetRolloutStatus().GetCondition(apiv1.ConditionChildResourceHealthy); healthy != nil && healthy.Status == metav1.ConditionTrue &&
+		healthy.ObservedGeneration == rollout.GetRolloutObjectMeta().GetGeneration() {
 		return apiv1.AssessmentResultSuccess
 	}
 	return apiv1.AssessmentResultUnknown
