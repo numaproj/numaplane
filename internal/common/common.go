@@ -97,22 +97,21 @@ const (
 	// this includes both the case of pausing for Pipeline updating as well as for NumaflowController and isbsvc updating
 	LabelKeyAllowDataLoss = KeyNumaplanePrefix + "allow-data-loss"
 
-	// LabelKeyProgressiveResultState is this resource's own progressive assessment.
-	// Argo CD health reads it, so the value is failed only when this resource failed,
-	// not when another member of its chain failed. A chain failure is recorded separately
-	// with LabelKeyProgressiveChainFailed.
+	// LabelKeyProgressiveResultState records the progressive outcome of this child.
+	// failed reflects only this child's own assessment, so Argo CD health marks just the resource
+	// that failed; a chain failure is recorded with LabelKeyProgressiveChainFailed.
+	// succeeded and force-promoted record how the child was promoted, which can depend on its chain.
 	LabelKeyProgressiveResultState = KeyNumaplanePrefix + "progressive-result-state"
 
-	// LabelValueResultStateFailed is the label value indicating that the progressive upgrade of a resource
-	// managed by a NumaRollout failed.
+	// LabelValueResultStateFailed means this child's own progressive assessment failed.
 	LabelValueResultStateFailed ResultState = "failed"
 
-	// LabelValueResultStateForcePromoted is the label value indicating that the progressive upgrade of a resource
-	// managed by a NumaRollout was force promoted.
+	// LabelValueResultStateForcePromoted means this child was promoted by force-promote, or by
+	// force-promote-chain on its chain, regardless of its own assessment.
 	LabelValueResultStateForcePromoted ResultState = "force-promoted"
 
-	// LabelValueResultStateSucceeded is the label value indicating that the progressive upgrade of a resource
-	// managed by a NumaRollout succeeded.
+	// LabelValueResultStateSucceeded means this child was promoted because it and every other
+	// member of its chain succeeded.
 	LabelValueResultStateSucceeded ResultState = "succeeded"
 
 	// LabelKeyUpgradeState is the label key used to identify the upgrade state of a resource that is managed by
