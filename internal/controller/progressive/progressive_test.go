@@ -514,7 +514,7 @@ func TestProcessUpgradingChildFinishesOwnAssessmentBeforePostFailure(t *testing.
 			{name: "healthy controller in a failed chain", childName: "controller-healthy", own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultFailure, wantResult: common.LabelValueResultStateSucceeded, wantLatch: true, wantRollout: true},
 			{name: "failed controller", childName: "controller-failed", own: apiv1.AssessmentResultFailure, chain: apiv1.AssessmentResultFailure, wantResult: common.LabelValueResultStateFailed, wantLatch: true, wantRollout: true},
 			{name: "failed controller upgrading alone", childName: "controller-alone", own: apiv1.AssessmentResultFailure, chain: apiv1.AssessmentResultFailure, alone: true, wantResult: common.LabelValueResultStateFailed, wantRollout: true},
-			{name: "reassessment keeps the hold and replaces a stale failure", childName: "controller-reassess", own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultUnknown, stampFailed: true, wantResult: common.LabelValueResultStateSucceeded, wantLatch: true},
+			{name: "reassessment replaces a stale failure", childName: "controller-reassess", own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultUnknown, stampFailed: true, wantResult: common.LabelValueResultStateSucceeded},
 			{name: "own assessment still running leaves the label unset", childName: "controller-running", own: apiv1.AssessmentResultUnknown, chain: apiv1.AssessmentResultUnknown},
 		} {
 			t.Run(tc.name, func(t *testing.T) {

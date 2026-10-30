@@ -671,10 +671,7 @@ func syncProgressiveResultLabels(ctx context.Context, c client.Client, child *un
 	}
 	labels := child.GetLabels()
 	resultLabel := labels[common.LabelKeyProgressiveResultState]
-	// A failed label on a child that did not fail itself was stamped from the chain before
-	// progressive-chain-failed existed, so it is carried over to that label.
-	if inChain && labels[common.LabelKeyProgressiveChainFailed] != "true" &&
-		(chainAssessment == apiv1.AssessmentResultFailure || (resultLabel == string(common.LabelValueResultStateFailed) && own != common.LabelValueResultStateFailed)) {
+	if inChain && chainAssessment == apiv1.AssessmentResultFailure && labels[common.LabelKeyProgressiveChainFailed] != "true" {
 		if err := kubernetes.SetAndPatchLabels(ctx, c, child, map[string]string{
 			common.LabelKeyProgressiveChainFailed: "true",
 		}); err != nil {
