@@ -204,10 +204,8 @@ func RemoveAndPatchLabels(ctx context.Context, c client.Client, obj *unstructure
 	}
 	obj.SetLabels(existing)
 
-	labelsJSON, err := json.Marshal(nullLabels)
-	if err != nil {
-		return fmt.Errorf("failed to marshal labels: %w", err)
-	}
+	// Marshaling a map of string keys to nil values cannot fail.
+	labelsJSON, _ := json.Marshal(nullLabels)
 	patchJSON := fmt.Sprintf(`{"metadata":{"labels":%s}}`, string(labelsJSON))
 	return PatchResource(ctx, c, obj, patchJSON, k8stypes.MergePatchType)
 }

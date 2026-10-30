@@ -732,6 +732,10 @@ func (patchErrorClient) Patch(context.Context, client.Object, client.Patch, ...c
 	return errors.New("patch failed")
 }
 
+func (patchErrorClient) List(context.Context, client.ObjectList, ...client.ListOption) error {
+	return nil
+}
+
 func TestProgressiveResultLabelEdges(t *testing.T) {
 	ctx := context.Background()
 
@@ -803,6 +807,38 @@ func TestProgressiveResultLabelEdges(t *testing.T) {
 		)
 		_, _, _, err := processUpgradingChild(ctx, rollout, &scriptedAssessmentController{own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultUnknown}, monoVertexToUnstruct(createMonoVertex("promoted")), monoVertexToUnstruct(trial), patchErrorClient{})
 		require.Error(t, err)
+	})
+
+	t.Run("chain promote returns the label patch error", func(t *testing.T) {
+		trial := createMonoVertex("patch-chain-promote")
+		trial.Annotations = map[string]string{common.AnnotationKeyChainPromote: ChainPromoteAnnotationValue(trial.Name, "")}
+		rollout := setMonoVertexProgressiveStatus(
+			defaultMonoVertexRollout.DeepCopy(),
+			&apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: trial.Name},
+				},
+			},
+			nil,
+		)
+		_, _, _, err := processUpgradingChild(ctx, rollout, fakeProgressiveController{}, monoVertexToUnstruct(createMonoVertex("promoted")), monoVertexToUnstruct(trial), patchErrorClient{})
+		require.ErrorContains(t, err, "patch failed")
+	})
+
+	t.Run("force promote chain returns the label patch error", func(t *testing.T) {
+		trial := createMonoVertex("patch-force-chain")
+		trial.Labels[common.LabelKeyForcePromoteChain] = "true"
+		rollout := setMonoVertexProgressiveStatus(
+			defaultMonoVertexRollout.DeepCopy(),
+			&apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: trial.Name},
+				},
+			},
+			nil,
+		)
+		_, _, _, err := processUpgradingChild(ctx, rollout, fakeProgressiveController{}, monoVertexToUnstruct(createMonoVertex("promoted")), monoVertexToUnstruct(trial), patchErrorClient{})
+		require.ErrorContains(t, err, "patch failed")
 	})
 }
 
