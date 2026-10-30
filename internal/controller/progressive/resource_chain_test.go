@@ -1,11 +1,22 @@
 package progressive
 
 import (
+	"context"
 	"testing"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+)
+
+const (
+	trialISBName    = "isb-1"
+	promotedISBName = "isb-0"
 )
 
 func TestCombineAssessmentResults(t *testing.T) {
@@ -65,4 +76,103 @@ func TestCombineMemberAssessments(t *testing.T) {
 		NewChainMember("PipelineRollout", "p", "p-1", apiv1.AssessmentResultSuccess),
 		NewChainMember("ISBServiceRollout", "isb", "isb-1", apiv1.AssessmentResultFailure),
 	}))
+}
+
+func TestPipelinesOnTrialISBCountsPromotedChild(t *testing.T) {
+	const namespace = "test"
+
+	const generation = 2
+
+	testCases := []struct {
+		name             string
+		healthy          metav1.ConditionStatus
+		healthGeneration int64
+		promotedISB      string
+		want             apiv1.ResourceChainMemberStatus
+	}{
+		{
+			name:             "healthy promoted child on the trial ISBService",
+			healthy:          metav1.ConditionTrue,
+			healthGeneration: generation,
+			promotedISB:      trialISBName,
+			want:             apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", ChildName: "pipeline-0", AssessmentResult: apiv1.AssessmentResultSuccess},
+		},
+		{
+			name:             "health from an earlier generation on the trial ISBService",
+			healthy:          metav1.ConditionTrue,
+			healthGeneration: generation - 1,
+			promotedISB:      trialISBName,
+			want:             apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", ChildName: "pipeline-0", AssessmentResult: apiv1.AssessmentResultUnknown},
+		},
+		{
+			name:             "unhealthy promoted child on the trial ISBService",
+			healthy:          metav1.ConditionFalse,
+			healthGeneration: generation,
+			promotedISB:      trialISBName,
+			want:             apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", ChildName: "pipeline-0", AssessmentResult: apiv1.AssessmentResultUnknown},
+		},
+		{
+			name:             "healthy promoted child still on the promoted ISBService",
+			healthy:          metav1.ConditionTrue,
+			healthGeneration: generation,
+			promotedISB:      promotedISBName,
+			want:             apiv1.ResourceChainMemberStatus{Kind: "PipelineRollout", Name: "pipeline", AssessmentResult: apiv1.AssessmentResultUnknown},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rollout := pipelineRolloutUsingISB(namespace, "pipeline", "isb", tc.healthy)
+			rollout.Generation = generation
+			rollout.Status.Conditions[0].ObservedGeneration = tc.healthGeneration
+			c := fakeClient(t,
+				trialChild(numaflowv1.ISBGroupVersionKind, namespace, trialISBName, "isb", trialISBName),
+				rollout,
+				promotedPipelineOnISB(namespace, "pipeline-0", "pipeline", tc.promotedISB),
+			)
+
+			members, reasons, err := PipelinesOnTrialISB(context.Background(), c, namespace, trialISBName, "")
+			require.NoError(t, err)
+			require.Empty(t, reasons)
+			require.Equal(t, []apiv1.ResourceChainMemberStatus{tc.want}, members)
+		})
+	}
+}
+
+func TestPipelinesOnTrialISBPromotedChildLookupFails(t *testing.T) {
+	const namespace = "test"
+	base := fakeClient(t,
+		trialChild(numaflowv1.ISBGroupVersionKind, namespace, trialISBName, "isb", trialISBName),
+		pipelineRolloutUsingISB(namespace, "pipeline", "isb", metav1.ConditionTrue),
+		promotedPipelineOnISB(namespace, "pipeline-0", "pipeline", trialISBName),
+	)
+	// OutsideTrialChain lists the promoted child once. The assessment lists it again.
+	c := &failNthKindList{Client: base, kind: numaflowv1.PipelineGroupVersionKind.Kind, failOn: 2}
+
+	_, _, err := PipelinesOnTrialISB(context.Background(), c, namespace, trialISBName, "")
+	require.Error(t, err)
+}
+
+func pipelineRolloutUsingISB(namespace, name, isbRolloutName string, healthy metav1.ConditionStatus) *apiv1.PipelineRollout {
+	return &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: apiv1.Pipeline{
+				Spec: runtime.RawExtension{Raw: []byte(`{"interStepBufferServiceName":"` + isbRolloutName + `"}`)},
+			},
+		},
+		Status: apiv1.PipelineRolloutStatus{
+			Status: apiv1.Status{
+				Conditions: []metav1.Condition{{
+					Type:   string(apiv1.ConditionChildResourceHealthy),
+					Status: healthy,
+				}},
+			},
+		},
+	}
+}
+
+func promotedPipelineOnISB(namespace, name, parent, isbsvcName string) *unstructured.Unstructured {
+	child := promotedChild(numaflowv1.PipelineGroupVersionKind, namespace, name, parent, name)
+	child.Object["spec"] = map[string]interface{}{"interStepBufferServiceName": isbsvcName}
+	return child
 }
