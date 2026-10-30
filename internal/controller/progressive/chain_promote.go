@@ -67,8 +67,10 @@ func parseChainPromoteAnnotation(value string) (string, string, bool) {
 // ControllerChainFailed reports whether the namespace has a trial NumaflowController, in a
 // Progressive upgrade, whose chain assessment has failed. A new Pipeline, MonoVertex, or
 // ISBService stays Pending until that chain succeeds, is reverted, or is force-promoted.
-// Replacing a failed member moves the chain assessment back to Unknown, so the failed result
-// state on the trial child keeps the hold until one of those outcomes.
+// Replacing a failed member moves the chain assessment back to Unknown, so the
+// progressive-chain-failed label on the trial controller keeps the hold until one of those
+// outcomes. A controller marked failed before that label existed is still held by
+// progressive-result-state.
 func ControllerChainFailed(ctx context.Context, c client.Client, namespace string) (bool, error) {
 	nfcRollout, trialChild, err := findTrialController(ctx, c, namespace)
 	if err != nil || nfcRollout == nil || trialChild == nil {
@@ -84,7 +86,11 @@ func ControllerChainFailed(ctx context.Context, c client.Client, namespace strin
 	if upgrading.ResourceChainAssessmentResult == apiv1.AssessmentResultFailure {
 		return true, nil
 	}
-	return trialChild.GetLabels()[common.LabelKeyProgressiveResultState] == string(common.LabelValueResultStateFailed), nil
+	labels := trialChild.GetLabels()
+	if labels[common.LabelKeyProgressiveChainFailed] == "true" {
+		return true, nil
+	}
+	return labels[common.LabelKeyProgressiveResultState] == string(common.LabelValueResultStateFailed), nil
 }
 
 // OutsideTrialChain reports whether a rollout takes no part in the current trial chain: its trial
