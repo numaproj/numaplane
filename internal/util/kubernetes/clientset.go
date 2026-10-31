@@ -9,7 +9,8 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-var DynamicClient *dynamic.DynamicClient
+// DynamicClient is the cluster dynamic client. Tests may replace it with a fake that implements dynamic.Interface.
+var DynamicClient dynamic.Interface
 var KubernetesClient *clientkube.Clientset
 var NumaplaneClient *versioned.Clientset
 

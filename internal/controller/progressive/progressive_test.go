@@ -3,6 +3,7 @@ package progressive
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -383,6 +384,475 @@ func Test_processUpgradingChild(t *testing.T) {
 			}
 		})
 	}
+}
+
+// otherMemberFailedController reports a chain that another member failed, with this resource's own
+// assessment set by ownResult, and counts post-failure processing calls.
+type otherMemberFailedController struct {
+	fakeProgressiveController
+	ownResult        apiv1.AssessmentResult
+	postFailureCalls int
+}
+
+func (o *otherMemberFailedController) AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured, schedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
+	return o.ownResult, "", nil
+}
+
+func (o *otherMemberFailedController) AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error) {
+	members := []apiv1.ResourceChainMemberStatus{
+		NewChainMember("MonoVertexRollout", rolloutObject.GetRolloutObjectMeta().Name, existingUpgradingChildDef.GetName(), o.ownResult),
+		NewChainMember("PipelineRollout", "other", "other-1", apiv1.AssessmentResultFailure),
+	}
+	return apiv1.AssessmentResultFailure, members, []string{"PipelineRollout other failed"}, nil
+}
+
+func (o *otherMemberFailedController) ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	o.postFailureCalls++
+	return false, nil
+}
+
+func (o *otherMemberFailedController) ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	o.postFailureCalls++
+	return false, nil
+}
+
+func TestProcessUpgradingChildFinishesOwnAssessmentBeforePostFailure(t *testing.T) {
+	restConfig, numaflowClientSet, k8sClient, _, err := commontest.PrepareK8SEnvironment()
+	require.NoError(t, err)
+	require.NoError(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	require.NoError(t, err)
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	require.NoError(t, config.GetConfigManagerInstance().LoadAllConfigs(func(error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2")))
+
+	ctx := context.Background()
+	namespace := ctlrcommon.DefaultTestNamespace
+
+	for _, tc := range []struct {
+		name                     string
+		ownResult                apiv1.AssessmentResult
+		stampFailed              bool
+		expectedPostFailureCalls int
+	}{
+		{name: "own assessment still running", ownResult: apiv1.AssessmentResultUnknown, expectedPostFailureCalls: 0},
+		{name: "own assessment succeeded", ownResult: apiv1.AssessmentResultSuccess, expectedPostFailureCalls: 2},
+		{name: "own assessment failed", ownResult: apiv1.AssessmentResultFailure, expectedPostFailureCalls: 2},
+		{name: "own assessment succeeded clears a chain-stamped failure", ownResult: apiv1.AssessmentResultSuccess, stampFailed: true, expectedPostFailureCalls: 2},
+		{name: "own assessment still running clears a chain-stamped failure", ownResult: apiv1.AssessmentResultUnknown, stampFailed: true, expectedPostFailureCalls: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}))
+			promoted := createMonoVertex("test")
+			trial := createMonoVertex("test-trial")
+			if tc.stampFailed {
+				trial.Labels[common.LabelKeyProgressiveResultState] = string(common.LabelValueResultStateFailed)
+			}
+			for _, mv := range []*numaflowv1.MonoVertex{promoted, trial} {
+				_, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, mv, metav1.CreateOptions{})
+				require.NoError(t, err)
+			}
+
+			rollout := setMonoVertexProgressiveStatus(
+				defaultMonoVertexRollout.DeepCopy(),
+				&apiv1.UpgradingMonoVertexStatus{
+					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+						UpgradingChildStatus: apiv1.UpgradingChildStatus{
+							Name:                     trial.Name,
+							BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							InitializationComplete:   true,
+						},
+					},
+				},
+				&apiv1.PromotedMonoVertexStatus{
+					PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+						PromotedChildStatus:           apiv1.PromotedChildStatus{Name: promoted.Name},
+						ScaleValuesRestoredToOriginal: true,
+					},
+				},
+			)
+
+			controller := &otherMemberFailedController{ownResult: tc.ownResult}
+			done, failed, delay, err := processUpgradingChild(ctx, rollout, controller, monoVertexToUnstruct(promoted), monoVertexToUnstruct(trial), k8sClient)
+			require.NoError(t, err)
+			assert.True(t, done)
+			assert.True(t, failed)
+			assert.Equal(t, 10*time.Second, delay)
+			assert.Equal(t, tc.expectedPostFailureCalls, controller.postFailureCalls)
+
+			childStatus := rollout.GetUpgradingChildStatus()
+			assert.Equal(t, tc.ownResult, childStatus.ResourceAssessmentResult)
+			assert.Equal(t, apiv1.AssessmentResultFailure, childStatus.ResourceChainAssessmentResult)
+			assert.Contains(t, childStatus.FailureReasons, "PipelineRollout other failed")
+			condition := rollout.Status.GetCondition(apiv1.ConditionProgressiveUpgradeSucceeded)
+			require.NotNil(t, condition)
+			assert.Equal(t, metav1.ConditionFalse, condition.Status)
+
+			got, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, trial.Name, metav1.GetOptions{})
+			require.NoError(t, err)
+			wantResult := map[apiv1.AssessmentResult]common.ResultState{
+				apiv1.AssessmentResultFailure: common.LabelValueResultStateFailed,
+				apiv1.AssessmentResultSuccess: common.LabelValueResultStateSucceeded,
+			}[tc.ownResult]
+			assert.Equal(t, string(wantResult), got.Labels[common.LabelKeyProgressiveResultState])
+			assert.Equal(t, "true", got.Labels[common.LabelKeyProgressiveChainFailed])
+		})
+	}
+
+	t.Run("controller chain failure follows the controller's own assessment", func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			childName   string
+			own         apiv1.AssessmentResult
+			chain       apiv1.AssessmentResult
+			stampFailed bool
+			alone       bool
+			wantResult  common.ResultState
+			wantLatch   bool
+			wantRollout bool
+		}{
+			{name: "healthy controller in a failed chain", childName: "controller-healthy", own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultFailure, wantResult: common.LabelValueResultStateSucceeded, wantLatch: true, wantRollout: true},
+			{name: "failed controller", childName: "controller-failed", own: apiv1.AssessmentResultFailure, chain: apiv1.AssessmentResultFailure, wantResult: common.LabelValueResultStateFailed, wantLatch: true, wantRollout: true},
+			{name: "failed controller upgrading alone", childName: "controller-alone", own: apiv1.AssessmentResultFailure, chain: apiv1.AssessmentResultFailure, alone: true, wantResult: common.LabelValueResultStateFailed, wantRollout: true},
+			{name: "reassessment replaces a stale failure", childName: "controller-reassess", own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultUnknown, stampFailed: true, wantResult: common.LabelValueResultStateSucceeded},
+			{name: "own assessment still running leaves the label unset", childName: "controller-running", own: apiv1.AssessmentResultUnknown, chain: apiv1.AssessmentResultUnknown},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				child := ctlrcommon.CreateTestNumaflowController(namespace, "controller", tc.childName, common.LabelValueUpgradeTrial, "trial")
+				if tc.stampFailed {
+					child.Labels[common.LabelKeyProgressiveResultState] = string(common.LabelValueResultStateFailed)
+				}
+				ctlrcommon.CreateNumaflowControllerInK8S(ctx, t, k8sClient, child)
+				objMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(child)
+				require.NoError(t, err)
+				childObject := &unstructured.Unstructured{Object: objMap}
+				childObject.SetGroupVersionKind(apiv1.NumaflowControllerGroupVersionKind)
+
+				rollout := setMonoVertexProgressiveStatus(
+					defaultMonoVertexRollout.DeepCopy(),
+					&apiv1.UpgradingMonoVertexStatus{
+						UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+							UpgradingChildStatus: apiv1.UpgradingChildStatus{
+								Name:                     tc.childName,
+								BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+								InitializationComplete:   true,
+							},
+						},
+					},
+					nil,
+				)
+				assessmentController := &scriptedAssessmentController{own: tc.own, chain: tc.chain, alone: tc.alone}
+				_, _, _, err = processUpgradingChild(ctx, rollout, assessmentController, childObject, childObject, k8sClient)
+				require.NoError(t, err)
+
+				var got apiv1.NumaflowController
+				require.NoError(t, k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: tc.childName}, &got))
+				assert.Equal(t, string(tc.wantResult), got.Labels[common.LabelKeyProgressiveResultState])
+				assert.Equal(t, tc.wantLatch, got.Labels[common.LabelKeyProgressiveChainFailed] == "true")
+				if tc.wantRollout {
+					condition := rollout.Status.GetCondition(apiv1.ConditionProgressiveUpgradeSucceeded)
+					require.NotNil(t, condition)
+					assert.Equal(t, metav1.ConditionFalse, condition.Status)
+				}
+			})
+		}
+	})
+}
+
+func TestProcessUpgradingChildForcePromoteOutsideAChain(t *testing.T) {
+	restConfig, numaflowClientSet, k8sClient, _, err := commontest.PrepareK8SEnvironment()
+	require.NoError(t, err)
+	require.NoError(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, config.GetConfigManagerInstance().LoadAllConfigs(func(error) {}, config.WithConfigsPath(filepath.Join(getwd, "../../../", "tests", "config")), config.WithConfigFileName("testconfig2")))
+
+	ctx := context.Background()
+	namespace := ctlrcommon.DefaultTestNamespace
+
+	for _, tc := range []struct {
+		name         string
+		childName    string
+		members      []apiv1.ResourceChainMemberStatus
+		forcePromote bool
+		// stampChainFailed seeds a chain-failure latch and an unrelated label on the trial.
+		stampChainFailed bool
+		wantFailed       bool
+		wantResult       common.ResultState
+		wantLatch        bool
+	}{
+		{
+			name:       "a resource that fails on its own is not marked as a chain failure",
+			childName:  "test-failure",
+			wantFailed: true,
+			wantResult: common.LabelValueResultStateFailed,
+		},
+		{
+			name:      "force promote promotes a resource that failed on its own",
+			childName: "test-alone",
+			members: []apiv1.ResourceChainMemberStatus{
+				NewChainMember("MonoVertexRollout", "test", "test-alone", apiv1.AssessmentResultFailure),
+			},
+			forcePromote:     true,
+			stampChainFailed: true,
+			wantResult:       common.LabelValueResultStateForcePromoted,
+		},
+		{
+			name:      "force promote is ignored while a chain of several rollouts has failed",
+			childName: "test-in-chain",
+			members: []apiv1.ResourceChainMemberStatus{
+				NewChainMember("MonoVertexRollout", "test", "test-in-chain", apiv1.AssessmentResultFailure),
+				NewChainMember("PipelineRollout", "other", "other-1", apiv1.AssessmentResultSuccess),
+			},
+			forcePromote: true,
+			wantFailed:   true,
+			wantResult:   common.LabelValueResultStateFailed,
+			wantLatch:    true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}))
+			promoted := createMonoVertex("test")
+			trial := createMonoVertex(tc.childName)
+			if tc.forcePromote {
+				trial.Labels[common.LabelKeyForcePromote] = "true"
+			}
+			if tc.stampChainFailed {
+				trial.Labels[common.LabelKeyProgressiveChainFailed] = "true"
+				trial.Labels["test-unrelated-label"] = "preserve"
+			}
+			for _, mv := range []*numaflowv1.MonoVertex{promoted, trial} {
+				_, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, mv, metav1.CreateOptions{})
+				require.NoError(t, err)
+			}
+
+			upgrading := apiv1.UpgradingChildStatus{
+				Name:                     trial.Name,
+				BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+				InitializationComplete:   true,
+			}
+			if tc.members != nil {
+				upgrading.AssessmentResult = apiv1.AssessmentResultFailure
+				upgrading.ResourceAssessmentResult = apiv1.AssessmentResultFailure
+				upgrading.ResourceChainAssessmentResult = apiv1.AssessmentResultFailure
+				upgrading.ResourceChainMembers = tc.members
+			}
+			rollout := setMonoVertexProgressiveStatus(
+				defaultMonoVertexRollout.DeepCopy(),
+				&apiv1.UpgradingMonoVertexStatus{UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{UpgradingChildStatus: upgrading}},
+				&apiv1.PromotedMonoVertexStatus{
+					PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+						PromotedChildStatus:           apiv1.PromotedChildStatus{Name: promoted.Name},
+						ScaleValuesRestoredToOriginal: true,
+					},
+				},
+			)
+
+			done, failed, _, err := processUpgradingChild(ctx, rollout, fakeProgressiveController{}, monoVertexToUnstruct(promoted), monoVertexToUnstruct(trial), k8sClient)
+			require.NoError(t, err)
+			assert.True(t, done)
+			assert.Equal(t, tc.wantFailed, failed)
+
+			got, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, trial.Name, metav1.GetOptions{})
+			require.NoError(t, err)
+			assert.Equal(t, string(tc.wantResult), got.Labels[common.LabelKeyProgressiveResultState])
+			assert.Equal(t, tc.wantLatch, got.Labels[common.LabelKeyProgressiveChainFailed] == "true")
+			if tc.stampChainFailed {
+				assert.Equal(t, "preserve", got.Labels["test-unrelated-label"])
+			}
+		})
+	}
+}
+
+func TestProgressiveResultStateFollowsOwnHealth(t *testing.T) {
+	forcedBy := func(reason SkipProgressiveAssessmentReason) *apiv1.UpgradingChildStatus {
+		return &apiv1.UpgradingChildStatus{ResourceAssessmentResult: apiv1.AssessmentResultSuccess, ForcedSuccess: true, ForcedSuccessReason: string(reason)}
+	}
+	succeeded := &apiv1.UpgradingChildStatus{ResourceAssessmentResult: apiv1.AssessmentResultSuccess}
+	failed := &apiv1.UpgradingChildStatus{ResourceAssessmentResult: apiv1.AssessmentResultFailure}
+	running := &apiv1.UpgradingChildStatus{ResourceAssessmentResult: apiv1.AssessmentResultUnknown}
+	legacyFailed := &apiv1.UpgradingChildStatus{AssessmentResult: apiv1.AssessmentResultFailure}
+
+	t.Run("own health", func(t *testing.T) {
+		assert.Equal(t, common.LabelValueResultStateSucceeded, ownResultState(succeeded))
+		assert.Equal(t, common.LabelValueResultStateFailed, ownResultState(failed))
+		assert.Equal(t, common.LabelValueResultStateFailed, ownResultState(legacyFailed))
+		assert.Equal(t, common.ResultState(""), ownResultState(running))
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, ownResultState(forcedBy(SkipProgressiveAssessmentReasonRolloutConfiguration)))
+		assert.Equal(t, common.LabelValueResultStateSucceeded, ownResultState(forcedBy(SkipProgressiveAssessmentReasonNoDataIngestion)))
+	})
+
+	t.Run("promoted because the chain succeeded", func(t *testing.T) {
+		assert.Equal(t, common.LabelValueResultStateSucceeded, promotedResultState(succeeded))
+		assert.Equal(t, common.LabelValueResultStateSucceeded, promotedResultState(running))
+		assert.Equal(t, common.LabelValueResultStateSucceeded, promotedResultState(failed), "a stale stored failure does not mark a promoted child failed")
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, promotedResultState(forcedBy(SkipProgressiveAssessmentReasonRolloutConfiguration)))
+	})
+
+	t.Run("promoted by a user override", func(t *testing.T) {
+		child := &unstructured.Unstructured{}
+		assert.Equal(t, common.LabelValueResultStateSucceeded, overriddenResultState(succeeded, child), "a healthy chain member stays succeeded")
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, overriddenResultState(failed, child))
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, overriddenResultState(running, child))
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, overriddenResultState(forcedBy(SkipProgressiveAssessmentReasonRolloutConfiguration), child))
+
+		child.SetLabels(map[string]string{common.LabelKeyProgressiveResultState: string(common.LabelValueResultStateForcePromoted)})
+		assert.Equal(t, common.LabelValueResultStateForcePromoted, overriddenResultState(forcedBy(SkipProgressiveAssessmentReasonForcePromote), child), "a retried override keeps force-promoted")
+	})
+}
+
+func TestInResourceChain(t *testing.T) {
+	self := NewChainMember("PipelineRollout", "p", "p-1", apiv1.AssessmentResultFailure)
+	assert.False(t, inResourceChain(nil))
+	assert.False(t, inResourceChain([]apiv1.ResourceChainMemberStatus{self}))
+	assert.False(t, inResourceChain([]apiv1.ResourceChainMemberStatus{self, self}))
+	assert.True(t, inResourceChain([]apiv1.ResourceChainMemberStatus{self, NewChainMember("ISBServiceRollout", "isb", "isb-1", apiv1.AssessmentResultSuccess)}))
+	assert.True(t, inResourceChain([]apiv1.ResourceChainMemberStatus{self, NewChainMember("MonoVertexRollout", "p", "p-1", apiv1.AssessmentResultSuccess)}))
+}
+
+// scriptedAssessmentController returns fixed own and chain assessment results.
+// The chain has a second rollout unless alone is set.
+type scriptedAssessmentController struct {
+	fakeProgressiveController
+	own   apiv1.AssessmentResult
+	chain apiv1.AssessmentResult
+	alone bool
+}
+
+func (s *scriptedAssessmentController) AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured, schedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
+	return s.own, "", nil
+}
+
+type patchErrorClient struct {
+	client.Client
+}
+
+func (patchErrorClient) Patch(context.Context, client.Object, client.Patch, ...client.PatchOption) error {
+	return errors.New("patch failed")
+}
+
+func (patchErrorClient) List(context.Context, client.ObjectList, ...client.ListOption) error {
+	return nil
+}
+
+func TestProgressiveResultLabelEdges(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("nil child", func(t *testing.T) {
+		require.NoError(t, syncProgressiveResultLabels(ctx, nil, nil, common.LabelValueResultStateFailed, apiv1.AssessmentResultFailure, true))
+	})
+
+	t.Run("failed label already recorded", func(t *testing.T) {
+		child := &unstructured.Unstructured{}
+		child.SetLabels(map[string]string{
+			common.LabelKeyProgressiveResultState: string(common.LabelValueResultStateFailed),
+			common.LabelKeyProgressiveChainFailed: "true",
+		})
+		require.NoError(t, syncProgressiveResultLabels(ctx, nil, child, common.LabelValueResultStateFailed, apiv1.AssessmentResultFailure, true))
+		assert.Equal(t, string(common.LabelValueResultStateFailed), child.GetLabels()[common.LabelKeyProgressiveResultState])
+		assert.Equal(t, "true", child.GetLabels()[common.LabelKeyProgressiveChainFailed])
+	})
+
+	t.Run("chain latch patch failure", func(t *testing.T) {
+		child := &unstructured.Unstructured{}
+		child.SetGroupVersionKind(apiv1.NumaflowControllerGroupVersionKind)
+		require.Error(t, syncProgressiveResultLabels(ctx, patchErrorClient{}, child, common.LabelValueResultStateSucceeded, apiv1.AssessmentResultFailure, true))
+	})
+
+	t.Run("resolved result patch failure", func(t *testing.T) {
+		child := &unstructured.Unstructured{}
+		child.SetName("child")
+		child.SetNamespace(ctlrcommon.DefaultTestNamespace)
+		require.Error(t, markResolvedProgressiveResult(ctx, patchErrorClient{}, common.LabelValueResultStateSucceeded, child))
+	})
+
+	getwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, config.GetConfigManagerInstance().LoadAllConfigs(func(error) {}, config.WithConfigsPath(filepath.Join(getwd, "../../../", "tests", "config")), config.WithConfigFileName("testconfig2")))
+
+	t.Run("chain failure returns the label patch error", func(t *testing.T) {
+		rollout := setMonoVertexProgressiveStatus(
+			defaultMonoVertexRollout.DeepCopy(),
+			&apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                     "patch-error",
+						BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						InitializationComplete:   true,
+					},
+				},
+			},
+			nil,
+		)
+		_, _, _, err := processUpgradingChild(ctx, rollout, &otherMemberFailedController{ownResult: apiv1.AssessmentResultFailure}, monoVertexToUnstruct(createMonoVertex("promoted")), monoVertexToUnstruct(createMonoVertex("patch-error")), patchErrorClient{})
+		require.Error(t, err)
+	})
+
+	t.Run("reassessment returns the label removal error", func(t *testing.T) {
+		trial := createMonoVertex("patch-remove")
+		trial.Labels[common.LabelKeyProgressiveResultState] = string(common.LabelValueResultStateFailed)
+		rollout := setMonoVertexProgressiveStatus(
+			defaultMonoVertexRollout.DeepCopy(),
+			&apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                     trial.Name,
+						BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						InitializationComplete:   true,
+					},
+				},
+			},
+			nil,
+		)
+		_, _, _, err := processUpgradingChild(ctx, rollout, &scriptedAssessmentController{own: apiv1.AssessmentResultSuccess, chain: apiv1.AssessmentResultUnknown}, monoVertexToUnstruct(createMonoVertex("promoted")), monoVertexToUnstruct(trial), patchErrorClient{})
+		require.Error(t, err)
+	})
+
+	t.Run("chain promote returns the label patch error", func(t *testing.T) {
+		trial := createMonoVertex("patch-chain-promote")
+		trial.Annotations = map[string]string{common.AnnotationKeyChainPromote: ChainPromoteAnnotationValue(trial.Name, "")}
+		rollout := setMonoVertexProgressiveStatus(
+			defaultMonoVertexRollout.DeepCopy(),
+			&apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: trial.Name},
+				},
+			},
+			nil,
+		)
+		_, _, _, err := processUpgradingChild(ctx, rollout, fakeProgressiveController{}, monoVertexToUnstruct(createMonoVertex("promoted")), monoVertexToUnstruct(trial), patchErrorClient{})
+		require.ErrorContains(t, err, "patch failed")
+	})
+
+	t.Run("force promote chain returns the label patch error", func(t *testing.T) {
+		trial := createMonoVertex("patch-force-chain")
+		trial.Labels[common.LabelKeyForcePromoteChain] = "true"
+		rollout := setMonoVertexProgressiveStatus(
+			defaultMonoVertexRollout.DeepCopy(),
+			&apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: trial.Name},
+				},
+			},
+			nil,
+		)
+		_, _, _, err := processUpgradingChild(ctx, rollout, fakeProgressiveController{}, monoVertexToUnstruct(createMonoVertex("promoted")), monoVertexToUnstruct(trial), patchErrorClient{})
+		require.ErrorContains(t, err, "patch failed")
+	})
+}
+
+func (s *scriptedAssessmentController) AssessResourceChain(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, []apiv1.ResourceChainMemberStatus, []string, error) {
+	members := []apiv1.ResourceChainMemberStatus{
+		NewChainMember("NumaflowControllerRollout", rolloutObject.GetRolloutObjectMeta().Name, existingUpgradingChildDef.GetName(), s.own),
+	}
+	if !s.alone {
+		members = append(members, NewChainMember("PipelineRollout", "other", "other-1", s.chain))
+	}
+	if s.chain == apiv1.AssessmentResultFailure {
+		return s.chain, members, []string{"chain failed"}, nil
+	}
+	return s.chain, members, nil, nil
 }
 
 func setMonoVertexProgressiveStatus(mvRollout *apiv1.MonoVertexRollout, upgradingChildStatus *apiv1.UpgradingMonoVertexStatus, promotedChildStatus *apiv1.PromotedMonoVertexStatus) *apiv1.MonoVertexRollout {
@@ -1037,6 +1507,84 @@ func TestProcessResourcePromotesAnnotatedTrialBeforeReplacement(t *testing.T) {
 	assert.Equal(t, metav1.ConditionTrue, condition.Status)
 	assert.Contains(t, condition.Message, createdTrial.Name)
 	assert.Equal(t, apiv1.PhaseDeployed, rollout.Status.Phase)
+}
+
+func TestProcessResourcePromotesForcePromoteChainTrialBeforeReplacement(t *testing.T) {
+	restConfig, numaflowClientSet, k8sClient, _, err := commontest.PrepareK8SEnvironment()
+	require.NoError(t, err)
+	require.NoError(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	require.NoError(t, err)
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	require.NoError(t, config.GetConfigManagerInstance().LoadAllConfigs(func(error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2")))
+
+	ctx := context.Background()
+	namespace := ctlrcommon.DefaultTestNamespace
+	require.NoError(t, numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}))
+
+	promoted := createMonoVertex("mv-promoted")
+	promoted.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+	trial := createMonoVertex("mv-trial")
+	trial.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeTrial)
+	trial.Labels[common.LabelKeyForcePromoteChain] = "true"
+
+	createdPromoted, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, promoted, metav1.CreateOptions{})
+	require.NoError(t, err)
+	createdTrial, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Create(ctx, trial, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	rollout := setMonoVertexProgressiveStatus(
+		&apiv1.MonoVertexRollout{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       ctlrcommon.DefaultTestMonoVertexRolloutName,
+				Namespace:  namespace,
+				Generation: 3,
+			},
+		},
+		&apiv1.UpgradingMonoVertexStatus{
+			UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+				UpgradingChildStatus: apiv1.UpgradingChildStatus{
+					Name:                          createdTrial.Name,
+					AssessmentResult:              apiv1.AssessmentResultFailure,
+					ResourceAssessmentResult:      apiv1.AssessmentResultFailure,
+					ResourceChainAssessmentResult: apiv1.AssessmentResultFailure,
+					BasicAssessmentStartTime:      &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					InitializationComplete:        true,
+				},
+			},
+		},
+		&apiv1.PromotedMonoVertexStatus{
+			PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+				PromotedChildStatus: apiv1.PromotedChildStatus{Name: createdPromoted.Name},
+			},
+		},
+	)
+	rollout.Status.MarkProgressiveUpgradeFailed("progressive upgrade failed", rollout.Generation)
+
+	promotedUn := monoVertexToUnstruct(createdPromoted)
+	promotedUn.SetGroupVersionKind(numaflowv1.MonoVertexGroupVersionKind)
+
+	controller := &specChangeController{}
+	done, failed, _, err := ProcessResource(ctx, rollout, promotedUn, true, controller, k8sClient)
+	require.NoError(t, err)
+	assert.True(t, done)
+	assert.False(t, failed)
+	assert.False(t, controller.replacementAttempted, "a spec change must wait until the force-promote-chain trial is promoted")
+
+	gotTrial, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, createdTrial.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradePromoted), gotTrial.Labels[common.LabelKeyUpgradeState])
+	assert.Equal(t, string(common.LabelValueResultStateForcePromoted), gotTrial.Labels[common.LabelKeyProgressiveResultState])
+
+	gotPromoted, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(namespace).Get(ctx, createdPromoted.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, string(common.LabelValueUpgradeRecyclable), gotPromoted.Labels[common.LabelKeyUpgradeState])
+
+	childStatus := rollout.GetUpgradingChildStatus()
+	require.NotNil(t, childStatus)
+	assert.True(t, childStatus.ForcedSuccess)
+	assert.Equal(t, apiv1.AssessmentResultSuccess, childStatus.ResourceChainAssessmentResult)
 }
 
 func TestDiscontinueTrialOnRecyclableController(t *testing.T) {

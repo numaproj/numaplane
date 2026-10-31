@@ -97,20 +97,22 @@ const (
 	// this includes both the case of pausing for Pipeline updating as well as for NumaflowController and isbsvc updating
 	LabelKeyAllowDataLoss = KeyNumaplanePrefix + "allow-data-loss"
 
-	// LabelKeyProgressiveResultState is the label key used to identify the progressive result state of a resource
-	// that is managed by a NumaRollout.
+	// LabelKeyProgressiveResultState is the health of this child on its own during a progressive upgrade.
+	// It does not reflect the other members of its chain: a chain failure is recorded with
+	// LabelKeyProgressiveChainFailed. The label is absent while this child's own assessment is not final.
+	// Argo CD health reads it, so only the resource that failed shows as Degraded.
 	LabelKeyProgressiveResultState = KeyNumaplanePrefix + "progressive-result-state"
 
-	// LabelValueResultStateFailed is the label value indicating that the progressive upgrade of a resource
-	// managed by a NumaRollout failed.
+	// LabelValueResultStateFailed means this child's own progressive assessment failed.
 	LabelValueResultStateFailed ResultState = "failed"
 
-	// LabelValueResultStateForcePromoted is the label value indicating that the progressive upgrade of a resource
-	// managed by a NumaRollout was force promoted.
+	// LabelValueResultStateForcePromoted means a user override decided this child's health instead of
+	// its own assessment: the Progressive strategy's forcePromote, or force-promote or
+	// force-promote-chain on a child whose own assessment had not succeeded.
 	LabelValueResultStateForcePromoted ResultState = "force-promoted"
 
-	// LabelValueResultStateSucceeded is the label value indicating that the progressive upgrade of a resource
-	// managed by a NumaRollout succeeded.
+	// LabelValueResultStateSucceeded means this child's own progressive assessment succeeded.
+	// The child may still wait for the rest of its chain before it is promoted.
 	LabelValueResultStateSucceeded ResultState = "succeeded"
 
 	// LabelKeyUpgradeState is the label key used to identify the upgrade state of a resource that is managed by
@@ -168,8 +170,15 @@ const (
 	// LabelKeyNumaflowMonoVertexName is the label key used to identify the pod with a specific monovertex vertex
 	LabelKeyNumaflowMonoVertexName = KeyNumaflowPrefix + "mono-vertex-name"
 
+	// LabelKeyProgressiveChainFailed is set on every current trial child when its chain assessment
+	// has failed and the chain has more than one rollout. A resource upgrading on its own does not get it.
+	// Argo CD uses it to show Force Promote Chain instead of Force Promote. On the trial
+	// NumaflowController it also keeps new workloads Pending after a failed member is replaced and
+	// the chain assessment returns to Unknown, until the chain succeeds, is reverted, or is force-promoted.
+	LabelKeyProgressiveChainFailed = KeyNumaplanePrefix + "progressive-chain-failed"
+
 	// LabelKeyForcePromote is the label key used to force promote the upgrading child during a progressive upgrade.
-	// It is ignored while that child's chain assessment is Failure. Use LabelKeyForcePromoteChain instead.
+	// It is ignored while a chain of more than one rollout has failed. Use LabelKeyForcePromoteChain instead.
 	LabelKeyForcePromote = KeyNumaplanePrefix + "force-promote"
 
 	// LabelKeyForcePromoteChain promotes every current trial resource in the chain.

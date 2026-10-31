@@ -45,6 +45,17 @@ func ChainPromoteApplies(obj *unstructured.Unstructured, currentTrialChildName s
 	return ChainPromoteAnnotationMatches(obj) && obj.GetName() == currentTrialChildName
 }
 
+// ForcePromoteChainApplies reports whether obj is still the rollout's current trial child and carries
+// the force-promote-chain label. Like a chain-promote annotation, it must be honored before a spec
+// change replaces that trial child.
+func ForcePromoteChainApplies(obj *unstructured.Unstructured, currentTrialChildName string) bool {
+	if obj == nil || obj.GetName() != currentTrialChildName {
+		return false
+	}
+	_, found := obj.GetLabels()[common.LabelKeyForcePromoteChain]
+	return found
+}
+
 func parseChainPromoteAnnotation(value string) (string, string, bool) {
 	name, uid, ok := strings.Cut(value, "/")
 	if !ok || name == "" {
@@ -54,8 +65,12 @@ func parseChainPromoteAnnotation(value string) (string, string, bool) {
 }
 
 // ControllerChainFailed reports whether the namespace has a trial NumaflowController, in a
-// Progressive upgrade, whose chain assessment is Failure. A new Pipeline, MonoVertex, or
+// Progressive upgrade, whose chain assessment has failed. A new Pipeline, MonoVertex, or
 // ISBService stays Pending until that chain succeeds, is reverted, or is force-promoted.
+// Replacing a failed member moves the chain assessment back to Unknown, so the
+// progressive-chain-failed label on the trial controller keeps the hold until one of those
+// outcomes. A controller marked failed before that label existed is still held by
+// progressive-result-state.
 func ControllerChainFailed(ctx context.Context, c client.Client, namespace string) (bool, error) {
 	nfcRollout, trialChild, err := findTrialController(ctx, c, namespace)
 	if err != nil || nfcRollout == nil || trialChild == nil {
@@ -68,7 +83,14 @@ func ControllerChainFailed(ctx context.Context, c client.Client, namespace strin
 	if upgrading == nil || upgrading.Name != trialChild.GetName() || upgrading.Discontinued {
 		return false, nil
 	}
-	return upgrading.ResourceChainAssessmentResult == apiv1.AssessmentResultFailure, nil
+	if upgrading.ResourceChainAssessmentResult == apiv1.AssessmentResultFailure {
+		return true, nil
+	}
+	labels := trialChild.GetLabels()
+	if labels[common.LabelKeyProgressiveChainFailed] == "true" {
+		return true, nil
+	}
+	return labels[common.LabelKeyProgressiveResultState] == string(common.LabelValueResultStateFailed), nil
 }
 
 // OutsideTrialChain reports whether a rollout takes no part in the current trial chain: its trial

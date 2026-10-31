@@ -141,6 +141,10 @@ E2E_TEST_TARGETS := \
 	test-ppnd-e2e \
 	test-progressive-monovertex-e2e \
 	test-progressive-pipeline-e2e \
+	test-progressive-nc-e2e \
+	test-progressive-nc-combined-e2e \
+	test-progressive-nc-staggered-e2e \
+	test-progressive-nc-failure-e2e \
 	test-progressive-analysis-monovertex-e2e \
 	test-progressive-analysis-pipeline-e2e \
 	test-skip-progressive-e2e \
@@ -154,9 +158,10 @@ E2E_TEST_TARGETS := \
 define RUN_E2E_TEST
 .PHONY: $(1)
 $(1): envtest ## Run e2e tests. Note we may need to increase the timeout in the future.
-	GOFLAGS="-count=1" ginkgo run -v --timeout 35m ./tests/e2e/$(patsubst test-%,%,$(1))
+	GOFLAGS="-count=1" ginkgo run -v --timeout $(2) ./tests/e2e/$(patsubst test-%,%,$(1))
 endef
-$(foreach t,$(E2E_TEST_TARGETS),$(eval $(call RUN_E2E_TEST,$(t))))
+$(foreach t,$(filter-out test-progressive-nc-failure-e2e,$(E2E_TEST_TARGETS)),$(eval $(call RUN_E2E_TEST,$(t),35m)))
+$(eval $(call RUN_E2E_TEST,test-progressive-nc-failure-e2e,90m))
 
 .PHONY: test test-with-coverage
 test: codegen fmt vet envtest ## Run unit tests.
@@ -283,7 +288,14 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
-	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	test -s $(LOCALBIN)/setup-envtest || { \
+		for i in 1 2 3; do \
+			GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest && exit 0; \
+			echo "setup-envtest install failed (attempt $$i), retrying..."; \
+			sleep 5; \
+		done; \
+		exit 1; \
+	}
 
 # release - targets only available on release branch
 ifneq ($(findstring release-,$(GIT_BRANCH)),)
