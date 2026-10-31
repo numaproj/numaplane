@@ -39,7 +39,7 @@ const (
 	analysisTemplateNameFailureOne = "test-monovertex-template-failure-1"
 	analysisTemplateNameFailureTwo = "test-monovertex-template-failure-2"
 	analysisRunName                = "monovertex-" + monoVertexRolloutName
-	// Aligns metric interval, initialDelay, and PromQL increase() lookback.
+	// Aligns metric interval, initialDelay, and PromQL range lookback.
 	analysisMetricInterval = "60s"
 )
 
@@ -134,7 +134,7 @@ func monoVertexAnalysisTemplateSpec(criticalErrorsMetricName, acknowledgedMessag
 		Metrics: []argov1alpha1.Metric{
 			{
 				Name:                    criticalErrorsMetricName,
-				FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
+				FailureLimit:            ptr.To(intstrutil.FromInt32(0)),
 				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 				InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
 				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
@@ -143,11 +143,11 @@ func monoVertexAnalysisTemplateSpec(criticalErrorsMetricName, acknowledgedMessag
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
 						Query: `
 (
-  sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
+  sum(max_over_time(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
 )
 OR
 (
-  absent(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"})
+  absent_over_time(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])
 )`,
 					},
 				},

@@ -47,7 +47,7 @@ const (
 	analysisTemplateNameSuccess = "test-pipeline-template-success"
 	analysisTemplateNameFailure = "test-pipeline-template-failure"
 	analysisRunName             = "pipeline-" + pipelineRolloutName
-	// Aligns metric interval, initialDelay, and PromQL increase() lookback.
+	// Aligns metric interval, initialDelay, and PromQL range lookback.
 	analysisMetricInterval = "60s"
 	pipelineSinkBadImage   = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
 	pipelineMapImage       = "quay.io/numaio/numaflow-go/map-cat:stable"
@@ -212,7 +212,7 @@ func pipelineAnalysisTemplateSpec(vertices ...string) argov1alpha1.AnalysisTempl
 func pipelineCriticalErrorMetric(vertex string) argov1alpha1.Metric {
 	return argov1alpha1.Metric{
 		Name:                    vertex + "-no-critical-errors",
-		FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
+		FailureLimit:            ptr.To(intstrutil.FromInt32(0)),
 		Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 		InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
 		ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
@@ -221,11 +221,11 @@ func pipelineCriticalErrorMetric(vertex string) argov1alpha1.Metric {
 				Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
 				Query: fmt.Sprintf(`
 (
-  sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}[{{args.interval}}])) == bool 0
+  sum(max_over_time(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}[{{args.interval}}])) == bool 0
 )
 OR
 (
-  absent(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"})
+  absent_over_time(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}[{{args.interval}}])
 )`, vertex, vertex),
 			},
 		},
