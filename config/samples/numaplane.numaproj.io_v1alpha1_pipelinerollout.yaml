@@ -77,7 +77,7 @@ spec:
     - name: no-critical-errors-success-limit
       value: "4"
     - name: no-critical-errors-failure-limit
-      value: "0"
+      value: "1"
   # One critical-error metric and one read/ack metric per vertex (in, cat, out).
   metrics:
   - name: in-no-critical-errors

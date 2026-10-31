@@ -143,7 +143,7 @@ func monoVertexAnalysisTemplateSpec(criticalErrorsMetricName, acknowledgedMessag
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
 						Query: `
 (
-  sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == 0
+  sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
 )
 OR
 (

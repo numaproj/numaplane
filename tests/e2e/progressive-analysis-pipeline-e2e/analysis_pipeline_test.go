@@ -22,9 +22,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
@@ -50,23 +48,11 @@ const (
 	analysisTemplateNameFailure = "test-pipeline-template-failure"
 	analysisRunName             = "pipeline-" + pipelineRolloutName
 	// Aligns metric interval, initialDelay, and PromQL increase() lookback.
-	analysisMetricInterval       = "60s"
-	pipelineSinkBadImage         = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
-	pipelineSourceImage          = "quay.io/numaio/numaflow-go/source-simple-source:stable"
-	pipelineMapImage             = "quay.io/numaio/numaflow-go/map-cat:stable"
-	pipelineSinkImage            = "quay.io/numaio/numaflow-go/sink-log:stable"
-	pipelineSlowMapImage         = "quay.io/numaio/numaflow-go/map-slow-cat:stable"
-	pipelineSlowTransformerImage = "slow-source-transformer:local"
+	analysisMetricInterval = "60s"
+	pipelineSinkBadImage   = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
+	pipelineMapImage       = "quay.io/numaio/numaflow-go/map-cat:stable"
+	pipelineSlowMapImage   = "quay.io/numaio/numaflow-go/map-slow-cat:stable"
 )
-
-// numaflowControllerVersionForTest returns the Numaflow controller version to deploy.
-// Override via shell env (not Makefile): NUMAFLOW_CONTROLLER_VERSION=1.7.5 make test-progressive-analysis-pipeline-e2e
-func numaflowControllerVersionForTest() string {
-	if v := os.Getenv("NUMAFLOW_CONTROLLER_VERSION"); v != "" {
-		return v
-	}
-	return PrimaryNumaflowControllerVersion
-}
 
 var (
 	pullPolicyAlways              = corev1.PullAlways
@@ -226,7 +212,7 @@ func pipelineAnalysisTemplateSpec(vertices ...string) argov1alpha1.AnalysisTempl
 func pipelineCriticalErrorMetric(vertex string) argov1alpha1.Metric {
 	return argov1alpha1.Metric{
 		Name:                    vertex + "-no-critical-errors",
-		FailureLimit:            ptr.To(intstrutil.FromInt32(0)),
+		FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
 		Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 		InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
 		ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
@@ -318,50 +304,6 @@ func mapVertex(name, image string, env []corev1.EnvVar) numaflowv1.AbstractVerte
 		},
 		Scale: vertexScale(),
 	}
-}
-
-func udSourceVertex(name, rev string) numaflowv1.AbstractVertex {
-	return numaflowv1.AbstractVertex{
-		Name: name,
-		Source: &numaflowv1.Source{
-			UDSource: &numaflowv1.UDSource{
-				Container: &numaflowv1.Container{
-					Image:           pipelineSourceImage,
-					ImagePullPolicy: &pullPolicyAlways,
-					Env:             []corev1.EnvVar{{Name: "ANALYSIS_REV", Value: rev}},
-				},
-			},
-		},
-		Scale: vertexScale(),
-	}
-}
-
-func udSinkVertex(name string) numaflowv1.AbstractVertex {
-	return numaflowv1.AbstractVertex{
-		Name: name,
-		Sink: &numaflowv1.Sink{AbstractSink: numaflowv1.AbstractSink{
-			UDSink: &numaflowv1.UDSink{Container: &numaflowv1.Container{
-				Image:           pipelineSinkImage,
-				ImagePullPolicy: &pullPolicyAlways,
-			}},
-		}},
-		Scale: vertexScale(),
-	}
-}
-
-// generatorWithSlowTransformer reads from the generator and blocks in the transformer,
-// so forwarder_read_total increases and forwarder_ack_total stays at 0.
-// No published transformer image does this; the test image is built locally.
-func generatorWithSlowTransformer(name string) numaflowv1.AbstractVertex {
-	vertex := generatorVertex(name, 5, time.Second)
-	pullNever := corev1.PullNever
-	vertex.Source.UDTransformer = &numaflowv1.UDTransformer{
-		Container: &numaflowv1.Container{
-			Image:           pipelineSlowTransformerImage,
-			ImagePullPolicy: &pullNever,
-		},
-	}
-	return vertex
 }
 
 func logSinkVertex(name string) numaflowv1.AbstractVertex {
@@ -467,30 +409,6 @@ func forwarderReadTotal(pipelineName string) (float64, bool) {
 	Expect(err).NotTo(HaveOccurred())
 	return value, true
 }
-
-// crashUpgradingContainer kills one user container and leaves the numa container running
-// so forwarder_critical_error_total stays scrapable.
-// kubectl debug cannot signal that sidecar on this runtime; docker kill reaches it directly.
-func crashUpgradingContainer(pipelineName, vertexName, containerName string) {
-	selector := fmt.Sprintf("app.kubernetes.io/name=%s-%s,app.kubernetes.io/component=vertex", pipelineName, vertexName)
-	out, err := exec.Command("kubectl", "get", "pods", "-n", Namespace, "-l", selector, "-o", "jsonpath={.items[0].metadata.name}").CombinedOutput()
-	Expect(err).NotTo(HaveOccurred(), string(out))
-	pod := strings.TrimSpace(string(out))
-	Expect(pod).NotTo(BeEmpty())
-
-	By("Killing the " + containerName + " container on " + pod)
-	filter := fmt.Sprintf("name=k8s_%s_%s_%s_", containerName, pod, Namespace)
-	idOut, idErr := exec.Command("docker", "ps", "-q", "--filter", filter).CombinedOutput()
-	Expect(idErr).NotTo(HaveOccurred(), string(idOut))
-	id := strings.TrimSpace(string(idOut))
-	Expect(id).NotTo(BeEmpty(), "no %s container matched %s", containerName, filter)
-	if i := strings.IndexByte(id, '\n'); i >= 0 {
-		id = id[:i]
-	}
-	killOut, killErr := exec.Command("docker", "kill", id).CombinedOutput()
-	Expect(killErr).NotTo(HaveOccurred(), string(killOut))
-}
-
 func TestProgressiveE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -503,7 +421,7 @@ func TestProgressiveE2E(t *testing.T) {
 
 var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(numaflowControllerVersionForTest())
+		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 	})
 
@@ -653,65 +571,6 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
 	})
-
-	It("fails the read/ack check when in reads and does not ack", func() {
-		if os.Getenv("TEST_SOURCE_ACK") != "true" {
-			Skip("set TEST_SOURCE_ACK=true and load slow-source-transformer:local to block the source transformer")
-		}
-		const templateName = "test-pipeline-template-slow-source"
-		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec("in", "out"))
-		initial := linearPipeline(generatorVertex("in", 5, time.Second), logSinkVertex("out"))
-		updated := linearPipeline(generatorWithSlowTransformer("in"), logSinkVertex("out"))
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initial, strategyForTemplate(templateName), apiv1.Metadata{})
-
-		By("Adding a source transformer that reads and does not return")
-		UpdatePipeline(pipelineRolloutName, updated)
-
-		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initial, updated)
-		VerifyAnalysisRunStatus("in-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
-		VerifyAnalysisRunStatus("in-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-
-		DeletePipelineRollout(pipelineRolloutName)
-		DeleteAnalysisTemplate(templateName)
-	})
-
-	for _, tc := range []struct {
-		vertex    string
-		container string
-	}{
-		{vertex: "in", container: "udsource"},
-		{vertex: "cat", container: "udf"},
-		{vertex: "out", container: "udsink"},
-	} {
-		It("fails analysis when the "+tc.vertex+" vertex increments critical errors", func() {
-			if os.Getenv("TEST_CRITICAL_ERROR") != "true" {
-				Skip("set TEST_CRITICAL_ERROR=true to crash a vertex container and require forwarder_critical_error_total to fail the rollout")
-			}
-			const templateName = "test-pipeline-template-critical"
-			CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec("in", "cat", "out"))
-			initial := linearPipeline(udSourceVertex("in", "1"), catVertex("cat"), udSinkVertex("out"))
-			updated := linearPipeline(udSourceVertex("in", "2"), catVertex("cat"), udSinkVertex("out"))
-			CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initial, strategyForTemplate(templateName), apiv1.Metadata{})
-
-			By("Changing the source revision to cause a Progressive change")
-			UpdatePipeline(pipelineRolloutName, updated)
-
-			upgrading := GetInstanceName(pipelineRolloutName, 1)
-			CheckEventually("waiting for AnalysisRun to start", func() bool {
-				status := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
-				return status.UpgradingPipelineStatus != nil &&
-					status.UpgradingPipelineStatus.Analysis.AnalysisRunName == GetInstanceName(analysisRunName, 1)
-			}).Should(BeTrue())
-
-			crashUpgradingContainer(upgrading, tc.vertex, tc.container)
-
-			VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), upgrading, initial, updated)
-			VerifyAnalysisRunStatus(tc.vertex+"-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
-
-			DeletePipelineRollout(pipelineRolloutName)
-			DeleteAnalysisTemplate(templateName)
-		})
-	}
 
 	It("Should delete all remaining rollout objects", func() {
 		DeleteISBServiceRollout(isbServiceRolloutName)

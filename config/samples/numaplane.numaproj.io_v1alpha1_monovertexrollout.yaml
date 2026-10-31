@@ -9,7 +9,7 @@ spec:
     #  assessmentSchedule: "10,200,60,10"
     analysis:
       templates:
-      - templateName: mvtx-no-critical-errors
+      - templateName: monovertex-template
         clusterScope: false
   riders: # can be defined here for resources that need to be deployed per-Monovertex
 
@@ -39,7 +39,7 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  name: mvtx-no-critical-errors
+  name: monovertex-template
   namespace: example-namespace
   labels:
     used_by: numaplane
@@ -72,7 +72,7 @@ spec:
         # absent() treats assets with no traffic / no counter yet as healthy (fallback on older Numaflow).
         query: |
           (
-            sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == 0
+            sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
           )
           or
           (
