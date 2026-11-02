@@ -221,11 +221,11 @@ func pipelineCriticalErrorMetric(vertex string) argov1alpha1.Metric {
 				Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
 				Query: fmt.Sprintf(`
 (
-  sum(max_over_time(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}[{{args.interval}}])) == bool 0
+  sum(increase(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}[{{args.interval}}])) == bool 0
 )
 OR
 (
-  absent_over_time(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"}[{{args.interval}}])
+  absent(forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="%s"})
 )`, vertex, vertex),
 			},
 		},

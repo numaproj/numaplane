@@ -47,12 +47,14 @@ spec:
   args:
     - name: upgrading-monovertex-name
     - name: monovertex-namespace
-    # Shared by metric interval, initialDelay, and the PromQL range lookback.
+    # Shared by metric interval, initialDelay, and the PromQL increase() lookback.
     # 60s spans ~2 Prometheus scrapes at the default 30s interval; matches UBC production config.
     - name: interval
       value: 60s
     - name: success-limit
       value: "3"
+    # Argo Rollouts fails the metric when failed measurements exceed failureLimit.
+    # 0 fails on the first failed measurement. 1 would still allow one.
     - name: no-critical-errors-failure-limit
       value: "0"
     - name: acknowledged-messages-failure-limit
@@ -62,23 +64,22 @@ spec:
     consecutiveSuccessLimit: '{{args.success-limit}}'
     failureLimit: '{{args.no-critical-errors-failure-limit}}'
     interval: '{{args.interval}}'
-    # Each measurement looks back one interval, so consecutive measurements cover the whole run.
+    # Wait one evaluation interval before the first query so increase() has a full lookback window.
     initialDelay: '{{args.interval}}'
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
         # Numaflow >= 1.8.0 (monovtx_critical_error_total, numaflow#3154).
-        # Fail if the MonoVertex reported a critical error (EOT, UDF crash, etc.) at any point in the window.
-        # The counter is created by the first error and goes stale once the numa container restarts,
-        # so check every sample in the window rather than the latest value or increase().
-        # absent_over_time() passes a healthy MonoVertex, and Numaflow < 1.8, which has no such metric.
+        # Pass when the counter did not increase in the lookback window. The counter is cumulative,
+        # so a value already above 0 from before this window still passes until it rises again.
+        # absent() passes when the series is missing (healthy MonoVertex, or Numaflow < 1.8).
         query: |
           (
-            sum(max_over_time(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
+            sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
           )
           or
           (
-            absent_over_time(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])
+            absent(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"})
           )
     successCondition: len(result) > 0 && result[0] > 0
   - name: acknowledged-messages
