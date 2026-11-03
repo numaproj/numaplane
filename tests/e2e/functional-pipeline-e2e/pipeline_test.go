@@ -156,7 +156,9 @@ var (
 			},
 		},
 	}
+	// A lone limit becomes the request (2Gi per JetStream pod), which can exhaust the single-node CI cluster.
 	updatedMemLimit, _            = apiresource.ParseQuantity("2Gi")
+	jetStreamMemRequest, _        = apiresource.ParseQuantity("128Mi")
 	ISBServiceSpecNoDataLossField = numaflowv1.InterStepBufferServiceSpec{
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: UpdatedJetstreamVersion,
@@ -165,7 +167,8 @@ var (
 			},
 			ContainerTemplate: &numaflowv1.ContainerTemplate{
 				Resources: corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
+					Limits:   corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
+					Requests: corev1.ResourceList{corev1.ResourceMemory: jetStreamMemRequest},
 				},
 			},
 		},
@@ -180,7 +183,8 @@ var (
 			},
 			ContainerTemplate: &numaflowv1.ContainerTemplate{
 				Resources: corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
+					Limits:   corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
+					Requests: corev1.ResourceList{corev1.ResourceMemory: jetStreamMemRequest},
 				},
 			},
 		},
