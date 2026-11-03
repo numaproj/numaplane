@@ -17,15 +17,16 @@ limitations under the License.
 package e2e
 
 import (
-	"encoding/json"
 	"fmt"
+	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
@@ -48,6 +49,7 @@ const (
 // stays up when the forwarder fails. On 1.8.3 the process exits in the same moment
 // monovtx_critical_error_total is incremented, so Prometheus never scrapes it and absent()
 // passes. 1.9 restarts the forwarder in-process and the counter keeps rising.
+// NUMAFLOW_CONTROLLER_VERSION is not read here; CI never exercised that override.
 const numaflowVersionForCriticalErrorAnalysis = "1.9.0"
 
 var (
@@ -58,9 +60,6 @@ var (
 	monoVertexScaleTo               = int64(2)
 	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"disabled\":null,\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
 	monovertexSinkBadImage          = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
-	// map-filter's expression reads JSON fields. simple-source emits plain integers, so the UDF calls log.Fatalf.
-	// On Numaflow 1.9 that forwarder failure increments monovtx_critical_error_total while the metrics server stays up.
-	monovertexFilterImage = "quay.io/numaio/numaflow-go/map-filter:stable"
 
 	defaultStrategyForSuccessCase = apiv1.PipelineTypeRolloutStrategy{
 		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
@@ -184,22 +183,45 @@ func monoVertexCriticalErrorOnlySpec(metricName string) argov1alpha1.AnalysisTem
 	return spec
 }
 
-func updateMonoVertexWithFilterUDF(name string, spec numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec {
-	updated := spec.DeepCopy()
-	pullAlways := corev1.PullAlways
-	updated.UDF = &numaflowv1.UDF{
-		Container: &numaflowv1.Container{
-			Image:           monovertexFilterImage,
-			ImagePullPolicy: &pullAlways,
-		},
+// startTerminatingUpgradingTransformer kills the upgrading source transformer every 20s in the
+// background until the returned stop func is called, which returns the number of successful kills.
+// monovtx_critical_error_total is created at 1 on the first error, so a single kill leaves
+// increase() at 0; the counter must keep rising across Prometheus scrapes (30s).
+// It runs in the background because the failure checks must observe the promoted MonoVertex
+// while it is still scaled down. Kills fail while the container is in restart backoff.
+func startTerminatingUpgradingTransformer(monoVertexName string) func() int {
+	const killInterval = 20 * time.Second
+	selector := fmt.Sprintf("numaflow.numaproj.io/mono-vertex-name=%s,app.kubernetes.io/component=mono-vertex", monoVertexName)
+	stopCh := make(chan struct{})
+	killsCh := make(chan int)
+
+	By("Repeatedly terminating the upgrading source transformer while its AnalysisRun is active")
+	go func() {
+		kills := 0
+		ticker := time.NewTicker(killInterval)
+		defer ticker.Stop()
+		for {
+			output, err := exec.Command("kubectl", "get", "pods", "-n", Namespace, "-l", selector,
+				"--field-selector=status.phase=Running", "-o", "jsonpath={.items[0].metadata.name}").Output()
+			if podName := strings.TrimSpace(string(output)); err == nil && podName != "" {
+				if exec.Command("kubectl", "exec", "-n", Namespace, podName, "-c", "transformer", "--",
+					"/bin/sh", "-c", "kill 1").Run() == nil {
+					kills++
+				}
+			}
+			select {
+			case <-stopCh:
+				killsCh <- kills
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
+	return func() int {
+		close(stopCh)
+		return <-killsCh
 	}
-	rawSpec, err := json.Marshal(updated)
-	Expect(err).ShouldNot(HaveOccurred())
-	UpdateMonoVertexRolloutInK8S(name, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
-		return mvr, nil
-	})
-	return updated
 }
 
 func TestProgressiveE2E(t *testing.T) {
@@ -292,9 +314,18 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, &strategy, apiv1.Metadata{})
 		VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
 
-		By("Adding a map UDF that crashes on the simple-source payload")
-		updated := updateMonoVertexWithFilterUDF(monoVertexRolloutName, initialMonoVertexSpec)
+		// Start with a healthy upgrade so Numaplane creates the AnalysisRun before the runtime error.
+		updated := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
+		upgradingMonoVertexName := GetInstanceName(monoVertexRolloutName, 1)
+		CheckEventually("waiting for the critical-error AnalysisRun to start", func() bool {
+			status := GetMonoVertexRolloutProgressiveStatus(monoVertexRolloutName)
+			return status.UpgradingMonoVertexStatus != nil &&
+				status.UpgradingMonoVertexStatus.Analysis.AnalysisRunName == GetInstanceName(analysisRunName, 1)
+		}).Should(BeTrue())
+
+		stopTerminating := startTerminatingUpgradingTransformer(upgradingMonoVertexName)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updated, monoVertexScaleTo, false)
+		Expect(stopTerminating()).Should(BeNumerically(">=", 2))
 		VerifyAnalysisRunStatus("mvtx-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
