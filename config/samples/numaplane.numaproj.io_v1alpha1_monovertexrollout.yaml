@@ -69,17 +69,17 @@ spec:
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
-        # Numaflow >= 1.8.0 (monovtx_critical_error_total, numaflow#3154).
+        # Numaflow >= 1.8.0 (monovtx_critical_error_total, numaflow#3154), queried with the local numaflow_ prefix.
         # Pass when the counter did not increase in the lookback window. The counter is cumulative,
         # so a value already above 0 from before this window still passes until it rises again.
         # absent() passes when the series is missing (healthy MonoVertex, or Numaflow < 1.8).
         query: |
           (
-            sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
+            sum(increase(numaflow_monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
           )
           or
           (
-            absent(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"})
+            absent(numaflow_monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"})
           )
     successCondition: len(result) > 0 && result[0] > 0
   - name: acknowledged-messages
