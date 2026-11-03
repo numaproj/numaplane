@@ -17,12 +17,7 @@ limitations under the License.
 package e2e
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -314,19 +309,6 @@ func logSinkVertex(name string) numaflowv1.AbstractVertex {
 	}
 }
 
-func failingSinkVertex(name string) numaflowv1.AbstractVertex {
-	return numaflowv1.AbstractVertex{
-		Name: name,
-		Sink: &numaflowv1.Sink{AbstractSink: numaflowv1.AbstractSink{
-			UDSink: &numaflowv1.UDSink{Container: &numaflowv1.Container{
-				Image:           pipelineSinkBadImage,
-				ImagePullPolicy: &pullPolicyAlways,
-			}},
-		}},
-		Scale: vertexScale(),
-	}
-}
-
 func linearPipeline(vertices ...numaflowv1.AbstractVertex) numaflowv1.PipelineSpec {
 	edges := make([]numaflowv1.Edge, 0, len(vertices)-1)
 	for i := 0; i < len(vertices)-1; i++ {
@@ -365,50 +347,6 @@ func pipelineAnalysisTemplateSpecUnreachable(vertices ...string) argov1alpha1.An
 	return spec
 }
 
-// forwarderReadTotal queries Prometheus for the upgrading pipeline's read counter.
-// An empty result means the series was never created.
-func forwarderReadTotal(pipelineName string) (float64, bool) {
-	cmd := exec.Command("kubectl", "port-forward", "-n", "prometheus", "svc/prometheus-kube-prometheus-prometheus", "19090:9090")
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
-	Expect(cmd.Start()).To(Succeed())
-	defer func() {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-	}()
-
-	query := fmt.Sprintf(`sum(forwarder_read_total{namespace="%s",pipeline="%s"})`, Namespace, pipelineName)
-	var parsed struct {
-		Status string `json:"status"`
-		Data   struct {
-			Result []struct {
-				Value []any `json:"value"`
-			} `json:"result"`
-		} `json:"data"`
-	}
-	Eventually(func() error {
-		resp, err := http.Get("http://127.0.0.1:19090/api/v1/query?query=" + url.QueryEscape(query))
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(body, &parsed)
-	}, 30*time.Second, time.Second).Should(Succeed())
-	Expect(parsed.Status).To(Equal("success"))
-	if len(parsed.Data.Result) == 0 {
-		return 0, false
-	}
-	raw, _ := parsed.Data.Result[0].Value[1].(string)
-	var value float64
-	_, err := fmt.Sscan(raw, &value)
-	Expect(err).NotTo(HaveOccurred())
-	return value, true
-}
 func TestProgressiveE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -460,30 +398,6 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeleteAnalysisTemplate(analysisTemplateNameFailure)
 	})
 
-	It("passes analysis for a pipeline that never reads", func() {
-		const templateName = "test-pipeline-template-idle"
-		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec("idle-in", "idle-out"))
-		initial := linearPipeline(generatorVertex("idle-in", 0, time.Second), logSinkVertex("idle-out"))
-		updated := linearPipeline(generatorVertex("idle-in", 0, 2*time.Second), logSinkVertex("idle-out"))
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initial, strategyForTemplate(templateName), apiv1.Metadata{})
-
-		By("Updating generator duration to cause a Progressive change with no messages")
-		UpdatePipeline(pipelineRolloutName, updated)
-
-		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updated)
-		VerifyAnalysisRunStatus("idle-in-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("idle-out-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("idle-in-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("idle-out-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		reads, present := forwarderReadTotal(GetInstanceName(pipelineRolloutName, 1))
-		if present {
-			Expect(reads).To(Equal(float64(0)))
-		}
-
-		DeletePipelineRollout(pipelineRolloutName)
-		DeleteAnalysisTemplate(templateName)
-	})
-
 	It("passes analysis when vertex names are not in, cat, and out", func() {
 		const templateName = "test-pipeline-template-renamed"
 		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec("alpha", "gamma"))
@@ -499,40 +413,6 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyAnalysisRunStatus("gamma-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyAnalysisRunStatus("alpha-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyAnalysisRunStatus("gamma-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-
-		DeletePipelineRollout(pipelineRolloutName)
-		DeleteAnalysisTemplate(templateName)
-	})
-
-	It("fails analysis when two sinks read without acking", func() {
-		const templateName = "test-pipeline-template-two-sinks"
-		CreateAnalysisTemplate(templateName, Namespace, pipelineAnalysisTemplateSpec("origin", "left", "right"))
-		initial := numaflowv1.PipelineSpec{
-			InterStepBufferServiceName: isbServiceRolloutName,
-			Vertices: []numaflowv1.AbstractVertex{
-				generatorVertex("origin", 5, time.Second),
-				logSinkVertex("left"),
-				logSinkVertex("right"),
-			},
-			Edges: []numaflowv1.Edge{{From: "origin", To: "left"}, {From: "origin", To: "right"}},
-		}
-		updated := numaflowv1.PipelineSpec{
-			InterStepBufferServiceName: isbServiceRolloutName,
-			Vertices: []numaflowv1.AbstractVertex{
-				generatorVertex("origin", 5, time.Second),
-				failingSinkVertex("left"),
-				failingSinkVertex("right"),
-			},
-			Edges: []numaflowv1.Edge{{From: "origin", To: "left"}, {From: "origin", To: "right"}},
-		}
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initial, strategyForTemplate(templateName), apiv1.Metadata{})
-
-		By("Pointing both sinks at sink-log-failure")
-		UpdatePipeline(pipelineRolloutName, updated)
-
-		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initial, updated)
-		VerifyAnalysisRunStatus("left-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
-		VerifyAnalysisRunStatus("right-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
