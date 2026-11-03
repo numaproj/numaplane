@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -25,6 +26,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
@@ -60,6 +62,8 @@ var (
 	monoVertexScaleTo               = int64(2)
 	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"disabled\":null,\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
 	monovertexSinkBadImage          = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
+	// map-filter's expression reads JSON fields. simple-source emits plain integers, so the UDF calls log.Fatalf.
+	monovertexFilterImage = "quay.io/numaio/numaflow-go/map-filter:stable"
 
 	defaultStrategyForSuccessCase = apiv1.PipelineTypeRolloutStrategy{
 		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
@@ -175,6 +179,32 @@ vector(0)`,
 	}
 }
 
+// monoVertexCriticalErrorOnlySpec keeps only the critical-error metric.
+// The ack metric is omitted so a rollout failure can be attributed to this check.
+func monoVertexCriticalErrorOnlySpec(metricName string) argov1alpha1.AnalysisTemplateSpec {
+	spec := monoVertexAnalysisTemplateSpec(metricName, "unused-ack")
+	spec.Metrics = spec.Metrics[:1]
+	return spec
+}
+
+func updateMonoVertexWithFilterUDF(name string, spec numaflowv1.MonoVertexSpec) *numaflowv1.MonoVertexSpec {
+	updated := spec.DeepCopy()
+	pullAlways := corev1.PullAlways
+	updated.UDF = &numaflowv1.UDF{
+		Container: &numaflowv1.Container{
+			Image:           monovertexFilterImage,
+			ImagePullPolicy: &pullAlways,
+		},
+	}
+	rawSpec, err := json.Marshal(updated)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdateMonoVertexRolloutInK8S(name, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
+		return mvr, nil
+	})
+	return updated
+}
+
 func TestProgressiveE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -242,6 +272,36 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameFailureOne)
 		DeleteAnalysisTemplate(analysisTemplateNameFailureTwo)
+	})
+
+	It("fails analysis when the upgrading MonoVertex reports a critical error", func() {
+		const templateName = "test-monovertex-template-critical-only"
+		CreateAnalysisTemplate(templateName, Namespace, monoVertexCriticalErrorOnlySpec("mvtx-no-critical-errors"))
+
+		strategy := apiv1.PipelineTypeRolloutStrategy{
+			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+				Progressive: apiv1.ProgressiveStrategy{
+					AssessmentSchedule: "10,180,30,10",
+				},
+				Analysis: apiv1.Analysis{
+					Templates: []argov1alpha1.AnalysisTemplateRef{{
+						TemplateName: templateName,
+						ClusterScope: false,
+					}},
+				},
+			},
+		}
+
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, &strategy, apiv1.Metadata{})
+		VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
+
+		By("Adding a map UDF that crashes on the simple-source payload")
+		updated := updateMonoVertexWithFilterUDF(monoVertexRolloutName, initialMonoVertexSpec)
+		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updated, monoVertexScaleTo, false)
+		VerifyAnalysisRunStatus("mvtx-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+		DeleteAnalysisTemplate(templateName)
 	})
 
 	It("Should delete all remaining rollout objects", func() {
