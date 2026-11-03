@@ -19,7 +19,6 @@ package e2e
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
@@ -45,14 +44,11 @@ const (
 	analysisMetricInterval = "60s"
 )
 
-// numaflowControllerVersionForTest returns the Numaflow controller version to deploy.
-// Override via shell env (not Makefile): NUMAFLOW_CONTROLLER_VERSION=1.7.5 make test-progressive-analysis-monovertex-e2e
-func numaflowControllerVersionForTest() string {
-	if v := os.Getenv("NUMAFLOW_CONTROLLER_VERSION"); v != "" {
-		return v
-	}
-	return PrimaryNumaflowControllerVersion
-}
+// numaflowVersionForCriticalErrorAnalysis is the oldest Numaflow release whose metrics server
+// stays up when the forwarder fails. On 1.8.3 the process exits in the same moment
+// monovtx_critical_error_total is incremented, so Prometheus never scrapes it and absent()
+// passes. 1.9 restarts the forwarder in-process and the counter keeps rising.
+const numaflowVersionForCriticalErrorAnalysis = "1.9.0"
 
 var (
 	monoVertexScaleMin  = int32(4)
@@ -63,6 +59,7 @@ var (
 	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"disabled\":null,\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
 	monovertexSinkBadImage          = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
 	// map-filter's expression reads JSON fields. simple-source emits plain integers, so the UDF calls log.Fatalf.
+	// On Numaflow 1.9 that forwarder failure increments monovtx_critical_error_total while the metrics server stays up.
 	monovertexFilterImage = "quay.io/numaio/numaflow-go/map-filter:stable"
 
 	defaultStrategyForSuccessCase = apiv1.PipelineTypeRolloutStrategy{
@@ -218,7 +215,7 @@ func TestProgressiveE2E(t *testing.T) {
 var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(numaflowControllerVersionForTest())
+		CreateNumaflowControllerRollout(numaflowVersionForCriticalErrorAnalysis)
 	})
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Success case", func() {
