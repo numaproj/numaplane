@@ -18,8 +18,10 @@ package e2e
 
 import (
 	"fmt"
-	"os"
+	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -39,18 +41,16 @@ const (
 	analysisTemplateNameFailureOne = "test-monovertex-template-failure-1"
 	analysisTemplateNameFailureTwo = "test-monovertex-template-failure-2"
 	analysisRunName                = "monovertex-" + monoVertexRolloutName
-	// Aligns metric interval, initialDelay, and PromQL increase() lookback.
+	// Aligns metric interval, initialDelay, and PromQL range lookback.
 	analysisMetricInterval = "60s"
 )
 
-// numaflowControllerVersionForTest returns the Numaflow controller version to deploy.
-// Override via shell env (not Makefile): NUMAFLOW_CONTROLLER_VERSION=1.7.5 make test-progressive-analysis-monovertex-e2e
-func numaflowControllerVersionForTest() string {
-	if v := os.Getenv("NUMAFLOW_CONTROLLER_VERSION"); v != "" {
-		return v
-	}
-	return PrimaryNumaflowControllerVersion
-}
+// numaflowVersionForCriticalErrorAnalysis is the oldest Numaflow release whose metrics server
+// stays up when the forwarder fails. On 1.8.3 the process exits in the same moment
+// monovtx_critical_error_total is incremented, so Prometheus never scrapes it and absent()
+// passes. 1.9 restarts the forwarder in-process and the counter keeps rising.
+// NUMAFLOW_CONTROLLER_VERSION is not read here; CI never exercised that override.
+const numaflowVersionForCriticalErrorAnalysis = "1.9.0"
 
 var (
 	monoVertexScaleMin  = int32(4)
@@ -134,7 +134,7 @@ func monoVertexAnalysisTemplateSpec(criticalErrorsMetricName, acknowledgedMessag
 		Metrics: []argov1alpha1.Metric{
 			{
 				Name:                    criticalErrorsMetricName,
-				FailureLimit:            ptr.To(intstrutil.FromInt32(1)),
+				FailureLimit:            ptr.To(intstrutil.FromInt32(0)),
 				Interval:                argov1alpha1.DurationString(analysisMetricInterval),
 				InitialDelay:            argov1alpha1.DurationString(analysisMetricInterval),
 				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
@@ -143,7 +143,7 @@ func monoVertexAnalysisTemplateSpec(criticalErrorsMetricName, acknowledgedMessag
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
 						Query: `
 (
-  sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == 0
+  sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
 )
 OR
 (
@@ -175,6 +175,55 @@ vector(0)`,
 	}
 }
 
+// monoVertexCriticalErrorOnlySpec keeps only the critical-error metric.
+// The ack metric is omitted so a rollout failure can be attributed to this check.
+func monoVertexCriticalErrorOnlySpec(metricName string) argov1alpha1.AnalysisTemplateSpec {
+	spec := monoVertexAnalysisTemplateSpec(metricName, "unused-ack")
+	spec.Metrics = spec.Metrics[:1]
+	return spec
+}
+
+// startTerminatingUpgradingTransformer kills the upgrading source transformer every 20s in the
+// background until the returned stop func is called, which returns the number of successful kills.
+// monovtx_critical_error_total is created at 1 on the first error, so a single kill leaves
+// increase() at 0; the counter must keep rising across Prometheus scrapes (30s).
+// It runs in the background because the failure checks must observe the promoted MonoVertex
+// while it is still scaled down. Kills fail while the container is in restart backoff.
+func startTerminatingUpgradingTransformer(monoVertexName string) func() int {
+	const killInterval = 20 * time.Second
+	selector := fmt.Sprintf("numaflow.numaproj.io/mono-vertex-name=%s,app.kubernetes.io/component=mono-vertex", monoVertexName)
+	stopCh := make(chan struct{})
+	killsCh := make(chan int)
+
+	By("Repeatedly terminating the upgrading source transformer while its AnalysisRun is active")
+	go func() {
+		kills := 0
+		ticker := time.NewTicker(killInterval)
+		defer ticker.Stop()
+		for {
+			output, err := exec.Command("kubectl", "get", "pods", "-n", Namespace, "-l", selector,
+				"--field-selector=status.phase=Running", "-o", "jsonpath={.items[0].metadata.name}").Output()
+			if podName := strings.TrimSpace(string(output)); err == nil && podName != "" {
+				if exec.Command("kubectl", "exec", "-n", Namespace, podName, "-c", "transformer", "--",
+					"/bin/sh", "-c", "kill 1").Run() == nil {
+					kills++
+				}
+			}
+			select {
+			case <-stopCh:
+				killsCh <- kills
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
+	return func() int {
+		close(stopCh)
+		return <-killsCh
+	}
+}
+
 func TestProgressiveE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -188,7 +237,7 @@ func TestProgressiveE2E(t *testing.T) {
 var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(numaflowControllerVersionForTest())
+		CreateNumaflowControllerRollout(numaflowVersionForCriticalErrorAnalysis)
 	})
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Success case", func() {
@@ -242,6 +291,45 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameFailureOne)
 		DeleteAnalysisTemplate(analysisTemplateNameFailureTwo)
+	})
+
+	It("fails analysis when the upgrading MonoVertex reports a critical error", func() {
+		const templateName = "test-monovertex-template-critical-only"
+		CreateAnalysisTemplate(templateName, Namespace, monoVertexCriticalErrorOnlySpec("mvtx-no-critical-errors"))
+
+		strategy := apiv1.PipelineTypeRolloutStrategy{
+			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+				Progressive: apiv1.ProgressiveStrategy{
+					AssessmentSchedule: "10,180,30,10",
+				},
+				Analysis: apiv1.Analysis{
+					Templates: []argov1alpha1.AnalysisTemplateRef{{
+						TemplateName: templateName,
+						ClusterScope: false,
+					}},
+				},
+			},
+		}
+
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, &strategy, apiv1.Metadata{})
+		VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
+
+		// Start with a healthy upgrade so Numaplane creates the AnalysisRun before the runtime error.
+		updated := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
+		upgradingMonoVertexName := GetInstanceName(monoVertexRolloutName, 1)
+		CheckEventually("waiting for the critical-error AnalysisRun to start", func() bool {
+			status := GetMonoVertexRolloutProgressiveStatus(monoVertexRolloutName)
+			return status.UpgradingMonoVertexStatus != nil &&
+				status.UpgradingMonoVertexStatus.Analysis.AnalysisRunName == GetInstanceName(analysisRunName, 1)
+		}).Should(BeTrue())
+
+		stopTerminating := startTerminatingUpgradingTransformer(upgradingMonoVertexName)
+		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updated, monoVertexScaleTo, false)
+		Expect(stopTerminating()).Should(BeNumerically(">=", 2))
+		VerifyAnalysisRunStatus("mvtx-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+		DeleteAnalysisTemplate(templateName)
 	})
 
 	It("Should delete all remaining rollout objects", func() {

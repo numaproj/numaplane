@@ -204,8 +204,12 @@ var (
 		},
 	}
 
-	// updating Resources.Limits will not cause data loss or require recreating ISBService
+	// updating Resources.Limits will not cause data loss or require recreating ISBService.
+	// The request is set explicitly because a lone limit becomes the request: 2Gi for each of the
+	// 3 JetStream pods, doubled while the progressive ISBService runs alongside the promoted one,
+	// leaves the single-node CI cluster unable to schedule the upgrading Pipeline's vertices.
 	updatedMemLimit, _        = apiresource.ParseQuantity("2Gi")
+	jetStreamMemRequest, _    = apiresource.ParseQuantity("128Mi")
 	directApplyISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: InitialJetstreamVersion,
@@ -214,7 +218,8 @@ var (
 			},
 			ContainerTemplate: &numaflowv1.ContainerTemplate{
 				Resources: corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
+					Limits:   corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
+					Requests: corev1.ResourceList{corev1.ResourceMemory: jetStreamMemRequest},
 				},
 			},
 		},
@@ -230,7 +235,8 @@ var (
 			},
 			ContainerTemplate: &numaflowv1.ContainerTemplate{
 				Resources: corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
+					Limits:   corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
+					Requests: corev1.ResourceList{corev1.ResourceMemory: jetStreamMemRequest},
 				},
 			},
 		},
@@ -329,14 +335,13 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			rawSpec, err := json.Marshal(tc.pipelineSpec)
 			Expect(err).ShouldNot(HaveOccurred())
 			UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-				// for this test, we start the assessment window at 4 minutes in, which is longer
-				// than other tests, because Numaflow Controller is also restarting
-				// and therefore can take longer to do its reconciliations of Pipeline changes
+				// the 300s window is longer than other tests because the trial Pipeline waits for the
+				// new Numaflow Controller and a new ISBService, whose JetStream image is pulled cold in CI
 				rollout.Spec.Strategy = &apiv1.PipelineStrategy{
 					PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
 						PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 							Progressive: apiv1.ProgressiveStrategy{
-								AssessmentSchedule: "60,180,60,10",
+								AssessmentSchedule: "60,300,60,10",
 							},
 						},
 					},
@@ -349,13 +354,12 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			rawSpec, err = json.Marshal(tc.monovertexSpec)
 			Expect(err).ShouldNot(HaveOccurred())
 			UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-				// for this test, we start the assessment window at 4 minutes in, which is longer
-				// than other tests, due to the fact that Numaflow Controller is also restarting
-				// and therefore can take longer to do its reconciliations of MonoVertex changes
+				// the 300s window is longer than other tests because the trial MonoVertex waits for
+				// the new Numaflow Controller to start
 				rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
 					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 						Progressive: apiv1.ProgressiveStrategy{
-							AssessmentSchedule: "60,180,60,10",
+							AssessmentSchedule: "60,300,60,10",
 						},
 					},
 				}

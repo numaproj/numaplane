@@ -59,21 +59,55 @@ kind: AnalysisTemplate
 metadata:
   name: pipeline-template
   namespace: example-namespace
+  labels:
+    used_by: numaplane
 spec:
   args:
-  - name: upgrading-pipeline-name
-  - name: pipeline-namespace
-  - name: interval
-    value: 60s
-  - name: success-limit
-    value: "4"
-  - name: failure-limit
-    value: "6"
+    - name: upgrading-pipeline-name
+    - name: pipeline-namespace
+    # Shared by metric interval, initialDelay, and the PromQL increase() lookback.
+    # 60s spans ~2 Prometheus scrapes at the default 30s interval; matches UBC production config.
+    - name: interval
+      value: 60s
+    # Read/ack metrics keep the limits this template was tested with.
+    - name: ack-success-limit
+      value: "4"
+    - name: ack-failure-limit
+      value: "6"
+    - name: no-critical-errors-success-limit
+      value: "4"
+    # Argo Rollouts fails the metric when failed measurements exceed failureLimit.
+    # 0 fails on the first failed measurement. 1 would still allow one.
+    - name: no-critical-errors-failure-limit
+      value: "0"
+  # One critical-error metric and one read/ack metric per vertex (in, cat, out).
   metrics:
-  - consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+  - name: in-no-critical-errors
+    consecutiveSuccessLimit: '{{args.no-critical-errors-success-limit}}'
+    failureLimit: '{{args.no-critical-errors-failure-limit}}'
     interval: '{{args.interval}}'
-    name: in
+    # Wait one evaluation interval before the first query so increase() has a full lookback window.
+    initialDelay: '{{args.interval}}'
+    provider:
+      prometheus:
+        address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
+        # Numaflow >= 1.8.0 (forwarder_critical_error_total, numaflow#3154), queried with the local numaflow_ prefix.
+        # Pass when the counter did not increase in the lookback window. The counter is cumulative,
+        # so a value already above 0 from before this window still passes until it rises again.
+        # absent() passes when the series is missing (healthy vertex, or Numaflow < 1.8).
+        query: |
+          (
+            sum(increase(numaflow_forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="in"}[{{args.interval}}])) == bool 0
+          )
+          or
+          (
+            absent(numaflow_forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="in"})
+          )
+    successCondition: len(result) > 0 && result[0] > 0
+  - name: in-ack
+    consecutiveSuccessLimit: '{{args.ack-success-limit}}'
+    failureLimit: '{{args.ack-failure-limit}}'
+    interval: '{{args.interval}}'
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
@@ -83,10 +117,27 @@ spec:
           pipeline="{{args.upgrading-pipeline-name}}", vertex="in"}) or vector(0))
           > 0)) or vector(0)
     successCondition: len(result) > 0 && result[0] > 0
-  - consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+  - name: cat-no-critical-errors
+    consecutiveSuccessLimit: '{{args.no-critical-errors-success-limit}}'
+    failureLimit: '{{args.no-critical-errors-failure-limit}}'
     interval: '{{args.interval}}'
-    name: cat
+    initialDelay: '{{args.interval}}'
+    provider:
+      prometheus:
+        address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
+        query: |
+          (
+            sum(increase(numaflow_forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"}[{{args.interval}}])) == bool 0
+          )
+          or
+          (
+            absent(numaflow_forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"})
+          )
+    successCondition: len(result) > 0 && result[0] > 0
+  - name: cat-ack
+    consecutiveSuccessLimit: '{{args.ack-success-limit}}'
+    failureLimit: '{{args.ack-failure-limit}}'
+    interval: '{{args.interval}}'
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
@@ -96,10 +147,27 @@ spec:
           pipeline="{{args.upgrading-pipeline-name}}", vertex="cat"})
           or vector(0)) > 0)) or vector(0)
     successCondition: len(result) > 0 && result[0] > 0
-  - consecutiveSuccessLimit: '{{args.success-limit}}'
-    failureLimit: '{{args.failure-limit}}'
+  - name: out-no-critical-errors
+    consecutiveSuccessLimit: '{{args.no-critical-errors-success-limit}}'
+    failureLimit: '{{args.no-critical-errors-failure-limit}}'
     interval: '{{args.interval}}'
-    name: out
+    initialDelay: '{{args.interval}}'
+    provider:
+      prometheus:
+        address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
+        query: |
+          (
+            sum(increase(numaflow_forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="out"}[{{args.interval}}])) == bool 0
+          )
+          or
+          (
+            absent(numaflow_forwarder_critical_error_total{namespace="{{args.pipeline-namespace}}", pipeline="{{args.upgrading-pipeline-name}}", vertex="out"})
+          )
+    successCondition: len(result) > 0 && result[0] > 0
+  - name: out-ack
+    consecutiveSuccessLimit: '{{args.ack-success-limit}}'
+    failureLimit: '{{args.ack-failure-limit}}'
+    interval: '{{args.interval}}'
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090

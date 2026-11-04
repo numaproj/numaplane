@@ -71,6 +71,18 @@ func GetMonoVertex(namespace, monoVertexName string) (*numaflowv1.MonoVertex, er
 }
 
 // Get MonoVertexSpec from Unstructured type
+func GetMonoVertexRolloutMonoVertexSpec(monoVertexRolloutName string) (numaflowv1.MonoVertexSpec, error) {
+	rollout, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+	if err != nil {
+		return numaflowv1.MonoVertexSpec{}, err
+	}
+	var monoVertexSpec numaflowv1.MonoVertexSpec
+	if err := json.Unmarshal(rollout.Spec.MonoVertex.Spec.Raw, &monoVertexSpec); err != nil {
+		return numaflowv1.MonoVertexSpec{}, err
+	}
+	return monoVertexSpec, nil
+}
+
 func getMonoVertexSpec(u *unstructured.Unstructured) (numaflowv1.MonoVertexSpec, error) {
 	specMap := u.Object["spec"]
 	var monoVertexSpec numaflowv1.MonoVertexSpec
@@ -148,15 +160,29 @@ func VerifyPromotedMonoVertexRunning(namespace, monoVertexRolloutName string) er
 			return retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhaseRunning
 		})
 
-	unstructMonoVertex, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
-	if err != nil {
-		return fmt.Errorf("unable to get the MonoVertex for the MonoVertexRollout %s/%s: %w", namespace, monoVertexRolloutName, err)
-	}
-
-	monoVertexSpec, err := getMonoVertexSpec(unstructMonoVertex)
-	if err != nil {
-		return fmt.Errorf("error getting the MonoVertex spec: %w", err)
-	}
+	// A just-finished upgrade can still have the promoted child scaled to zero, so wait until its
+	// scale matches the rollout before counting pods.
+	var monoVertexSpec numaflowv1.MonoVertexSpec
+	CheckEventually("verifying promoted MonoVertex scale matches the rollout", func() bool {
+		unstructMonoVertex, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
+		if err != nil {
+			return false
+		}
+		childSpec, err := getMonoVertexSpec(unstructMonoVertex)
+		if err != nil {
+			return false
+		}
+		rolloutSpec, err := GetMonoVertexRolloutMonoVertexSpec(monoVertexRolloutName)
+		if err != nil {
+			return false
+		}
+		if scaleMin(childSpec.Scale) != scaleMin(rolloutSpec.Scale) || scaleMax(childSpec.Scale) != scaleMax(rolloutSpec.Scale) {
+			return false
+		}
+		monoVertexName = unstructMonoVertex.GetName()
+		monoVertexSpec = childSpec
+		return true
+	}).Should(BeTrue())
 
 	VerifyVerticesPodsRunning(namespace, monoVertexName, []numaflowv1.AbstractVertex{{Scale: monoVertexSpec.Scale}}, ComponentMonoVertex)
 

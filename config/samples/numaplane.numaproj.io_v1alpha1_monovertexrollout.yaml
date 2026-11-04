@@ -9,7 +9,7 @@ spec:
     #  assessmentSchedule: "10,200,60,10"
     analysis:
       templates:
-      - templateName: mvtx-no-critical-errors
+      - templateName: monovertex-template
         clusterScope: false
   riders: # can be defined here for resources that need to be deployed per-Monovertex
 
@@ -39,7 +39,7 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  name: mvtx-no-critical-errors
+  name: monovertex-template
   namespace: example-namespace
   labels:
     used_by: numaplane
@@ -53,8 +53,10 @@ spec:
       value: 60s
     - name: success-limit
       value: "3"
+    # Argo Rollouts fails the metric when failed measurements exceed failureLimit.
+    # 0 fails on the first failed measurement. 1 would still allow one.
     - name: no-critical-errors-failure-limit
-      value: "1"
+      value: "0"
     - name: acknowledged-messages-failure-limit
       value: "3"
   metrics:
@@ -67,16 +69,17 @@ spec:
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
-        # Numaflow >= 1.8.0 (monovtx_critical_error_total, numaflow#3154).
-        # Pass when no critical errors (EOT, UDF crash, etc.) occurred in the lookback window.
-        # absent() treats assets with no traffic / no counter yet as healthy (fallback on older Numaflow).
+        # Numaflow >= 1.8.0 (monovtx_critical_error_total, numaflow#3154), queried with the local numaflow_ prefix.
+        # Pass when the counter did not increase in the lookback window. The counter is cumulative,
+        # so a value already above 0 from before this window still passes until it rises again.
+        # absent() passes when the series is missing (healthy MonoVertex, or Numaflow < 1.8).
         query: |
           (
-            sum(increase(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == 0
+            sum(increase(numaflow_monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
           )
           or
           (
-            absent(monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"})
+            absent(numaflow_monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"})
           )
     successCondition: len(result) > 0 && result[0] > 0
   - name: acknowledged-messages
