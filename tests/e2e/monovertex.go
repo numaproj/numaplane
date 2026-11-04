@@ -705,10 +705,22 @@ func CreateInitialMonoVertexRollout(monoVertexRolloutName string, initialMonoVer
 
 	By("Verifying that the MonoVertex spec is as expected")
 	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-		return reflect.DeepEqual(retrievedMonoVertexSpec, initialMonoVertexSpec)
+		return monoVertexSpecsEqualIgnoringReplicas(retrievedMonoVertexSpec, initialMonoVertexSpec)
 	})
 	VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 	VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
+}
+
+// monoVertexSpecsEqualIgnoringReplicas compares MonoVertex specs while ignoring
+// spec.replicas. Numaflow Controller manages that field (e.g. materializing
+// scale.min); Numaplane's progressive comparison already excludes it for the
+// same reason.
+func monoVertexSpecsEqualIgnoringReplicas(a, b numaflowv1.MonoVertexSpec) bool {
+	aCopy := a.DeepCopy()
+	bCopy := b.DeepCopy()
+	aCopy.Replicas = nil
+	bCopy.Replicas = nil
+	return reflect.DeepEqual(aCopy, bCopy)
 }
 
 func UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage string, initialMonoVertexSpec numaflowv1.MonoVertexSpec, udTransformer numaflowv1.UDTransformer) *numaflowv1.MonoVertexSpec {
