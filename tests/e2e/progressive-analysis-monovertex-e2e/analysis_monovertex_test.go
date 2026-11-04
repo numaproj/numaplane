@@ -45,13 +45,6 @@ const (
 	analysisMetricInterval = "60s"
 )
 
-// numaflowVersionForCriticalErrorAnalysis is the oldest Numaflow release whose metrics server
-// stays up when the forwarder fails. On 1.8.3 the process exits in the same moment
-// monovtx_critical_error_total is incremented, so Prometheus never scrapes it and absent()
-// passes. 1.9 restarts the forwarder in-process and the counter keeps rising.
-// NUMAFLOW_CONTROLLER_VERSION is not read here; CI never exercised that override.
-const numaflowVersionForCriticalErrorAnalysis = "1.9.0"
-
 var (
 	monoVertexScaleMin  = int32(4)
 	monoVertexScaleMax  = int32(5)
@@ -237,7 +230,7 @@ func TestProgressiveE2E(t *testing.T) {
 var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(numaflowVersionForCriticalErrorAnalysis)
+		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
 	})
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Success case", func() {
