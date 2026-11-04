@@ -178,10 +178,8 @@ func testPauseResume(currentMonoVertexIndex int, currentMonoVertexSpec numaflowv
 
 	currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhaseRunning
 
-	// Verify since strategy.pauseResume.resumeFast isn't set it defaults to resuming slowly
-	// which means that spec.replicas will get set to null
-
-	// patch monovertex's replicas to 5, thereby imitating the Numaflow autoscaler scaling up
+	// Patch monovertex's replicas to max, imitating the Numaflow autoscaler scaling up,
+	// so we can tell fast resume (keeps that count) from gradual resume (resets toward min).
 	promotedMonoVertexName, err := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 	UpdateMonoVertexInK8S(promotedMonoVertexName, func(monoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
@@ -196,12 +194,13 @@ func testPauseResume(currentMonoVertexIndex int, currentMonoVertexSpec numaflowv
 		return retrievedMonoVertexSpec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
 	}, nil, false, currentMonoVertexIndex, apiv1.Metadata{})
 
-	// then verify that replicas is null
+	// Fast resume keeps the patched replica count. Gradual resume clears
+	// replicas so Numaflow resets to scale.min (on 1.9+ that min is written
+	// back into spec.replicas rather than leaving the field absent).
 	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(spec numaflowv1.MonoVertexSpec) bool {
 		if resumeFast {
-			return spec.Replicas != nil && *spec.Replicas == 5
-		} else {
-			return spec.Replicas == nil
+			return spec.Replicas != nil && *spec.Replicas == monoVertexScaleMax
 		}
+		return spec.Replicas != nil && *spec.Replicas == monoVertexScaleMin
 	})
 }
