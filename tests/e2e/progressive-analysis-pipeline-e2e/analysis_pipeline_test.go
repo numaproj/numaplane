@@ -50,6 +50,7 @@ const (
 	// Aligns metric interval, initialDelay, and PromQL range lookback.
 	analysisMetricInterval = "60s"
 	pipelineSinkBadImage   = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
+	pipelineSinkEotImage   = "quay.io/numaio/numaflow-go/sink-eot:stable"
 	pipelineMapImage       = "quay.io/numaio/numaflow-go/map-cat:stable"
 	pipelineSlowMapImage   = "quay.io/numaio/numaflow-go/map-slow-cat:stable"
 )
@@ -249,6 +250,19 @@ func pipelineAckMetric(vertex string) argov1alpha1.Metric {
 	}
 }
 
+// pipelineCriticalErrorOnlySpec keeps only the per-vertex critical-error metrics.
+// Ack metrics are omitted so a rollout failure can be attributed to this check.
+func pipelineCriticalErrorOnlySpec(vertices ...string) argov1alpha1.AnalysisTemplateSpec {
+	metrics := make([]argov1alpha1.Metric, 0, len(vertices))
+	for _, vertex := range vertices {
+		metrics = append(metrics, pipelineCriticalErrorMetric(vertex))
+	}
+	return argov1alpha1.AnalysisTemplateSpec{
+		Metrics: metrics,
+		Args:    analysisTemplateArgs,
+	}
+}
+
 // pipelineSpecWithFailingSink copies spec and points every sink at an image that reads without acking.
 // sink-log-failure does not increment forwarder_critical_error_total; it only breaks ack.
 func pipelineSpecWithFailingSink(spec numaflowv1.PipelineSpec) numaflowv1.PipelineSpec {
@@ -310,6 +324,28 @@ func logSinkVertex(name string) numaflowv1.AbstractVertex {
 	return numaflowv1.AbstractVertex{
 		Name:  name,
 		Sink:  &numaflowv1.Sink{AbstractSink: numaflowv1.AbstractSink{Log: &numaflowv1.Log{}}},
+		Scale: vertexScale(),
+	}
+}
+
+// eotSinkVertex is a UDSink that works during FAIL_AFTER_SECONDS then produces
+// eot_received_from_sink critical errors (forwarder_critical_error_total).
+func eotSinkVertex(name string) numaflowv1.AbstractVertex {
+	return numaflowv1.AbstractVertex{
+		Name: name,
+		Sink: &numaflowv1.Sink{
+			AbstractSink: numaflowv1.AbstractSink{
+				UDSink: &numaflowv1.UDSink{
+					Container: &numaflowv1.Container{
+						Image:           pipelineSinkEotImage,
+						ImagePullPolicy: &pullPolicyAlways,
+						Env: []corev1.EnvVar{
+							{Name: "FAIL_AFTER_SECONDS", Value: "60"},
+						},
+					},
+				},
+			},
+		},
 		Scale: vertexScale(),
 	}
 }
@@ -501,6 +537,25 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initial, updated)
 		VerifyAnalysisRunStatus("cat-ack", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 		VerifyAnalysisRunStatus("cat-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+
+		DeletePipelineRollout(pipelineRolloutName)
+		DeleteAnalysisTemplate(templateName)
+	})
+
+	It("fails analysis when the upgrading Pipeline sink reports a critical error", func() {
+		const templateName = "test-pipeline-template-critical-only"
+		CreateAnalysisTemplate(templateName, Namespace, pipelineCriticalErrorOnlySpec("in", "out"))
+		initial := linearPipeline(generatorVertex("in", 5, time.Second), logSinkVertex("out"))
+		updated := linearPipeline(generatorVertex("in", 5, time.Second), eotSinkVertex("out"))
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initial, strategyForTemplate(templateName), apiv1.Metadata{})
+
+		// Upgrade to sink-eot: warm-up lets Ready/AnalysisRun start, then EOT failures
+		// increment forwarder_critical_error_total (reason=eot_received_from_sink).
+		By("Switching the sink to sink-eot to cause a Progressive critical-error failure")
+		UpdatePipeline(pipelineRolloutName, updated)
+
+		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initial, updated)
+		VerifyAnalysisRunStatus("out-no-critical-errors", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(templateName)
