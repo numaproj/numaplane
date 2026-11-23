@@ -69,10 +69,10 @@ spec:
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
-        # Numaflow >= 1.8.0 (monovtx_critical_error_total, numaflow#3154), queried with the local numaflow_ prefix.
+        # Numaflow >= 1.9.0 (monovtx_critical_error_total, numaflow#3154), queried with the local numaflow_ prefix.
         # Pass when the counter did not increase in the lookback window. The counter is cumulative,
         # so a value already above 0 from before this window still passes until it rises again.
-        # absent() passes when the series is missing (healthy MonoVertex, or Numaflow < 1.8).
+        # absent() passes when the series is missing (healthy MonoVertex, or Numaflow < 1.9).
         query: |
           (
             sum(increase(numaflow_monovtx_critical_error_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}[{{args.interval}}])) == bool 0
@@ -89,7 +89,7 @@ spec:
     provider:
       prometheus:
         address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
-        # Legacy read/ack check; provides validation on Numaflow < 1.8 where critical-error metric is absent.
+        # Legacy read/ack check; provides validation on Numaflow < 1.9 where critical-error metric is absent.
         # Pass when no reads yet, or at least one ack has been recorded.
         query: (vector(1) and on() ((sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}",
           mvtx_name="{{args.upgrading-monovertex-name}}"}) or vector(0)) == 0)) or
